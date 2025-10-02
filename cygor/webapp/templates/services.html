@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="mb-4">Services Overview</h1>
+
+<!-- Services Stats -->
+<div class="mb-3">
+  <span class="badge bg-primary fs-6">
+    Total Services: {{ service_summary|length }}
+  </span>
+</div>
+
+<div class="card bg-dark border-0 shadow-sm">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table id="servicesTable" class="table align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Service</th>
+            <th>Hosts Running</th>
+            <th class="text-center">Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for service, count in service_summary.items() %}
+          {% set percentage = (count / total_hosts * 100) if total_hosts > 0 else 0 %}
+          <tr>
+            <!-- Service Name (normalized with tooltip for raw) -->
+            <td class="fw-medium">
+              <span data-bs-toggle="tooltip" title="Raw: {{ service }}">
+                {{ service|capitalize }}
+              </span>
+            </td>
+
+            <!-- Hosts Running with progress bar -->
+            <td style="min-width: 220px;">
+              <div class="d-flex justify-content-between mb-1">
+                <small>{{ count }} of {{ total_hosts }} hosts</small>
+                <small>{{ "%.1f"|format(percentage) }}%</small>
+              </div>
+              <div class="progress" style="height: 18px;">
+                {% if percentage >= 50 %}
+                  <div class="progress-bar bg-success" role="progressbar"
+                       style="width: {{ percentage }}%"></div>
+                {% elif percentage >= 20 %}
+                  <div class="progress-bar bg-warning text-dark" role="progressbar"
+                       style="width: {{ percentage }}%"></div>
+                {% else %}
+                  <div class="progress-bar bg-danger" role="progressbar"
+                       style="width: {{ percentage }}%"></div>
+                {% endif %}
+              </div>
+            </td>
+
+            <!-- Details button -->
+            <td class="text-center">
+              <a href="/services/{{ service }}" class="btn btn-sm btn-outline-info">
+                View Hosts
+              </a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="3" class="text-center text-muted">
+              No services recorded.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- jQuery + DataTables + Bootstrap Tooltip -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css"/>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+$(document).ready(function() {
+  $('#servicesTable').DataTable({
+    paging: true,
+    searching: true,
+    ordering: true,
+    pageLength: 25,
+    lengthMenu: [10, 25, 50, 100],
+    order: [[0, 'asc']],
+    language: {
+      search: "_INPUT_",
+      searchPlaceholder: "Search services..."
+    }
+  });
+
+  // Enable Bootstrap tooltips
+  var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+  tooltipTriggerList.map(function (el) {
+    return new bootstrap.Tooltip(el)
+  })
+});
+</script>
+{% endblock %}

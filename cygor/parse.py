@@ -1,0 +1,367 @@
+# cygor/parse.py
+# Parse Nmap scan files into categorized hostlists
+import os
+import sys
+import argparse
+import re
+import json
+import csv
+import xml.etree.ElementTree as ET
+from colorama import Fore, Style, init
+from pathlib import Path
+
+# Initialize colorama
+init(autoreset=True)
+
+# Try to import libnmap, but allow fallback if it's not installed
+try:
+    from libnmap.parser import NmapParser, NmapParserException
+except Exception:
+    NmapParser = None
+    class NmapParserException(Exception):
+        pass
+
+# --- Colorized help formatter ---
+from argparse import RawTextHelpFormatter
+class ColorHelpFormatter(RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
+    def start_section(self, heading):
+        heading = f"{Fore.CYAN}{heading}{Style.RESET_ALL}"
+        super().start_section(heading)
+    def _format_action_invocation(self, action):
+        parts = super()._format_action_invocation(action)
+        return f"{Fore.YELLOW}{parts}{Style.RESET_ALL}"
+
+# --- Banner & Examples ---
+BANNER = f"""
+{Fore.GREEN}{'='*60}
+  CYGOR PARSE - Nmap XML & Hostlist Extraction
+{'='*60}{Style.RESET_ALL}
+"""
+
+EXAMPLES = f"""
+   {Fore.MAGENTA}Examples:{Style.RESET_ALL}
+
+    {Fore.YELLOW}# Parse a directory of Nmap results and print hostlists{Style.RESET_ALL}
+    cygor parse results/nmap
+
+    {Fore.YELLOW}# Parse a single XML and write hostlists to results/parsed-hostlists{Style.RESET_ALL}
+    cygor parse results/nmap/scan1.xml -o results
+
+    {Fore.YELLOW}# Recursively parse .xml/.nmap/.gnmap files and write outputs{Style.RESET_ALL}
+    cygor parse /path/to/scans --out-dir results
+"""
+
+# ---------------- Services & Fingerprints ----------------
+
+SERVICES = {
+    # Web / Admin Panels
+    "http": [
+        80, 81, 88, 3000, 3333, 5000, 7001, 8000, 8008, 8080,
+        8081, 8088, 8443, 8888, 9000, 9080, 10000, 10443,
+        12000, 16080, 18080, 50080
+    ],
+    "https": [
+        443, 4443, 5443, 7443, 8443, 9443, 10443, 12443, 16443, 18443
+    ],
+
+    # File sharing
+    "smb": [139, 445],
+    "nfs": [2049],
+    "ftp": [20, 21, 2121],
+    "tftp": [69],
+
+    # Remote access
+    "ssh": [22],
+    "telnet": [23],
+    "rdp": [3389],
+    "winrm": [5985, 5986],
+    "vnc": [5900, 5901, 5902, 5903, 5904, 5905],
+
+    # Databases
+    "mysql": [3306],
+    "postgres": [5432],
+    "mssql": [1433, 1434],
+    "oracle": [1521],
+    "mongodb": [27017, 27018],
+    "couchdb": [5984],
+    "redis": [6379],
+    "elasticsearch": [9200, 9300],
+    "cassandra": [9042],
+    "db2": [50000],
+
+    # Mail
+    "smtp": [25, 465, 587, 2525],
+    "imap": [143, 993],
+    "pop3": [110, 995],
+
+    # Directory & auth
+    "ldap": [389, 636],
+    "kerberos": [88, 464],
+    "radius": [1812, 1813],
+
+    # Other infra
+    "dns": [53],
+    "snmp": [161, 162],
+    "ntp": [123],
+    "ipp": [631],
+
+    # Messaging / IoT
+    "mqtt": [1883, 8883],
+    "amqp": [5672, 5671],
+    "stomp": [61613],
+    "zeromq": [5555],
+    "memcached": [11211],
+
+    # DevOps / APIs
+    "docker-api": [2375, 2376],
+    "kubernetes-api": [6443],
+
+    # Virtualization (only Proxmox + Hyper-V get their own lists)
+    "proxmox": [8006],
+    "hyperv": [2179],
+}
+
+FINGERPRINTS = {
+    "proxmox": ["proxmox", "pve", "proxmox ve"],
+    "hyperv": ["microsoft hyper-v", "hyper-v"],
+    # ESXi, Xen, OpenStack handled only as web-like
+    "esxi": ["vmware esxi", "vsphere", "vcenter", "vmware"],
+    "xen": ["xen", "citrix hypervisor"],
+    "openstack": ["openstack", "keystone", "nova", "glance", "neutron"],
+}
+
+# Web-like categories always also go into http/https
+WEBLIKE_CATEGORIES = {"proxmox", "hyperv", "esxi", "xen", "openstack"}
+
+# ---------------- Parsing helpers ----------------
+
+def parse_nmap_xml(file_path):
+    hosts = {service: set() for service in SERVICES}
+    for cat in FINGERPRINTS.keys():
+        hosts.setdefault(cat, set())
+
+    if NmapParser is None:
+        print(f"{Fore.RED}[!] libnmap not installed — cannot parse XML file: {file_path}")
+        return hosts
+
+    try:
+        nmap_report = NmapParser.parse_fromfile(file_path)
+        print(f"{Fore.YELLOW}[i] Parsing XML file: {file_path}")
+
+        for host in nmap_report.hosts:
+            if not host.is_up():
+                continue
+
+            for service in host.services:
+                if service.state != 'open':
+                    continue
+
+                port = getattr(service, "port", None)
+                target_entry = f"{host.address}:{port}" if port else host.address
+
+                # Port-based
+                for serv_name, ports in SERVICES.items():
+                    if port in ports:
+                        if serv_name == "smb":
+                            hosts[serv_name].add(host.address)
+                        else:
+                            hosts[serv_name].add(target_entry)
+
+                        if serv_name in WEBLIKE_CATEGORIES or serv_name in ("http", "https"):
+                            hosts["http"].add(target_entry)
+                            hosts["https"].add(target_entry)
+
+                # Fingerprint-based
+                combined = " ".join([
+                    (getattr(service, "service", "") or "").lower(),
+                    (getattr(service, "product", "") or "").lower(),
+                    (getattr(service, "banner", "") or "").lower(),
+                    (getattr(service, "servicefp", "") or "").lower()
+                ])
+                for category, keywords in FINGERPRINTS.items():
+                    if any(k in combined for k in keywords):
+                        if category in ("proxmox", "hyperv"):
+                            hosts[category].add(target_entry)
+                        hosts["http"].add(target_entry)
+                        hosts["https"].add(target_entry)
+
+    except NmapParserException as e:
+        print(f"{Fore.RED}[!] Error parsing {file_path}: {e}")
+    return hosts
+
+def parse_nmap_text(file_path):
+    hosts = {service: set() for service in SERVICES}
+    for cat in FINGERPRINTS.keys():
+        hosts.setdefault(cat, set())
+
+    print(f"{Fore.YELLOW}[i] Parsing text-based file: {file_path}")
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            match = re.search(r"(\d+\.\d+\.\d+\.\d+).*?(\d{1,5})/open", line)
+            if match:
+                ip, port_num = match.groups()
+                port_num = int(port_num)
+                target_entry = f"{ip}:{port_num}"
+
+                for service, ports in SERVICES.items():
+                    if port_num in ports:
+                        if service == "smb":
+                            hosts[service].add(ip)
+                        else:
+                            hosts[service].add(target_entry)
+
+                        if service in WEBLIKE_CATEGORIES or service in ("http", "https"):
+                            hosts["http"].add(target_entry)
+                            hosts["https"].add(target_entry)
+    return hosts
+
+# ---------------- Writers ----------------
+
+def _write_service_hostlist(base_dir: str, service: str, items: set[str]) -> None:
+    if not items:
+        return
+    svc_dir_name = service
+    filename = f"{service}-hostlist.txt"
+    if service == "http+https":
+        svc_dir_name = "http-https"
+        filename = "http-https-hostlist.txt"
+    svc_dir = os.path.join(base_dir, svc_dir_name)
+    os.makedirs(svc_dir, exist_ok=True)
+    out_file = os.path.join(svc_dir, filename)
+    try:
+        with open(out_file, "w") as f:
+            f.write("\n".join(sorted(items)))
+        print(f"{Fore.GREEN}[+] Saved: {out_file}")
+    except Exception as e:
+        print(f"{Fore.RED}[!] Error writing to {out_file}: {e}")
+
+def save_as_json(hosts, base_dir=None):
+    data = {svc: sorted(list(items)) for svc, items in hosts.items() if items}
+    if base_dir:
+        out_file = os.path.join(base_dir, "parsed-hosts.json")
+        with open(out_file, "w") as f:
+            json.dump(data, f, indent=2)
+        print(f"{Fore.GREEN}[+] Saved JSON: {out_file}")
+    else:
+        print(json.dumps(data, indent=2))
+
+def save_as_csv(hosts, base_dir=None):
+    if base_dir:
+        out_file = os.path.join(base_dir, "parsed-hosts.csv")
+        with open(out_file, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["service", "host"])
+            for svc, items in sorted(hosts.items()):
+                for item in sorted(items):
+                    writer.writerow([svc, item])
+        print(f"{Fore.GREEN}[+] Saved CSV: {out_file}")
+    else:
+        writer = csv.writer(sys.stdout)
+        writer.writerow(["service", "host"])
+        for svc, items in sorted(hosts.items()):
+            for item in sorted(items):
+                writer.writerow([svc, item])
+
+def save_as_xml(hosts, base_dir=None):
+    root = ET.Element("services")
+    for svc, items in sorted(hosts.items()):
+        svc_el = ET.SubElement(root, "service", name=svc)
+        for item in sorted(items):
+            ET.SubElement(svc_el, "host").text = item
+    tree = ET.ElementTree(root)
+    if base_dir:
+        out_file = os.path.join(base_dir, "parsed-hosts.xml")
+        tree.write(out_file, encoding="utf-8", xml_declaration=True)
+        print(f"{Fore.GREEN}[+] Saved XML: {out_file}")
+    else:
+        try: ET.indent(tree, space="  ")
+        except Exception: pass
+        tree.write(sys.stdout, encoding="unicode", xml_declaration=True)
+
+# ---------------- Save dispatcher ----------------
+
+def save_results(hosts, output_dir=None, fmt="txt"):
+    if output_dir:
+        base_dir = os.path.abspath(os.path.expanduser(output_dir))
+        leaf = os.path.basename(os.path.normpath(base_dir))
+        base = base_dir if leaf == "parsed-hostlists" else os.path.join(base_dir, "parsed-hostlists")
+        os.makedirs(base, exist_ok=True)
+        print(f"{Fore.BLUE}\n[i] Output directory: {base}{Style.RESET_ALL}")
+
+        if fmt in ("txt", "all"):
+            for service, items in hosts.items():
+                _write_service_hostlist(base, service, items)
+            combined = sorted(hosts.get("http", set()).union(hosts.get("https", set())))
+            if combined:
+                _write_service_hostlist(base, "http+https", set(combined))
+        if fmt in ("json", "all"): save_as_json(hosts, base)
+        if fmt in ("csv", "all"): save_as_csv(hosts, base)
+        if fmt in ("xml", "all"): save_as_xml(hosts, base)
+    else:
+        if fmt == "txt":
+            for service, ips in hosts.items():
+                if ips:
+                    print(f"\n{Fore.CYAN}[{service.upper()} HOSTS]")
+                    for ip in sorted(ips): print(f"{Fore.GREEN}{ip}")
+        elif fmt == "json": save_as_json(hosts)
+        elif fmt == "csv": save_as_csv(hosts)
+        elif fmt == "xml": save_as_xml(hosts)
+        elif fmt == "all":
+            print(f"{Fore.YELLOW}[!] Warning: dumping JSON, CSV, and XML all to stdout may be messy.{Style.RESET_ALL}")
+            save_as_json(hosts); save_as_csv(hosts); save_as_xml(hosts)
+
+    # Summary
+    print(f"\n{Fore.MAGENTA}{'='*40}")
+    print(f"{Fore.MAGENTA} Summary of Discovered Services")
+    print(f"{'='*40}{Style.RESET_ALL}")
+    any_found = False
+    for service in sorted(hosts.keys()):
+        count = len(hosts[service])
+        if count > 0:
+            any_found = True
+            print(f"{Fore.CYAN}{service:<12}{Style.RESET_ALL}: {Fore.GREEN}{count}{Style.RESET_ALL}")
+    combined_count = len(hosts.get("http", set()).union(hosts.get("https", set())))
+    if combined_count > 0:
+        any_found = True
+        print(f"{Fore.CYAN}{'http+https':<12}{Style.RESET_ALL}: {Fore.GREEN}{combined_count}{Style.RESET_ALL}")
+    if not any_found:
+        print(f"{Fore.RED}[!] No open service hosts discovered.{Style.RESET_ALL}")
+
+# ---------------- CLI entry ----------------
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="cygor parse",
+        usage="cygor parse [options] <input>",
+        description=BANNER + "\nParse Nmap scan files (.xml, .nmap, .gnmap) into categorized hostlists.\n\n"
+                    f"{Fore.YELLOW}Note:{Style.RESET_ALL} If you specify {Fore.CYAN}-o/--out-dir{Style.RESET_ALL}, "
+                    "Cygor will create a subdirectory called "
+                    f"{Fore.CYAN}parsed-hostlists/{Style.RESET_ALL}.\n",
+        epilog=EXAMPLES,
+        formatter_class=ColorHelpFormatter,
+    )
+    parser.add_argument("input", help="Path to a file or directory containing scan files")
+    parser.add_argument("-o","--out-dir",dest="output",
+                        help="Directory to save extracted service lists (parsed-hostlists/ created here)")
+    parser.add_argument("--format", choices=["txt","json","csv","xml","all"], default="txt",
+                        help="Output format (default: txt). If no -o is given, json/csv/xml print to stdout.")
+    args = parser.parse_args(argv)
+
+    input_path, output_dir, fmt = args.input, args.output, args.format
+    all_hosts = {service: set() for service in SERVICES}
+    for cat in FINGERPRINTS.keys(): all_hosts.setdefault(cat, set())
+
+    files_to_parse = []
+    if os.path.isdir(input_path):
+        for f in Path(input_path).rglob("*"):
+            if f.suffix.lower() in (".xml",".nmap",".gnmap"): files_to_parse.append(str(f))
+    else: files_to_parse.append(input_path)
+
+    for file_path in files_to_parse:
+        file_hosts = parse_nmap_xml(file_path) if file_path.endswith(".xml") else parse_nmap_text(file_path)
+        for service in file_hosts: all_hosts.setdefault(service,set()).update(file_hosts[service])
+
+    save_results(all_hosts, output_dir, fmt)
+
+if __name__ == "__main__":
+    main()

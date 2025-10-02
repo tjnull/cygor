@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="mb-3">
+  Nmap Output for {{ host.address }}
+  {% if host.hostname %}
+    <span class="text-secondary">({{ host.hostname }})</span>
+  {% endif %}
+</h2>
+
+<!-- Search Box -->
+<div class="mb-3">
+  <input id="nmapSearch" type="text" class="form-control" placeholder="Search in Nmap output...">
+</div>
+
+<!-- Nmap Output -->
+<div class="card bg-dark border-0 shadow-sm">
+  <div class="card-body">
+    <pre style="max-height: 70vh; overflow-y: auto; white-space: pre;">
+      <code id="nmapOutput" class="plaintext line-numbers">{{ nmap_output }}</code>
+    </pre>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="mt-3 d-flex justify-content-between">
+  <a href="/hosts/{{ host.id }}" class="btn btn-outline-light">← Back to Host</a>
+</div>
+
+<!-- Highlight.js (color coding) -->
+<link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+<!-- Line numbers plugin -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlightjs-line-numbers.js/2.8.0/highlightjs-line-numbers.min.js"></script>
+<link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlightjs-line-numbers.js/2.8.0/styles/line-numbers.min.css"/>
+
+<style>
+/* Highlight matches */
+mark.search-highlight {
+  background-color: yellow;
+  color: black;
+  padding: 0;
+}
+</style>
+
+<script>
+  // Init highlight.js + line numbers
+  hljs.highlightAll();
+  hljs.initLineNumbersOnLoad();
+
+  const searchInput = document.getElementById("nmapSearch");
+  const output = document.getElementById("nmapOutput");
+
+  searchInput.addEventListener("input", function() {
+    const query = this.value.toLowerCase();
+
+    // Reset content to original text when clearing
+    output.innerHTML = output.textContent;
+
+    if (!query) {
+      hljs.highlightElement(output);
+      hljs.lineNumbersBlock(output);
+      return;
+    }
+
+    // Highlight matches with <mark>
+    const regex = new RegExp("(" + query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ")", "gi");
+    output.innerHTML = output.textContent.replace(regex, '<mark class="search-highlight">$1</mark>');
+
+    // Reapply highlighting + line numbers
+    hljs.highlightElement(output);
+    hljs.lineNumbersBlock(output);
+  });
+</script>
+{% endblock %}

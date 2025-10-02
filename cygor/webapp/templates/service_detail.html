@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="mb-4">
+  Service: 
+  <span data-bs-toggle="tooltip" title="Raw: {{ service }}">
+    {{ service|capitalize }}
+  </span>
+</h1>
+
+<!-- Summary Card -->
+<div class="card bg-dark border-0 shadow-sm mb-4">
+  <div class="card-body">
+    {% set host_count = host_services|length %}
+    {% set percentage = (host_count / total_hosts * 100) if total_hosts > 0 else 0 %}
+    <p class="mb-2">
+      Showing <strong>{{ host_count }}</strong> unique host(s) running 
+      <span class="badge bg-info">{{ service|capitalize }}</span>.
+    </p>
+    <div class="d-flex justify-content-between mb-1">
+      <small>{{ host_count }} of {{ total_hosts }} hosts</small>
+      <small>{{ "%.1f"|format(percentage) }}%</small>
+    </div>
+    <div class="progress" style="height: 18px;">
+      {% if percentage >= 50 %}
+        <div class="progress-bar bg-success" style="width: {{ percentage }}%"></div>
+      {% elif percentage >= 20 %}
+        <div class="progress-bar bg-warning text-dark" style="width: {{ percentage }}%"></div>
+      {% else %}
+        <div class="progress-bar bg-danger" style="width: {{ percentage }}%"></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Hosts Table -->
+<div class="card bg-dark border-0 shadow-sm">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table id="serviceHostsTable" class="table align-middle table-dark table-striped">
+        <thead class="table-dark">
+          <tr>
+            <th>Host</th>
+            <th>Hostname</th>
+            <th>Ports</th>
+            <th>Protocols</th>
+            <th>Banners</th>
+            <th class="text-center">Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in host_services %}
+          <tr>
+            <!-- Host -->
+            <td>{{ entry.host.address }}</td>
+            <!-- Hostname -->
+            <td>{{ entry.host.hostname or "—" }}</td>
+            <!-- Ports -->
+            <td>
+              {% if entry.ports %}
+                {% for p in entry.ports %}
+                  {% set banner = (p.banner or "")|lower %}
+                  {% set use_https = ("ssl" in banner or "https" in banner or p.port in [443, 8443]) %}
+                  <a href="{{ 'https' if use_https else 'http' }}://{{ entry.host.address }}:{{ p.port }}"
+                     target="_blank"
+                     class="badge bg-primary text-decoration-none me-1">
+                    {{ p.port }}
+                  </a>
+                {% endfor %}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <!-- Protocols -->
+            <td>
+              {% if entry.ports %}
+                {% for p in entry.ports %}
+                  <span class="badge bg-success me-1">{{ p.protocol }}</span>
+                {% endfor %}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <!-- Banners -->
+            <td>
+              {% if entry.ports %}
+                {% for p in entry.ports %}
+                  <div><small class="text-muted">{{ p.banner or "—" }}</small></div>
+                {% endfor %}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <!-- Details -->
+            <td class="text-center">
+              <a href="/hosts/{{ entry.host.id }}" class="btn btn-sm btn-outline-info">
+                View Host →
+              </a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" class="text-center text-muted">
+              No hosts are currently recorded for this service.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<a href="/services" class="btn btn-outline-dark mt-3">← Back to Services</a>
+
+<!-- jQuery + DataTables + Bootstrap Tooltip -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css"/>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+$(document).ready(function() {
+  $('#serviceHostsTable').DataTable({
+    paging: true,
+    searching: true,
+    ordering: true,
+    pageLength: 25,
+    order: [[0, 'asc']],
+    language: {
+      search: "_INPUT_",
+      searchPlaceholder: "Search hosts..."
+    }
+  });
+
+  // Enable Bootstrap tooltips
+  var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+  tooltipTriggerList.map(function (el) {
+    return new bootstrap.Tooltip(el)
+  })
+});
+</script>
+{% endblock %}

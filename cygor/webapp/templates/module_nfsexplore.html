@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="mb-4">NFSExplorer — NFS Exports</h1>
+
+{% if rows %}
+  <div class="card bg-dark border-0 shadow-sm">
+    <div class="card-body">
+      <input id="nfsFilter" class="form-control form-control-sm mb-3" type="text"
+             placeholder="Filter by IP, export path, permissions..." />
+      <div class="table-responsive">
+        <table id="nfsTable" class="table table-dark table-hover table-sm align-middle">
+          <thead>
+            <tr>
+              <th>IP Address</th>
+              <th>Export Path</th>
+              <th>Permissions</th>
+              <th>Options</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>{{ row['ip'] }}</td>
+                <td>{{ row['export'] }}</td>
+                <td>{{ row['permissions'] }}</td>
+                <td>{{ row['options'] }}</td>
+                <td>{{ row['notes'] }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <small class="text-muted">{{ rows|length }} exports found</small>
+    </div>
+  </div>
+{% else %}
+  <div class="alert alert-secondary">
+    No NFSExplorer results found in
+    <code>results/cygor-enumeration-modules/nfsexplorer/</code>.
+  </div>
+{% endif %}
+
+<script>
+  // Client-side filter
+  const input = document.getElementById("nfsFilter");
+  const rows = document.querySelectorAll("#nfsTable tbody tr");
+  input?.addEventListener("input", () => {
+    const q = input.value.toLowerCase();
+    rows.forEach(r => {
+      r.style.display = r.textContent.toLowerCase().includes(q) ? "" : "none";
+    });
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,513 @@
+{% extends "base.html" %}
+{% block content %}
+
+{# ---- Permission renderer: prefers bits; falls back to string parsing ---- #}
+{% macro render_perms(p, r=None, w=None, x=None) -%}
+  {% if r is not none or w is not none or x is not none %}
+    {% set has_r = r %}{% set has_w = w %}{% set has_x = x %}
+    {% set unknown = false %}
+  {% else %}
+    {% set s = ((p or '')|string).upper().replace('-', '_').replace(' ', '_') %}
+    {% set deny_r = 'NO_READ' in s or 'DENY_READ' in s %}
+    {% set deny_w = 'NO_WRITE' in s or 'DENY_WRITE' in s or 'NOWRITE' in s %}
+    {% set deny_x = 'NO_EXEC' in s or 'NO_EXECUTE' in s or 'NOEXEC' in s or 'DENY_EXEC' in s or 'DENY_EXECUTE' in s %}
+    {% set has_r = ('READ' in s) and not deny_r %}
+    {% set has_w = ('WRITE' in s) and not deny_w %}
+    {% set has_x = (('EXEC' in s) or ('EXECUTE' in s)) and not deny_x %}
+    {% set unknown = (not s) or ('UNKNOWN' in s) %}
+  {% endif %}
+
+  {% if unknown %}
+    {% set overall_label = 'Unknown' %}{% set overall_class = 'pill-unknown' %}
+  {% elif has_r and has_w and has_x %}
+    {% set overall_label = 'Read / Write / Execute' %}{% set overall_class = 'pill-allow' %}
+  {% elif has_r and has_w %}
+    {% set overall_label = 'Read / Write' %}{% set overall_class = 'pill-allow' %}
+  {% elif has_r and has_x %}
+    {% set overall_label = 'Read / Execute' %}{% set overall_class = 'pill-partial' %}
+  {% elif has_r %}
+    {% set overall_label = 'Read-only' %}{% set overall_class = 'pill-warn' %}
+  {% else %}
+    {% set overall_label = 'No access' %}{% set overall_class = 'pill-deny' %}
+  {% endif %}
+
+  <span class="perm-wrap">
+    <span class="overall {{ overall_class }}">{{ overall_label }}</span>
+    <span class="mono-chip {{ 'chip-allow' if has_r else 'chip-deny' }}">R
+      <i class="bi {{ 'bi-check-lg' if has_r else 'bi-x-lg' }}"></i>
+    </span>
+    <span class="mono-chip {{ 'chip-allow' if has_w else 'chip-deny' }}">W
+      <i class="bi {{ 'bi-check-lg' if has_w else 'bi-x-lg' }}"></i>
+    </span>
+    <span class="mono-chip {{ 'chip-allow' if has_x else 'chip-deny' }}">X
+      <i class="bi {{ 'bi-check-lg' if has_x else 'bi-x-lg' }}"></i>
+    </span>
+  </span>
+{%- endmacro %}
+
+<h1 class="mb-4 d-flex align-items-center">
+  NFS Explorer — Enumerated Shares & Files
+  <a href="#" class="ms-2" data-bs-toggle="modal" data-bs-target="#infoModal">
+    <i class="bi bi-info-circle text-info"></i>
+  </a>
+</h1>
+
+<!-- Info Modal -->
+<div class="modal fade" id="infoModal" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light">
+      <div class="modal-header border-0">
+        <h5 class="modal-title" id="infoModalLabel">About NFS Explorer</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>
+          NFSExplorer enumerates available NFS exports from discovered hosts,
+          evaluates permissions, and optionally lists files and directories.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if rows %}
+  <!-- Dashboard -->
+  <h4 class="mb-3">NFS Explorer Dashboard</h4>
+  <div class="row mb-4 text-center">
+    <div class="col-md-4">
+      <div class="card bg-dark border-0 shadow-sm h-100">
+        <div class="card-body">
+          <i class="bi bi-hdd-network fs-1 text-info"></i>
+          <h3 class="mt-2 text-white fw-bold">{{ rows|map(attribute='ip')|unique|list|length }}</h3>
+          <p class="fw-semibold text-info">Hosts with NFS</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card bg-dark border-0 shadow-sm h-100">
+        <div class="card-body">
+          <i class="bi bi-folder2-open fs-1 text-warning"></i>
+          <h3 class="mt-2 text-white fw-bold">{{ rows|map(attribute='share')|unique|list|length }}</h3>
+          <p class="fw-semibold text-warning">Exports Found</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card bg-dark border-0 shadow-sm h-100">
+        <div class="card-body">
+          <i class="bi bi-file-earmark-text fs-1 text-success"></i>
+          <h3 class="mt-2 text-white fw-bold">
+            {{
+              (file_rows|length) if file_rows is defined
+              else (rows|selectattr("type","equalto","file")|list|length
+                    + rows|selectattr("type","equalto","File")|list|length)
+            }}
+          </h3>
+          <p class="fw-semibold text-success">Files Enumerated</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <h4 class="mb-3">Search</h4>
+  <div class="mb-4 position-relative">
+    <div class="input-group">
+      <span class="input-group-text bg-dark text-secondary border border-secondary">
+        <i class="bi bi-search"></i>
+      </span>
+      <input id="nfsSearch" type="text"
+             class="form-control bg-dark text-white border border-secondary"
+             placeholder="Search IPs, exports, directories, files…">
+    </div>
+    <!-- live results popout -->
+    <div id="nfsSearchResults"
+         class="list-group position-absolute w-100 mt-1 shadow"
+         style="z-index:1040; display:none; max-height:320px; overflow:auto;">
+    </div>
+  </div>
+
+  <!-- Hosts -->
+  <div class="accordion" id="nfsAccordion">
+    {% for ip, exports in rows|groupby("ip") %}
+      {% set all_file_rows = file_rows if file_rows is defined else [] %}
+      <div class="accordion-item bg-dark border-0 nfs-item" data-ip="{{ ip }}">
+        <h2 class="accordion-header" id="heading{{ loop.index }}">
+          <button class="accordion-button collapsed bg-dark text-white" type="button"
+                  data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}">
+            <span class="fw-bold">{{ ip }}</span>
+            <span class="text-muted ms-2">({{ exports|unique(attribute='share')|list|length }} exports)</span>
+          </button>
+        </h2>
+        <div id="collapse{{ loop.index }}" class="accordion-collapse collapse"
+             data-bs-parent="#nfsAccordion">
+          <div class="accordion-body">
+
+            {% for share, entries in exports|groupby("share") %}
+              {% set subdirs_rows = entries|selectattr("type","equalto","dir")|list
+                                     + entries|selectattr("type","equalto","directory")|list %}
+              {% set files_rows  = entries|selectattr("type","equalto","file")|list
+                                     + entries|selectattr("type","equalto","File")|list %}
+              {% set export_files_ext = all_file_rows
+                  | selectattr("ip","equalto", ip)
+                  | selectattr("share","equalto", share)
+                  | list %}
+              {% set export_files = export_files_ext if export_files_ext else files_rows %}
+
+              <!-- Main Export -->
+              <h5 class="mt-4 mb-2 text-white fw-semibold">
+                <i class="bi bi-hdd-network text-info"></i>
+                Main Export: <span class="text-info">{{ share }}</span>
+              </h5>
+              <div class="table-responsive mb-3">
+                <table class="table table-dark table-hover table-sm align-middle" data-section="main-export">
+                  <thead>
+                    <tr>
+                      <th>Share</th>
+                      <th>Permissions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% set e0 = entries|first if entries|length else none %}
+                    <tr data-share="{{ share|e }}">
+                      <td>{{ share }}</td>
+                      <td>
+                        {{ render_perms(
+                          e0.permissions if e0 else '-',
+                          e0.perm_r if e0 is not none and e0.perm_r is defined else none,
+                          e0.perm_w if e0 is not none and e0.perm_w is defined else none,
+                          e0.perm_x if e0 is not none and e0.perm_x is defined else none
+                        ) }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Export Shares (directories) -->
+              {% if subdirs_rows %}
+                <h6 class="mt-3 mb-2 text-white-50 fw-semibold">
+                  <i class="bi bi-folder2-open text-warning"></i> Export Shares
+                </h6>
+                <div class="table-responsive mb-3">
+                  <table class="table table-dark table-hover table-sm align-middle" data-section="subdirs">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Size</th>
+                        <th>Permissions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for d in subdirs_rows %}
+                        {% set dname = d.name if d.name is defined and d.name else (d.file if d.file is defined and d.file else '-') %}
+                        <tr data-share="{{ d['share']|e }}" data-name="{{ dname|e }}">
+                          <td><i class="bi bi-folder-fill text-warning"></i> {{ dname }}</td>
+                          <td>{{ d.size if d.size is defined else '-' }}</td>
+                          <td>
+                            {{ render_perms(
+                              d.permissions if d.permissions is defined else '-',
+                              d.perm_r if d.perm_r is defined else none,
+                              d.perm_w if d.perm_w is defined else none,
+                              d.perm_x if d.perm_x is defined else none
+                            ) }}
+                          </td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% endif %}
+
+              <!-- Export Files -->
+              {% if export_files %}
+                <h6 class="mt-3 mb-2 text-white-50 fw-semibold">
+                  <i class="bi bi-file-earmark-text text-success"></i> Export Files
+                </h6>
+                <div class="table-responsive mb-2">
+                  <table class="table table-dark table-hover table-sm align-middle" data-section="files">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Size</th>
+                        <th>Permissions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for f in export_files %}
+                        {% set fname = f.name if f.name is defined and f.name else (f.file if f.file is defined and f.file else '-') %}
+                        <tr data-share="{{ f['share']|e }}" data-name="{{ fname|e }}">
+                          <td>
+                            {% set t = (f.type|string).lower() %}
+                            {% if t == 'directory' or t == 'dir' %}
+                              <i class="bi bi-folder-fill text-warning"></i>
+                            {% else %}
+                              <i class="bi bi-file-earmark-text text-success"></i>
+                            {% endif %}
+                            {{ fname }}
+                          </td>
+                          <td>{{ f.size if f.size is defined else '-' }}</td>
+                          <td>
+                            {{ render_perms(
+                              f.permissions if f.permissions is defined else '-',
+                              f.perm_r if f.perm_r is defined else none,
+                              f.perm_w if f.perm_w is defined else none,
+                              f.perm_x if f.perm_x is defined else none
+                            ) }}
+                          </td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% endif %}
+
+              <hr class="border-secondary opacity-25">
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="alert alert-secondary">
+    No NFSExplorer results found in
+    <code>results/cygor-enumeration-modules/nfsexplorer/</code>.
+  </div>
+{% endif %}
+
+<style>
+  /* Titles and table headers readable in dark theme */
+  .accordion-body h5, .accordion-body h6 { color:#fff !important; }
+  .table thead th { color:#fff !important; }
+  .table td, .table th { vertical-align: middle; }
+
+  /* Search UI */
+  mark { background:#ffc107; color:#000; padding:0 2px; border-radius:2px; }
+  #nfsSearchResults .list-group-item { font-size:.9rem; }
+  #nfsSearchResults .badge { font-weight:500; }
+
+  /* Permission UI */
+  .perm-wrap { display:inline-flex; align-items:center; gap:.35rem; }
+  .overall {
+    padding:.15rem .5rem; border-radius:9999px; font-weight:600; font-size:.78rem;
+    border:1px solid transparent;
+  }
+  .mono-chip {
+    display:inline-flex; align-items:center; gap:.25rem;
+    padding:.1rem .45rem; border-radius:9999px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-weight:700; font-size:.72rem; letter-spacing:.02em;
+    border:1px solid transparent;
+  }
+
+  /* Colors tuned for dark backgrounds */
+  .pill-allow   { background:rgba(25,135,84,.16);  color:#75b798; border-color:#198754; }
+  .pill-partial { background:rgba(255,193,7,.16);  color:#ffd27a; border-color:#ffc107; }
+  .pill-warn    { background:rgba(255,193,7,.12);  color:#ffda79; border-color:#e0a800; }
+  .pill-deny    { background:rgba(220,53,69,.16);  color:#f1aeb5; border-color:#dc3545; }
+  .pill-unknown { background:rgba(108,117,125,.14);color:#ced4da; border-color:#6c757d; }
+
+  .chip-allow   { background:rgba(25,135,84,.12);  color:#7cd2a5; border-color:#198754; }
+  .chip-deny    { background:rgba(220,53,69,.12);  color:#f3a6ad; border-color:#dc3545; }
+  .mono-chip { border-width:1px; }
+  .mono-chip i { font-size:.8rem; line-height:1; }
+</style>
+
+<script>
+(function () {
+  const searchInput = document.getElementById("nfsSearch");
+  const resultsBox  = document.getElementById("nfsSearchResults");
+  if (!searchInput || !resultsBox) return;
+
+  const items = Array.from(document.querySelectorAll(".nfs-item"));
+
+  // Build a compact in-memory index of hosts, exports, subdirs, files
+  const index = { hosts: [], exports: [], contents: [] };
+
+  items.forEach(item => {
+    const ip = item.dataset.ip;
+    const button   = item.querySelector(".accordion-button");
+    const collapse = item.querySelector(".accordion-collapse");
+    const collapseId = collapse ? collapse.id : "";
+
+    index.hosts.push({ ip, item, button, collapse, collapseId });
+
+    // main-export rows
+    item.querySelectorAll('table[data-section="main-export"] tbody tr').forEach(tr => {
+      const share = (tr.dataset.share || tr.querySelector("td")?.innerText || "").trim();
+      if (share) index.exports.push({ ip, share, row: tr, item, button, collapse, collapseId });
+    });
+
+    // subdirs + files rows
+    item.querySelectorAll('table[data-section="subdirs"] tbody tr, table[data-section="files"] tbody tr')
+        .forEach(tr => {
+          const share = (tr.dataset.share || "").trim();
+          const name  = (tr.dataset.name  || "").trim();
+          const tds   = tr.querySelectorAll("td");
+          const fallbackShare = share || (tds[0]?.innerText.trim() || "");
+          const fallbackName  = name  || (tds[0]?.innerText.trim() || "");
+          index.contents.push({
+            ip,
+            share: fallbackShare.toLowerCase(),
+            name : fallbackName.toLowerCase(),
+            row: tr, item, button, collapse, collapseId
+          });
+        });
+  });
+
+  // helpers
+  const TAKE = 25;
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const clearHighlights = root => root.querySelectorAll("mark").forEach(m=>m.replaceWith(m.textContent));
+  function highlight(root, q){
+    if(!q) return;
+    const re = new RegExp('('+esc(q)+')','gi');
+    root.querySelectorAll("td, th, button, h5, h6").forEach(el=>{
+      const texts=[]; el.childNodes.forEach(n=>{ if(n.nodeType===Node.TEXT_NODE) texts.push(n); });
+      texts.forEach(n=>{
+        const span=document.createElement('span');
+        span.innerHTML = n.textContent.replace(re,'<mark>$1</mark>');
+        n.replaceWith(...span.childNodes);
+      });
+    });
+  }
+
+  function filterHosts(q){
+    const qq = q.toLowerCase();
+    items.forEach(item=>{
+      clearHighlights(item);
+      if(!qq){
+        item.style.display="";
+        const btn=item.querySelector(".accordion-button");
+        const col=item.querySelector(".accordion-collapse");
+        btn?.classList.add("collapsed");
+        col?.classList.remove("show");
+        return;
+      }
+      const hit = item.textContent.toLowerCase().includes(qq);
+      item.style.display = hit ? "" : "none";
+      if(hit){
+        const btn=item.querySelector(".accordion-button");
+        const col=item.querySelector(".accordion-collapse");
+        btn?.classList.remove("collapsed");
+        col?.classList.add("show");
+        highlight(item, q);
+      }
+    });
+  }
+
+  function showResults(q){
+    const qq = q.toLowerCase();
+    if(!qq){ resultsBox.style.display="none"; resultsBox.innerHTML=""; return; }
+
+    const hosts   = index.hosts.filter(h=>h.ip.toLowerCase().includes(qq)).slice(0,TAKE);
+    const exports = index.exports.filter(e=>e.share.toLowerCase().includes(qq)).slice(0,TAKE);
+    const files   = index.contents.filter(c=> c.name.includes(qq) || c.share.includes(qq)).slice(0,TAKE);
+
+    const out = [];
+    if(hosts.length){
+      out.push('<div class="list-group-item bg-secondary text-dark fw-semibold">Target Hosts</div>');
+      hosts.forEach(h=>{
+        out.push(`<a href="#" class="list-group-item list-group-item-action bg-dark text-light border-secondary"
+                   data-type="host" data-ip="${h.ip}" data-target="#${h.collapseId}">
+                   <i class="bi bi-pc-display"></i> ${h.ip}
+                   <span class="badge bg-secondary ms-2">host</span></a>`);
+      });
+    }
+    if(exports.length){
+      out.push('<div class="list-group-item bg-secondary text-dark fw-semibold">Exports</div>');
+      exports.forEach(e=>{
+        out.push(`<a href="#" class="list-group-item list-group-item-action bg-dark text-light border-secondary"
+                   data-type="export" data-ip="${e.ip}" data-target="#${e.collapseId}"
+                   data-share="${e.share}">
+                   <i class="bi bi-hdd-network text-info"></i> ${e.share}
+                   <span class="text-muted ms-1">on</span> ${e.ip}
+                   <span class="badge bg-info ms-2">export</span></a>`);
+      });
+    }
+    if(files.length){
+      out.push('<div class="list-group-item bg-secondary text-dark fw-semibold">Files & Directories</div>');
+      files.forEach(f=>{
+        out.push(`<a href="#" class="list-group-item list-group-item-action bg-dark text-light border-secondary"
+                   data-type="content" data-ip="${f.ip}" data-target="#${f.collapseId}"
+                   data-share="${f.share}" data-name="${f.name}">
+                   <i class="bi bi-file-earmark-text text-success"></i> ${f.name || '(dir)'}
+                   <span class="text-muted ms-1">in</span> ${f.share}
+                   <span class="text-muted ms-1">on</span> ${f.ip}
+                   <span class="badge bg-success ms-2">content</span></a>`);
+      });
+    }
+
+    resultsBox.innerHTML = out.join('') || '<div class="list-group-item bg-dark text-secondary border-secondary">No matches</div>';
+    resultsBox.style.display = "block";
+  }
+
+  function expandAndFocus(ip, getRow){
+    const host = index.hosts.find(h=>h.ip===ip);
+    if(!host) return;
+    host.button?.classList.remove("collapsed");
+    host.collapse?.classList.add("show");
+    clearHighlights(host.item);
+    highlight(host.item, searchInput.value.trim());
+
+    const row = getRow ? getRow(host) : null;
+    (row || host.item).scrollIntoView({ behavior:'smooth', block:'center' });
+    if(row){
+      row.classList.add("table-active");
+      setTimeout(()=>row.classList.remove("table-active"), 1200);
+    }
+  }
+
+  // Debounced search
+  let t;
+  searchInput.addEventListener("input", ()=>{
+    const q = searchInput.value.trim();
+    clearTimeout(t);
+    t = setTimeout(()=>{ filterHosts(q); showResults(q); }, 90);
+  });
+
+  // Popout navigation
+  resultsBox.addEventListener("click", (e)=>{
+    const a = e.target.closest("a.list-group-item");
+    if(!a) return;
+    e.preventDefault();
+    const type = a.dataset.type;
+    const ip   = a.dataset.ip;
+
+    if(type === "host"){
+      expandAndFocus(ip, null);
+    } else if(type === "export"){
+      const share = (a.dataset.share || "").toLowerCase();
+      expandAndFocus(ip, ()=>{
+        const rows = document.querySelectorAll(`.nfs-item[data-ip="${ip}"] table[data-section="main-export"] tbody tr`);
+        return Array.from(rows).find(tr => (tr.dataset.share||"").toLowerCase() === share) || null;
+      });
+    } else if(type === "content"){
+      const share = (a.dataset.share || "").toLowerCase();
+      const name  = (a.dataset.name  || "").toLowerCase();
+      expandAndFocus(ip, ()=>{
+        const rows = document.querySelectorAll(
+          `.nfs-item[data-ip="${ip}"] table[data-section="subdirs"] tbody tr,
+           .nfs-item[data-ip="${ip}"] table[data-section="files"] tbody tr`
+        );
+        return Array.from(rows).find(tr =>
+          (tr.dataset.share||"").toLowerCase() === share &&
+          (tr.dataset.name ||"").toLowerCase() === name
+        ) || null;
+      });
+    }
+    resultsBox.style.display="none";
+  });
+
+  // Hide popout when clicking elsewhere / Esc
+  document.addEventListener("click",(e)=>{
+    if(!resultsBox.contains(e.target) && e.target!==searchInput){ resultsBox.style.display="none"; }
+  });
+  document.addEventListener("keydown",(e)=>{
+    if(e.key==="Escape"){ resultsBox.style.display="none"; }
+  });
+})();
+</script>
+
+{% endblock %}

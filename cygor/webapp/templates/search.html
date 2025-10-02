@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Search</h1>
+{% if query %}
+  <div class="mb-4 text-slate-400">Results for: <span class="text-slate-200">{{ query }}</span></div>
+{% endif %}
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <div>
+    <h2 class="font-semibold mb-2">Hosts</h2>
+    <ul class="list-disc ml-6 space-y-1">
+      {% for h in hosts %}
+        <li><a class="hover:underline" href="/hosts/{{ h.id }}">{{ h.address }}</a> {% if h.hostname %}<span class="text-slate-400">({{ h.hostname }})</span>{% endif %}</li>
+      {% else %}
+        <li class="text-slate-500">No matching hosts.</li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div>
+    <h2 class="font-semibold mb-2">Services</h2>
+    <ul class="list-disc ml-6 space-y-1">
+      {% for p in ports %}
+        <li>{{ p.host.address }} : {{ p.port }} — {{ p.service or "unknown" }}</li>
+      {% else %}
+        <li class="text-slate-500">No matching services.</li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div>
+    <h2 class="font-semibold mb-2">Script Output</h2>
+    <ul class="list-disc ml-6 space-y-1">
+      {% for s in scripts %}
+        <li><span class="text-slate-400">{{ s.name }}</span>: <span class="whitespace-pre-wrap">{{ s.output }}</span></li>
+      {% else %}
+        <li class="text-slate-500">No matching script output.</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="mb-4">Nmap Scans</h1>
+
+<div class="card bg-dark border-0 shadow-sm">
+  <div class="card-body">
+
+    <!-- Filter Controls -->
+    <div class="mb-3">
+      <div class="btn-group" role="group">
+        <button type="button" class="btn btn-outline-light btn-sm" id="filter-all">All</button>
+        <button type="button" class="btn btn-outline-success btn-sm" id="filter-reviewed">Reviewed</button>
+        <button type="button" class="btn btn-outline-warning btn-sm" id="filter-unreviewed">Unreviewed</button>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table id="hostsTable" class="table align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Reviewed</th>
+            <th>Host</th>
+            <th>Hostname</th>
+            <th>OS</th>
+            <th>OS Accuracy</th>
+            <th>Ports</th>
+            <th>Services</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in hosts %}
+          {% set osg = top_os_map.get(h.id) if top_os_map else None %}
+          <tr>
+            <!-- Reviewed checkbox -->
+            <td>
+              <input type="checkbox" class="review-checkbox" data-host="{{ h.address }}">
+            </td>
+
+            <!-- Host (IP) -->
+            <td>
+              <a href="/hosts/{{ h.id }}" class="text-decoration-none">
+                {{ h.address }}
+              </a>
+            </td>
+
+            <!-- Hostname -->
+            <td>
+              {% if h.hostname %}
+                {{ h.hostname }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+
+            <!-- OS Guess -->
+            <td>
+              {% if osg %}
+                {{ osg.name }}
+              {% else %}
+                <span class="text-muted">Unknown</span>
+              {% endif %}
+            </td>
+
+            <!-- OS Accuracy with progress bar -->
+            <td style="min-width: 150px;">
+              {% if osg %}
+                <div class="progress" style="height: 20px;">
+                  {% if osg.accuracy >= 90 %}
+                    <div class="progress-bar bg-success" role="progressbar" 
+                         style="width: {{ osg.accuracy }}%" 
+                         aria-valuenow="{{ osg.accuracy }}" aria-valuemin="0" aria-valuemax="100">
+                      {{ osg.accuracy }}%
+                    </div>
+                  {% elif osg.accuracy >= 60 %}
+                    <div class="progress-bar bg-warning text-dark" role="progressbar" 
+                         style="width: {{ osg.accuracy }}%" 
+                         aria-valuenow="{{ osg.accuracy }}" aria-valuemin="0" aria-valuemax="100">
+                      {{ osg.accuracy }}%
+                    </div>
+                  {% else %}
+                    <div class="progress-bar bg-danger" role="progressbar" 
+                         style="width: {{ osg.accuracy }}%" 
+                         aria-valuenow="{{ osg.accuracy }}" aria-valuemin="0" aria-valuemax="100">
+                      {{ osg.accuracy }}%
+                    </div>
+                  {% endif %}
+                </div>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+
+            <!-- Ports -->
+            <td>{{ h.ports | length if h.ports else 0 }}</td>
+
+            <!-- Services -->
+            <td>
+              {% set services = (h.ports | map(attribute='service') | list if h.ports else []) %}
+              {% if services %}
+                {{ services | reject('equalto', None) | unique | list | join(', ') }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- jQuery + DataTables -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css"/>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<style>
+/* Style for reviewed rows */
+.reviewed-row {
+  opacity: 0.5; /* fade out instead of italics */
+}
+</style>
+
+<script>
+// Custom sorting for IP addresses
+jQuery.extend(jQuery.fn.dataTable.ext.type.order, {
+  "ip-pre": function (data) {
+    if (!data) return 0;
+    var parts = data.split('.').map(function(x){ return parseInt(x,10) || 0; });
+    return (parts[0]<<24) + (parts[1]<<16) + (parts[2]<<8) + parts[3];
+  },
+  "ip-asc": function (a, b) { return a - b; },
+  "ip-desc": function (a, b) { return b - a; }
+});
+
+$(document).ready(function() {
+  var table = $('#hostsTable').DataTable({
+    paging: true,
+    searching: true,
+    ordering: true,
+    pageLength: 50,
+    lengthMenu: [10, 25, 50, 100],
+    columnDefs: [
+      { orderable: false, targets: 0 }, // disable sorting on checkbox column
+      { type: 'ip', targets: 1 }        // IP sort for Host column
+    ],
+    order: [[1, 'asc']], // Sort by Host IP
+    language: {
+      search: "_INPUT_",
+      searchPlaceholder: "Search hosts..."
+    }
+  });
+
+  // Restore checkbox states + row styling from localStorage
+  $('#hostsTable tbody .review-checkbox').each(function() {
+    var host = $(this).data('host');
+    var row = $(this).closest('tr');
+    if (localStorage.getItem('reviewed_' + host) === 'true') {
+      $(this).prop('checked', true);
+      row.addClass('reviewed-row');
+    }
+  });
+
+  // Save checkbox state + toggle row style
+  $('#hostsTable').on('change', '.review-checkbox', function() {
+    var host = $(this).data('host');
+    var row = $(this).closest('tr');
+    if ($(this).is(':checked')) {
+      localStorage.setItem('reviewed_' + host, true);
+      row.addClass('reviewed-row');
+    } else {
+      localStorage.setItem('reviewed_' + host, false);
+      row.removeClass('reviewed-row');
+    }
+  });
+
+  // Filter buttons
+  $('#filter-all').on('click', function() {
+    table.rows().every(function() { $(this.node()).show(); });
+  });
+
+  $('#filter-reviewed').on('click', function() {
+    table.rows().every(function() {
+      var checkbox = $(this.node()).find('.review-checkbox');
+      $(this.node()).toggle(checkbox.is(':checked'));
+    });
+  });
+
+  $('#filter-unreviewed').on('click', function() {
+    table.rows().every(function() {
+      var checkbox = $(this.node()).find('.review-checkbox');
+      $(this.node()).toggle(!checkbox.is(':checked'));
+    });
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container-fluid py-4">
+
+  <!-- Stat Widgets -->
+  <div class="row g-4 mb-4">
+    <div class="col-lg-4 col-md-6">
+      <div class="card bg-gradient-dark text-white shadow-sm h-100">
+        <div class="card-body d-flex align-items-center">
+          <i class="bi bi-hdd-network fs-1 text-info me-3"></i>
+          <div>
+            <h6 class="text-uppercase text-secondary fw-bold">Hosts Discovered</h6>
+            <h2 class="mb-0">{{ hosts_total }}</h2>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4 col-md-6">
+      <div class="card bg-gradient-dark text-white shadow-sm h-100">
+        <div class="card-body d-flex align-items-center">
+          <i class="bi bi-search fs-1 text-success me-3"></i>
+          <div>
+            <h6 class="text-uppercase text-secondary fw-bold">Hosts Scanned</h6>
+            <h2 class="mb-0">{{ hosts_scanned }}</h2>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4 col-md-6">
+      <div class="card bg-gradient-dark text-white shadow-sm h-100">
+        <div class="card-body d-flex align-items-center">
+          <i class="bi bi-terminal fs-1 text-warning me-3"></i>
+          <div>
+            <h6 class="text-uppercase text-secondary fw-bold">Hosts Enumerated</h6>
+            <h2 class="mb-0">{{ hosts_enum }}</h2>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts Row -->
+  <div class="row g-4 mb-4">
+    <div class="col-md-6">
+      <div class="card bg-dark shadow-sm h-100">
+        <div class="card-header border-0">
+          <h5 class="card-title text-white mb-0"><i class="bi bi-graph-up me-2"></i> Scan Progress</h5>
+        </div>
+        <div class="card-body">
+          <canvas id="hostsChart" style="width:100%; height:250px;"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card bg-dark shadow-sm h-100">
+        <div class="card-header border-0">
+          <h5 class="card-title text-white mb-0"><i class="bi bi-diagram-3 me-2"></i> Top Services</h5>
+        </div>
+        <div class="card-body">
+          <canvas id="servicesChart" style="width:100%; height:250px;"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+<!-- OS Discovery Card -->
+<div class="col-12">
+  <div class="card bg-dark text-white shadow-sm h-100">
+    <div class="card-header border-0">
+      <h5 class="mb-0"><i class="bi bi-laptop me-2"></i> OS Discovery</h5>
+    </div>
+    <div class="card-body">
+      {% set c = os_summary.counts %}
+      <div class="row text-center">
+        <div class="col">
+          <div class="display-6"><a href="/hosts?os=Windows" class="text-white text-decoration-none">{{ c['Windows'] }}</a></div>
+          <div class="text-secondary">Windows</div>
+        </div>
+        <div class="col">
+          <div class="display-6"><a href="/hosts?os=Linux" class="text-white text-decoration-none">{{ c['Linux'] }}</a></div>
+          <div class="text-secondary">Linux</div>
+        </div>
+        <div class="col">
+          <div class="display-6"><a href="/hosts?os=macOS" class="text-white text-decoration-none">{{ c['macOS'] }}</a></div>
+          <div class="text-secondary">macOS</div>
+        </div>
+        <div class="col">
+          <div class="display-6"><a href="/hosts?os=BSD/Unix" class="text-white text-decoration-none">{{ c['BSD/Unix'] }}</a></div>
+          <div class="text-secondary">BSD/Unix</div>
+        </div>
+        <div class="col">
+          <div class="display-6"><a href="/hosts?os=Android" class="text-white text-decoration-none">{{ c['Android'] }}</a></div>
+          <div class="text-secondary">Android</div>
+        </div>
+        <div class="col">
+          <div class="display-6"><a href="/hosts?os=iOS" class="text-white text-decoration-none">{{ c['iOS'] }}</a></div>
+          <div class="text-secondary">iOS</div>
+        </div>
+      </div>
+
+      <div class="row text-center mt-3">
+        <div class="col">
+          <div class="display-6"><a href="/hosts?os=Network Device" class="text-white text-decoration-none">{{ c['Network Device'] }}</a></div>
+          <div class="text-secondary">Network Device</div>
+        </div>
+        <div class="col">
+          <div class="display-6"><a href="/hosts?os=Virtualization/Hypervisor" class="text-white text-decoration-none">{{ c['Virtualization/Hypervisor'] }}</a></div>
+          <div class="text-secondary">Virtualization/Hypervisor</div>
+        </div>
+        <div class="col">
+          <div class="display-6"><a href="/hosts?os=Printer/Peripheral" class="text-white text-decoration-none">{{ c['Printer/Peripheral'] }}</a></div>
+          <div class="text-secondary">Printer/Peripheral</div>
+        </div>
+        <div class="col">
+          <div class="display-6"><a href="/hosts?os=Specialized Device" class="text-white text-decoration-none">{{ c['Specialized Device'] }}</a></div>
+          <div class="text-secondary">Specialized Device</div>
+        </div>
+        <div class="col">
+          <div class="display-6"><a href="/hosts?os=Other" class="text-white text-decoration-none">{{ c['Other'] }}</a></div>
+          <div class="text-secondary">Other</div>
+        </div>
+        <div class="col">
+          <div class="display-6"><a href="/hosts?os=Unknown" class="text-white text-decoration-none">{{ c['Unknown'] }}</a></div>
+          <div class="text-secondary">Unknown</div>
+        </div>
+      </div>
+
+      {% if os_summary.top_items %}
+      <hr class="border-secondary my-4"/>
+      <div class="row">
+        <div class="col-12">
+          <h6 class="text-secondary mb-3">Top 10 OS Guesses</h6>
+          <div class="table-responsive">
+            <table class="table table-dark table-striped align-middle">
+              <thead>
+                <tr>
+                  <th>IP Address</th>
+                  <th>Hostname</th>
+                  <th>OS Guess</th>
+                  <th>Accuracy</th>
+                  <th class="text-center">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in os_summary.top_items %}
+                <tr>
+                  <td>{{ item.host.address }}</td>
+                  <td>{{ item.host.hostname or "—" }}</td>
+                  <td>{{ item.guess.name or "—" }}</td>
+                  <td><span class="badge bg-secondary">{{ item.guess.accuracy }}%</span></td>
+                  <td class="text-center">
+                    <a href="/hosts/{{ item.host.id }}" class="btn btn-sm btn-outline-info">
+                      View Host →
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="text-secondary mt-3">No OS guesses available yet.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+function renderDonutChart() {
+  const scanned = {{ hosts_scanned }};
+  const enumerated = {{ hosts_enum }};
+  const remaining = {{ hosts_total - hosts_scanned }};
+
+  if ((scanned + enumerated + remaining) === 0) {
+    document.getElementById("hostsChart").outerHTML =
+      "<div class='text-center text-secondary py-5'>No data yet</div>";
+    return;
+  }
+
+  new Chart(document.getElementById("hostsChart"), {
+    type: 'doughnut',
+    data: {
+      labels: ["Scanned", "Enumerated", "Remaining"],
+      datasets: [{
+        data: [scanned, enumerated, remaining],
+        backgroundColor: ["#0d6efd", "#ffc107", "#6c757d"]
+      }]
+    },
+    options: { 
+      cutout: "70%",
+      responsive: true, 
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { color: "#e0e0e0" } } }
+    }
+  });
+}
+
+function renderServicesChart() {
+  const labels = {{ service_summary.keys()|list|tojson }};
+  const values = {{ service_summary.values()|list|tojson }};
+
+  if (!values || values.length === 0 || values.every(v => v === 0)) {
+    document.getElementById("servicesChart").outerHTML =
+      "<div class='text-center text-secondary py-5'>No data yet</div>";
+    return;
+  }
+
+  const ctx = document.getElementById("servicesChart");
+  const chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        backgroundColor: "#0d6efd"
+      }]
+    },
+    options: { 
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      onClick: (evt, elements) => {
+        if (elements.length > 0) {
+          const idx = elements[0].index;
+          const serviceName = labels[idx].toLowerCase();
+          window.location.href = `/services/${serviceName}`;
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: "#e0e0e0" },
+          grid: { color: "rgba(255,255,255,0.1)" }
+        },
+        y: {
+          ticks: { color: "#e0e0e0", precision: 0 },
+          grid: { color: "rgba(255,255,255,0.1)" }
+        }
+      }
+    }
+  });
+}
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  renderDonutChart();
+  renderServicesChart();
+});
+</script>
+
+
+
+{% endblock %}

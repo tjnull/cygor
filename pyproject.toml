@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cygor"
+version = "0.1.0"
+description = "Cygor: scan, parse, and enumerate"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "tjnull" }]
+
+# Core runtime deps (PEP 508 compliant)
+dependencies = [
+  "colorama>=0.4.6",
+  "python-libnmap>=0.7.3",         
+  "requests>=2.31.0",
+  "playwright>=1.46",
+  "smbmap",
+  "tabulate",
+  'py-xdrlib; python_version >= "3.13"',  # XDR backfill for Py3.13+
+
+  # web
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "jinja2>=3.1",
+  "python-multipart>=0.0.9",
+
+  # db
+  "sqlmodel>=0.0.22",
+  "SQLAlchemy>=2.0",            # sqlmodel relies on this
+  "asyncpg>=0.29",              # async Postgres driver
+  "aiosqlite",
+
+  # parsing & IO
+  "lxml>=5.2",                  # robust nmap XML parse
+  "watchfiles>=0.24",           # fast cross-platform FS watcher (async)
+  "pandas>=2.2",
+  "openpyxl>=3.1",              # pandas xlsx engine
+
+  # nfsclient (GitHub)
+  "pyNfsClient @ git+https://github.com/Pennyw0rth/NfsClient.git@master",
+
+]
+
+[project.scripts]
+cygor = "cygor.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["cygor", "cygor.*"]
+
+# If you ship non-.py files (templates, etc.), uncomment and adjust:
+# [tool.setuptools.package-data]
+# "cygor" = ["modules/*.tmpl", "data/**/*"]
+

@@ -1,0 +1,431 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="mb-4">Lockon — Web Discovery & Screenshots</h1>
+
+{# Counters setup #}
+{% set codes = items
+  | selectattr("status_code", "defined")
+  | map(attribute="status_code")
+  | map("int")
+  | list
+%}
+{% set count_2xx = codes | select("ge",200) | select("lt",300) | list | length %}
+{% set count_3xx = codes | select("ge",300) | select("lt",400) | list | length %}
+{% set count_4xx = codes | select("ge",400) | select("lt",500) | list | length %}
+{% set count_5xx = codes | select("ge",500) | select("lt",600) | list | length %}
+{% set count_other = (codes | reject("ge",200) | list | length) + (codes | select("ge",600) | list | length) %}
+
+<!-- Dashboard -->
+<div class="row row-cols-1 row-cols-sm-2 g-3 mb-4">
+  <div class="col">
+    <div class="card text-bg-dark border-0 shadow-sm h-100 text-center">
+      <div class="card-body">
+        <i class="bi bi-camera fs-3 text-info"></i>
+        <h5 class="card-title mt-2">{{ items|length }}</h5>
+        <p class="card-text small text-muted">Captured Screenshots</p>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="card text-bg-dark border-0 shadow-sm h-100 text-center">
+      <div class="card-body">
+        <i class="bi bi-exclamation-triangle fs-3 text-warning"></i>
+        <h5 class="card-title mt-2">
+          {% set fails = (items|selectattr('screenshot_failed','equalto',True)|list|length) if items else 0 %}
+          {{ fails }}
+        </h5>
+        <p class="card-text small text-muted">Failures</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Status cards -->
+<h5 class="mb-3 d-flex justify-content-between align-items-center">
+  <span>Status Codes</span>
+  <button id="clearFilters" class="btn btn-sm btn-outline-light">
+    <i class="bi bi-x-circle"></i> Clear Filters
+  </button>
+</h5>
+<div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-xl-5 g-3 mb-4">
+  <div class="col"><div class="card text-bg-dark border-0 shadow-sm h-100 status-filter" data-filter="2"><div class="card-body text-center"><h5 class="card-title text-success">{{ count_2xx }}</h5><p class="card-text small text-muted">2xx Success</p></div></div></div>
+  <div class="col"><div class="card text-bg-dark border-0 shadow-sm h-100 status-filter" data-filter="3"><div class="card-body text-center"><h5 class="card-title text-info">{{ count_3xx }}</h5><p class="card-text small text-muted">3xx Redirects</p></div></div></div>
+  <div class="col"><div class="card text-bg-dark border-0 shadow-sm h-100 status-filter" data-filter="4"><div class="card-body text-center"><h5 class="card-title text-warning">{{ count_4xx }}</h5><p class="card-text small text-muted">4xx Client Errors</p></div></div></div>
+  <div class="col"><div class="card text-bg-dark border-0 shadow-sm h-100 status-filter" data-filter="5"><div class="card-body text-center"><h5 class="card-title text-danger">{{ count_5xx }}</h5><p class="card-text small text-muted">5xx Server Errors</p></div></div></div>
+  <div class="col"><div class="card text-bg-dark border-0 shadow-sm h-100 status-filter" data-filter="other"><div class="card-body text-center"><h5 class="card-title text-muted">{{ count_other }}</h5><p class="card-text small text-muted">Other</p></div></div></div>
+</div>
+
+<!-- Search bar -->
+<div class="card bg-dark border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <h5 class="card-title mb-3">Search & Filter</h5>
+    <div class="input-group input-group-lg">
+      <span class="input-group-text bg-dark text-light border-secondary"><i class="bi bi-search"></i></span>
+      <input id="lockonFilter" class="form-control bg-dark text-light border-secondary" type="text" placeholder="Search by host, port, and schemes" />
+      <select id="statusFilter" class="d-none"><option value="all" selected>All</option></select>
+    </div>
+  </div>
+</div>
+
+<!-- Screenshots -->
+<div class="card bg-dark border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <h5 class="card-title mb-3 d-flex justify-content-between align-items-center">
+      <span>Captured Screenshots</span>
+      <div class="btn-group flex-wrap">
+        <button id="showAllReviews" class="btn btn-sm btn-outline-light active" data-review="all">All</button>
+        <button id="showReviewed" class="btn btn-sm btn-outline-success" data-review="reviewed">Reviewed</button>
+        <button id="showUnreviewed" class="btn btn-sm btn-outline-warning" data-review="unreviewed">Unreviewed</button>
+        <button id="markAllReviewed" class="btn btn-sm btn-outline-primary"><i class="bi bi-check2-all"></i> Mark Visible Reviewed</button>
+        <button id="markAllUnreviewed" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-square"></i> Mark Visible Unreviewed</button>
+        <button id="clearAllReviews" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Clear All Review Marks</button>
+      </div>
+    </h5>
+    <div id="reviewCounter" class="text-muted small mb-3">
+      Reviewed: 0 / {{ items|length }}
+    </div>
+    <div id="shotsGrid" class="shots-grid">
+      {% for it in items %}
+        {% set is_map = it is mapping %}
+        {% set url = it.url if is_map else it %}
+        {% set failed = (it.screenshot_failed if is_map and it.screenshot_failed is not none else false) %}
+        {% set code = it.status_code if is_map and it.status_code else "?" %}
+        {% set sf = (it.screenshot_file if is_map and it.screenshot_file else
+                     (url|replace('://','_')|replace('/','_')|replace(':','_')|replace('?','_')|replace('&','_')) ~ '.png') %}
+        <div class="lockon-card" data-status="{{ code }}" data-review="unreviewed">
+          <div class="lockon-tile bg-dark shadow-sm">
+            <div class="screenshot-wrap"
+                 data-img="/enum/lockon/screenshots/{{ sf }}"
+                 data-url="{{ url }}"
+                 data-key="{{ sf }}">
+              <img src="/enum/lockon/screenshots/{{ sf }}" alt="{{ url }}" class="screenshot-img">
+              <div class="thumb-fallback{% if not failed %} d-none{% endif %}"><i class="bi bi-image"></i><span>No screenshot</span></div>
+              <div class="screenshot-footer d-flex justify-content-between align-items-center">
+                <a href="{{ url }}" target="_blank" rel="noreferrer" class="url-text">{{ url }}</a>
+                <span class="badge status-badge
+                  {% if code|int >=200 and code|int <300 %}bg-success
+                  {% elif code|int >=300 and code|int <400 %}bg-info
+                  {% elif code|int >=400 and code|int <500 %}bg-warning
+                  {% elif code|int >=500 %}bg-danger
+                  {% else %}bg-secondary{% endif %}" data-code="{{ code }}">
+                  {{ code }}
+                </span>
+              </div>
+            </div>
+            <div class="review-toggle px-2 py-1">
+              <label class="form-check-label m-0">
+                <input type="checkbox" class="form-check-input review-checkbox me-1"> <strong>Reviewed</strong>
+              </label>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    <small class="text-muted d-block mt-2">{{ items|length }} captured screenshot(s)</small>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="screenshotModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content bg-dark">
+      <div class="modal-header border-0">
+        <h6 class="modal-title"><a id="screenshotTitle" href="#" target="_blank" rel="noreferrer" class="link-light text-decoration-none"></a></h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center">
+        <img id="screenshotFull" src="" alt="Full Screenshot" class="img-fluid rounded">
+      </div>
+      <div class="modal-footer border-0 d-flex justify-content-between">
+        <div class="form-check text-start text-light">
+          <input class="form-check-input" type="checkbox" id="modalReviewCheckbox">
+          <label class="form-check-label" for="modalReviewCheckbox">Reviewed</label>
+        </div>
+        <div>
+          <a id="modalOpenImage" href="#" target="_blank" class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-up-right"></i> Open Image</a>
+          <a id="modalVisitSite" href="#" target="_blank" class="btn btn-sm btn-primary"><i class="bi bi-link-45deg"></i> Visit Site</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Gapless masonry layout using CSS Grid */
+.shots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  grid-auto-flow: dense; /* tightly pack items */
+  gap: 1.25rem;
+}
+
+.lockon-card {
+  display: block;
+  opacity: 1;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+/* Smooth fade-out when hidden */
+.lockon-card.fading-out { 
+  opacity: 0;
+  transform: scale(0.97); /* subtle shrink */
+}
+.lockon-card.hidden { display: none !important; }
+
+.screenshot-wrap {
+  position: relative;
+  width: 100%;
+  background: #111;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.4s ease, box-shadow 0.4s ease;
+}
+
+/* Hover sway effect */
+.screenshot-wrap:hover {
+  transform: scale(1.05) rotate(-0.5deg);
+  box-shadow: 0 0.75rem 1.5rem rgba(0,0,0,0.45);
+}
+
+.screenshot-img {
+  width: 100%;
+  height: 240px;    /* fixed height */
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s ease;
+}
+
+
+.screenshot-wrap:hover .screenshot-img {
+  transform: scale(1.08);
+}
+
+.screenshot-footer { 
+  position:absolute; 
+  bottom:0; left:0; right:0; 
+  background:rgba(0,0,0,0.6); 
+  padding:.5rem .7rem; 
+  font-size:.9rem; 
+}
+
+.review-toggle { 
+  background:rgba(255,255,255,0.05); 
+  border-top:1px solid rgba(255,255,255,0.1); 
+  font-size:1rem; 
+  padding:.6rem; 
+}
+.review-toggle label { font-size: 1rem; color: #f8f9fa; }
+
+.status-filter { cursor:pointer; transition: all 0.3s ease; opacity: .85; }
+.status-filter:hover { opacity: 1; transform: scale(1.03); }
+.status-filter.active { border: 2px solid #fff; box-shadow: 0 0 10px rgba(255,255,255,.6); transform: scale(1.05); opacity: 1; }
+.status-badge { cursor:pointer; }
+</style>
+
+
+
+<script>
+(function () {
+  const grid = document.getElementById('shotsGrid');
+  const modal = document.getElementById('screenshotModal');
+  const modalImg = document.getElementById('screenshotFull');
+  const modalTitle = document.getElementById('screenshotTitle');
+  const modalOpen = document.getElementById('modalOpenImage');
+  const modalSite = document.getElementById('modalVisitSite');
+  const modalReviewCheckbox = document.getElementById('modalReviewCheckbox');
+  const reviewCounter = document.getElementById('reviewCounter');
+
+  const statusCards = document.querySelectorAll('.status-filter');
+  const clearBtn  = document.getElementById('clearFilters');
+  const reviewBtns = document.querySelectorAll('[data-review]');
+  const markAllReviewedBtn = document.getElementById('markAllReviewed');
+  const markAllUnreviewedBtn = document.getElementById('markAllUnreviewed');
+  const clearAllReviewsBtn = document.getElementById('clearAllReviews');
+  let reviewMode = 'all';
+  const activeStatus = new Set();
+  let currentModalKey = null;
+
+  function updateCounter() {
+    const total = grid.querySelectorAll('.lockon-card').length;
+    const reviewed = grid.querySelectorAll('.lockon-card[data-review="reviewed"]').length;
+    if (reviewCounter) reviewCounter.textContent = `Reviewed: ${reviewed} / ${total}`;
+  }
+
+  function openModalFor(tile) {
+    const imgUrl = tile.dataset.img;
+    const siteUrl = tile.dataset.url;
+    currentModalKey = tile.dataset.key;
+
+    modalImg.src = imgUrl;
+    modalTitle.textContent = siteUrl;
+    modalTitle.href = siteUrl;
+    modalOpen.href = imgUrl;
+    modalSite.href = siteUrl;
+
+    const saved = localStorage.getItem('lockon_review_' + currentModalKey);
+    modalReviewCheckbox.checked = (saved === '1');
+
+    new bootstrap.Modal(modal).show();
+  }
+
+  modalReviewCheckbox?.addEventListener('change', () => {
+    if (!currentModalKey) return;
+    const card = grid.querySelector(`.screenshot-wrap[data-key="${currentModalKey}"]`)?.closest('.lockon-card');
+    if (!card) return;
+    const cb = card.querySelector('.review-checkbox');
+
+    if (modalReviewCheckbox.checked) {
+      localStorage.setItem('lockon_review_' + currentModalKey, '1');
+      card.dataset.review = 'reviewed';
+      if (cb) cb.checked = true;
+    } else {
+      localStorage.setItem('lockon_review_' + currentModalKey, '0');
+      card.dataset.review = 'unreviewed';
+      if (cb) cb.checked = false;
+    }
+    applyAllFilters();
+    updateCounter();
+  });
+
+  function initScreens() {
+    grid.querySelectorAll('.screenshot-wrap').forEach(tile => {
+      tile.addEventListener('click', e => {
+        if (e.target.classList.contains('review-checkbox')) return;
+        if (e.target.closest('.url-text')) return;
+        if (e.target.closest('.status-badge')) return;
+        openModalFor(tile);
+      });
+    });
+
+    grid.querySelectorAll('.review-checkbox').forEach(cb => {
+      const card = cb.closest('.lockon-card');
+      const key = card.querySelector('.screenshot-wrap')?.dataset.key;
+      const saved = localStorage.getItem('lockon_review_' + key);
+      if (saved === '1') { cb.checked = true; card.dataset.review = 'reviewed'; }
+      cb.addEventListener('change', () => {
+        if (cb.checked) { localStorage.setItem('lockon_review_' + key,'1'); card.dataset.review='reviewed'; }
+        else { localStorage.setItem('lockon_review_' + key,'0'); card.dataset.review='unreviewed'; }
+        applyAllFilters();
+        updateCounter();
+      });
+    });
+  }
+
+  function applyAllFilters() {
+  const q = (document.getElementById('lockonFilter')?.value || '').trim().toLowerCase();
+  grid.querySelectorAll('.lockon-card').forEach(col => {
+    const url = col.querySelector('.url-text')?.textContent.toLowerCase() || '';
+    const codeStr = col.getAttribute('data-status') || '';
+    const code = parseInt(codeStr,10);
+
+    const textPass = !q || url.includes(q) || codeStr.includes(q);
+
+    let statusPass = true;
+    if (activeStatus.size>0) {
+      statusPass=false;
+      if (activeStatus.has('2') && code>=200 && code<300) statusPass=true;
+      if (activeStatus.has('3') && code>=300 && code<400) statusPass=true;
+      if (activeStatus.has('4') && code>=400 && code<500) statusPass=true;
+      if (activeStatus.has('5') && code>=500 && code<600) statusPass=true;
+      if (activeStatus.has('other') && (isNaN(code)||code<200||code>=600)) statusPass=true;
+    }
+
+    const reviewAttr = col.getAttribute('data-review');
+    let reviewPass=true;
+    if (reviewMode==='reviewed') reviewPass=(reviewAttr==='reviewed');
+    if (reviewMode==='unreviewed') reviewPass=(reviewAttr==='unreviewed');
+
+    const shouldShow = (textPass && statusPass && reviewPass);
+
+    if (shouldShow) {
+      col.classList.remove('hidden');
+      col.classList.remove('fading-out');
+    } else {
+      if (!col.classList.contains('hidden')) {
+        col.classList.add('fading-out');
+        setTimeout(()=> col.classList.add('hidden'), 400); // wait for fade
+      }
+    }
+  });
+  updateCounter();
+}
+
+
+  // Status filter cards
+  statusCards.forEach(card=>{
+    card.addEventListener('click',()=>{
+      const f=card.dataset.filter;
+      if(activeStatus.has(f)){activeStatus.delete(f);card.classList.remove('active');}
+      else{activeStatus.clear();statusCards.forEach(c=>c.classList.remove('active'));activeStatus.add(f);card.classList.add('active');}
+      applyAllFilters();
+    });
+  });
+
+  // Review filter buttons
+  reviewBtns.forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      reviewBtns.forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      reviewMode=btn.dataset.review||'all';
+      applyAllFilters();
+    });
+  });
+
+  // Clear filters
+  clearBtn?.addEventListener('click',()=>{
+    activeStatus.clear();
+    statusCards.forEach(c=>c.classList.remove('active'));
+    reviewMode='all';
+    reviewBtns.forEach(b=>b.classList.remove('active'));
+    document.getElementById('showAllReviews')?.classList.add('active');
+    document.getElementById('lockonFilter').value='';
+    applyAllFilters();
+  });
+
+  // Bulk mark reviewed
+  markAllReviewedBtn?.addEventListener('click', () => {
+    grid.querySelectorAll('.lockon-card:not(.hidden)').forEach(col => {
+      const cb = col.querySelector('.review-checkbox');
+      const key = col.querySelector('.screenshot-wrap')?.dataset.key;
+      if (cb && key) {
+        cb.checked = true;
+        col.dataset.review = 'reviewed';
+        localStorage.setItem('lockon_review_' + key,'1');
+      }
+    });
+    applyAllFilters();
+  });
+
+  // Bulk mark unreviewed
+  markAllUnreviewedBtn?.addEventListener('click', () => {
+    grid.querySelectorAll('.lockon-card:not(.hidden)').forEach(col => {
+      const cb = col.querySelector('.review-checkbox');
+      const key = col.querySelector('.screenshot-wrap')?.dataset.key;
+      if (cb && key) {
+        cb.checked = false;
+        col.dataset.review = 'unreviewed';
+        localStorage.setItem('lockon_review_' + key,'0');
+      }
+    });
+    applyAllFilters();
+  });
+
+  // Clear all review marks
+  clearAllReviewsBtn?.addEventListener('click', () => {
+    grid.querySelectorAll('.lockon-card').forEach(col => {
+      const cb = col.querySelector('.review-checkbox');
+      const key = col.querySelector('.screenshot-wrap')?.dataset.key;
+      if (cb && key) {
+        cb.checked = false;
+        col.dataset.review = 'unreviewed';
+        localStorage.removeItem('lockon_review_' + key);
+      }
+    });
+    applyAllFilters();
+  });
+
+  initScreens();
+  applyAllFilters();
+})();
+</script>
+{% endblock %}

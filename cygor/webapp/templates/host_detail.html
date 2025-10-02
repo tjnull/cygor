@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="mb-4">Host Details</h1>
+
+<!-- Host Summary -->
+<div class="card bg-dark border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <h4>
+      <span class="fw-bold">{{ h.address }}</span>
+      {% if h.hostname %}
+        <span class="text-secondary">({{ h.hostname }})</span>
+      {% endif %}
+    </h4>
+
+    <!-- OS Guesses -->
+    <div class="mt-2">
+      <strong>OS Guesses:</strong>
+      {% if os_guesses %}
+        <ul class="mb-2">
+          {% for guess in os_guesses %}
+            <li>
+              {{ guess.name }}
+              <span class="badge bg-secondary">{{ guess.accuracy }}%</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <span class="text-muted">Unknown</span>
+      {% endif %}
+    </div>
+
+    <!-- Host Metadata -->
+    <div class="mt-3">
+      <strong>Details:</strong>
+      <ul class="list-unstyled mb-0 small">
+        <li><strong>IP Address:</strong> {{ h.address }}</li>
+        <li><strong>Hostname:</strong> {{ h.hostname or "—" }}</li>
+        <li><strong>Total Open Ports:</strong> {{ h.ports|length }}</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card-footer d-flex justify-content-between">
+    <a href="/hosts" class="btn btn-outline-light">← Back to Hosts</a>
+
+    <!-- Dropdown to choose raw scan file -->
+    <div class="btn-group">
+      <button type="button" class="btn btn-outline-warning dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+        <i class="bi bi-file-earmark-text me-1"></i> View Raw Scan Output
+      </button>
+      <ul class="dropdown-menu dropdown-menu-dark">
+        {% if nmap_output %}
+        <li><a class="dropdown-item" href="#" onclick="openModal('nmap')">.nmap File</a></li>
+        {% endif %}
+        {% if xml_output %}
+        <li><a class="dropdown-item" href="#" onclick="openModal('xml')">.xml File</a></li>
+        {% endif %}
+        {% if gnmap_output %}
+        <li><a class="dropdown-item" href="#" onclick="openModal('gnmap')">.gnmap File</a></li>
+        {% endif %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+
+<!-- Ports & Services -->
+<div class="card bg-dark border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <h5>Open Ports & Services</h5>
+    <div class="table-responsive">
+      <table class="table table-dark table-striped align-middle">
+        <thead>
+          <tr>
+            <th>IP Address</th>
+            <th>Hostname</th>
+            <th>Port</th>
+            <th>Protocol</th>
+            <th>Service</th>
+            <th>Banner</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in h.ports %}
+          <tr>
+            <td>{{ h.address }}</td>
+            <td>{{ h.hostname or "—" }}</td>
+            <td><span class="badge bg-primary">{{ p.port }}</span></td>
+            <td><span class="badge bg-success">{{ p.protocol }}</span></td>
+            <td>{{ p.service or "—" }}</td>
+            <td>
+              {% if p.banner %}
+                {{ p.banner }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" class="text-center text-muted">No open ports recorded.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+
+<!-- Nmap Scan Modal -->
+<div class="modal fade" id="scanModal" tabindex="-1" aria-labelledby="scanModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" id="scanModalDialog">
+    <div class="modal-content bg-dark text-light">
+      <div class="modal-header d-flex align-items-center">
+        <h5 class="modal-title me-auto" id="scanModalLabel">
+          <i class="bi bi-terminal me-2"></i> Raw Nmap Output ({{ h.address }})
+        </h5>
+        <input id="scanSearch" type="text" class="form-control form-control-sm w-50 me-2" placeholder="Search in output...">
+        <button type="button" id="toggleFullscreen" class="btn btn-outline-info btn-sm me-2">Fullscreen</button>
+        <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Close</button>
+      </div>
+      <div class="modal-body p-3">
+        <pre style="max-height: 85vh; overflow-y: auto; overflow-x: auto; white-space: pre;">
+          <!-- Ensure <code> is used for Highlight.js + line numbers -->
+          <code id="scanOutput" class="hljs line-numbers language-plaintext">No output loaded.</code>
+        </pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Highlight.js -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlightjs-line-numbers.js/2.8.0/highlightjs-line-numbers.min.js"></script>
+
+<!-- mark.js for reliable search -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mark.js/8.11.1/mark.min.js"></script>
+
+<style>
+mark {
+  background-color: yellow;
+  color: black;
+  padding: 0;
+}
+
+/* ✅ Fix spacing between line numbers and code text */
+.hljs-ln td.hljs-ln-code {
+  padding-left: 12px; /* creates space between numbers and code */
+}
+
+.hljs-ln td.hljs-ln-numbers {
+  padding-right: 12px; /* space after numbers */
+  color: #888;         /* dim color for readability */
+  user-select: none;   /* prevents accidental copy */
+}
+
+/* Optional fullscreen helper */
+#scanModalDialog.fullscreen {
+  width: 98vw;
+  max-width: 98vw;
+  height: 98vh;
+  margin: 0;
+}
+#scanModalDialog.fullscreen .modal-content {
+  height: 98vh;
+}
+#scanModalDialog.fullscreen pre {
+  max-height: calc(98vh - 130px);
+}
+</style>
+
+
+<script>
+// Optional: register custom nmap syntax highlighting
+hljs.registerLanguage("nmap", function(hljs) {
+  return {
+    name: "Nmap",
+    contains: [
+      { className: "comment", begin: "#", end: "$" },
+      { className: "keyword", begin: "\\b(open|closed|filtered|unfiltered)\\b" },
+      { className: "number", begin: "\\b\\d+/(tcp|udp)\\b" },
+      { className: "string", begin: "\\b(http|https|ssh|ftp|dns|smtp|rdp|mysql|postgres)\\b" }
+    ]
+  };
+});
+
+function openModal(type) {
+  const modalEl = document.getElementById("scanModal");
+  const codeEl  = document.getElementById("scanOutput");
+  const search  = document.getElementById("scanSearch");
+  if (!modalEl || !codeEl || !search) return;
+
+  const modal = new bootstrap.Modal(modalEl);
+  const markInstance = new Mark(codeEl);
+
+  // Resolve text + language
+  let rawText = "";
+  let lang = "plaintext";
+
+  if (type === "nmap") {
+    rawText = {{ nmap_output|default('')|tojson }};
+    lang = "nmap";        // uses the custom grammar registered above
+  } else if (type === "xml") {
+    rawText = {{ xml_output|default('')|tojson }};
+    lang = "xml";
+  } else if (type === "gnmap") {
+    rawText = {{ gnmap_output|default('')|tojson }};
+    lang = "nmap";        // or 'plaintext' if you prefer
+  }
+
+  // Reset previous language-* class; keep hljs + line-numbers
+  Array.from(codeEl.classList)
+    .filter(c => c.startsWith("language-"))
+    .forEach(c => codeEl.classList.remove(c));
+  codeEl.classList.add("hljs", "line-numbers", `language-${lang}`);
+
+  // Set text content (clears any previous highlight/mark DOM)
+  codeEl.textContent = rawText || "No output available.";
+
+  // Highlight + add line numbers
+  try {
+    hljs.highlightElement(codeEl);
+    if (hljs.lineNumbersBlock) {
+      hljs.lineNumbersBlock(codeEl);
+    }
+  } catch (e) {
+    console.error("Highlight.js error:", e);
+  }
+
+  // Debounced search with mark.js across elements
+  let debounceId;
+  const debounce = (fn, ms) => {
+    clearTimeout(debounceId);
+    debounceId = setTimeout(fn, ms);
+  };
+
+  search.value = "";
+  search.oninput = function () {
+    const q = this.value.trim();
+    debounce(() => {
+      markInstance.unmark({
+        done: () => {
+          if (q) {
+            markInstance.mark(q, {
+              separateWordSearch: true,
+              acrossElements: true
+            });
+          }
+        }
+      });
+    }, 120);
+  };
+
+  modal.show();
+}
+
+// Fullscreen toggle
+document.addEventListener("DOMContentLoaded", function () {
+  const toggleBtn = document.getElementById("toggleFullscreen");
+  const modalDialog = document.getElementById("scanModalDialog");
+  if (!toggleBtn || !modalDialog) return;
+
+  toggleBtn.addEventListener("click", function () {
+    modalDialog.classList.toggle("fullscreen");
+    toggleBtn.textContent = modalDialog.classList.contains("fullscreen")
+      ? "Compact"
+      : "Fullscreen";
+  });
+});
+</script>
+{% endblock %}

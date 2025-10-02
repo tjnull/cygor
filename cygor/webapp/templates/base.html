@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en" class="h-100">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Cygor UI</title>
+
+  <!-- Bootstrap 5 Dark Theme -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --sidebar-width: 240px;
+      --navbar-height: 56px;
+      --accent-color: #0d6efd; /* Sidebar accent */
+    }
+
+    body {
+      background-color: #121212;
+      color: #e0e0e0;
+    }
+
+    /* Top navbar */
+    .topbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--navbar-height);
+      background: #0f0f14;
+      z-index: 1100;
+      display: flex;
+      align-items: center;
+      padding: 0 .75rem;
+    }
+
+    .topbar .brand-inline {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-weight: 600;
+      color: #e0e0e0;
+      text-decoration: none;
+      font-size: 1.1rem;
+    }
+
+    .topbar .brand-inline:hover {
+      color: #fff;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      top: var(--navbar-height);
+      left: 0;
+      width: var(--sidebar-width);
+      height: calc(100vh - var(--navbar-height));
+      background: #0d0d12;
+      padding: 1rem 0;
+      transition: transform .3s ease;
+      z-index: 1000;
+      overflow-y: auto;
+    }
+
+    .sidebar.collapsed {
+      transform: translateX(-100%);
+    }
+
+    .sidebar .nav-link {
+      color: #adb5bd;
+      white-space: nowrap;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: .6rem 1rem;
+      border-radius: 0;
+      position: relative;
+      transition: color .2s ease, background-color .2s ease;
+    }
+
+    .sidebar .nav-link.active,
+    .sidebar .nav-link:hover {
+      color: #fff;
+      background-color: rgba(255,255,255,0.03);
+    }
+
+    /* Left accent bar on hover/active */
+    .sidebar .nav-link::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background-color: var(--accent-color);
+      opacity: 0;
+      transition: opacity .2s ease;
+    }
+
+    .sidebar .nav-link.active::before,
+    .sidebar .nav-link:hover::before {
+      opacity: 1;
+    }
+
+    /* Content */
+    .content {
+      margin-top: var(--navbar-height);
+      margin-left: var(--sidebar-width);
+      padding: 2rem;
+      transition: margin-left .3s ease;
+      min-height: calc(100vh - var(--navbar-height));
+    }
+
+    .content.expanded {
+      margin-left: 0;
+    }
+    
+    /* Default modal fixes */
+    .modal {
+      z-index: 2000 !important;
+    }
+
+    /* Fullscreen mode (applied via JS toggle) */
+    .modal-dialog.fullscreen {
+      max-width: 98vw !important;
+      width: 98vw !important;
+      height: 95vh !important;
+      margin: auto;
+    }
+
+    .modal-dialog.fullscreen .modal-content {
+      height: 100%;
+    }
+
+    .modal-dialog.fullscreen .modal-body {
+      max-height: calc(95vh - 80px); /* room for header */
+      overflow-y: auto;
+      overflow-x: auto;
+    }
+  
+  </style>
+</head>
+<body class="d-flex flex-column h-100">
+
+  <!-- Top Navbar -->
+  <nav class="topbar">
+    <button id="globalToggleSidebar" class="btn btn-outline-light btn-sm me-3" title="Toggle sidebar" aria-label="Toggle sidebar">
+      <i class="bi bi-list"></i>
+    </button>
+    <a href="/" class="brand-inline">Cygor</a>
+  </nav>
+
+  <!-- Sidebar -->
+  <nav id="sidebar" class="sidebar">
+    <ul class="nav nav-pills flex-column mb-auto px-2">
+      <li class="mb-1"><a href="/" class="nav-link text-white"><i class="bi bi-speedometer2"></i><span>Dashboard</span></a></li>
+      <li class="mb-1"><a href="/hosts" class="nav-link text-white"><i class="bi bi-hdd-network"></i><span>Nmap Scans</span></a></li>
+      <li class="mb-1"><a href="/services" class="nav-link text-white"><i class="bi bi-diagram-3"></i><span>Services</span></a></li>
+      <!-- Enumeration (auto-detected) -->
+      <li class="mb-1">
+        <button class="btn w-100 text-start text-white" data-bs-toggle="collapse" data-bs-target="#enumMenu" aria-expanded="false">
+          <i class="bi bi-collection"></i><span class="ms-2">Modules</span>
+        </button>
+        <div class="collapse" id="enumMenu">
+          <ul class="nav flex-column ps-3">
+            {% set modules = request.state.modules if request.state.modules is defined else [] %}
+            {% if modules %}
+              {% for m in modules %}
+                <li class="mb-1">
+                  <a href="/enum/{{ m }}" class="nav-link text-white">
+                    <i class="bi bi-chevron-right"></i>
+                    <span class="ms-1">{{ m }}</span>
+                  </a>
+                </li>
+              {% endfor %}
+            {% else %}
+              <li class="text-muted ms-2">No modules found</li>
+            {% endif %}
+          </ul>
+        </div>
+      </li>
+
+    </ul>
+  </nav>
+
+  <!-- Main Content -->
+  <main id="mainContent" class="content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    function toggleSidebar() {
+      const sidebar = document.getElementById("sidebar");
+      const content = document.getElementById("mainContent");
+      sidebar.classList.toggle("collapsed");
+      content.classList.toggle("expanded");
+    }
+    document.getElementById("globalToggleSidebar").addEventListener("click", toggleSidebar);
+  </script>
+</body>
+</html>
