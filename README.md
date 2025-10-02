@@ -1,10 +1,12 @@
 # cygor
 
+README is still in works... 10/2/2025
+
 Unified CLI wrapper around existing Cygor scripts.
 
 ---
 
-## 🚀 Quickstart
+##  Quickstart
 
 ### Run a Scan (CLI)
 ```bash
@@ -41,7 +43,7 @@ cygor web --help
 
 ---
 
-## 🐳 Running Cygor with Docker
+## Running Cygor with Docker
 
 You can run Cygor inside a Docker container without installing dependencies directly on your host system. This ensures a clean, portable setup.
 
@@ -78,7 +80,7 @@ CYGOR_RESULTS_PATH=/home/user/scans cygor scan -i eth0 -ips 192.168.1.0/24 --dis
 
 ---
 
-## 🌐 Running Cygor Web with Docker Compose
+##  Running Cygor Web with Docker Compose
 
 You can also launch the Cygor Web UI using Docker Compose.
 
