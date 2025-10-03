@@ -277,7 +277,7 @@ examples = f"""
     cygor scan -i eth0 -f scope.txt --discover naabu --processes 10 --scan-type fullscan
 
     {Fore.YELLOW}# 7. Run Cygor to discover hosts and scan them with Nmap with a provided lists of IP Addresses or CDRs{Style.RESET_ALL}
-    cygor scan -i eth0 -ips 10.10.10.1 10.10.10.5 10.10.20.0/24 --discover naabu --processes 10 --scan-type fullscan
+    cygor scan -i eth0 --ips 10.10.10.1 10.10.10.5 10.10.20.0/24 --discover naabu --processes 10 --scan-type fullscan
 
     {Fore.YELLOW}# 8. Exclude specific subnets or hosts from scan{Style.RESET_ALL}
     cygor scan -i eth0 -f scope.txt --exclusions exclusions.txt --discover masscan
