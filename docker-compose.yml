@@ -1,12 +1,17 @@
+name: cygor
+
 services:
   cygor:
     build: .
+    image: cygor:latest
+
     container_name: cygor
-    command: web start --host 0.0.0.0 --port ${CYGOR_PORT:-8080} --load-dir /app/results
+    hostname: cygor
+
+    ports:
+      - 8080:8080
+
     volumes:
-      - ${CYGOR_RESULTS_PATH}:/app/results
-    network_mode: "host"
-    stdin_open: true
-    tty: true
-    environment:
-      - CYGOR_PORT=${CYGOR_PORT:-8080}
+      - ${CYGOR_RESULTS_PATH}:/opt/cygor/results
+
+    command: web start --host 0.0.0.0 --port 8080 --load-dir /opt/cygor/results
