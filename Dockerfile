@@ -1,56 +1,80 @@
 # Base image
-FROM python:3.11-slim
+FROM python:3.11-slim AS base
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    CYGOR_PORT=8080
+# Set the default environment variables:
+ENV CYGOR_PORT=8080 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Set the WORKDIR as an environment variable,
+# so that we can re-use it without typing out the whole thing:
+ENV APPLICATION_HOME=/opt/cygor
+
+# Set the PATH variable so /root/.local/bin is included in it.
+# This is needed for "uv tool install . -e", which is executed later.
+ENV PATH=/root/.local/bin:$PATH
+
+WORKDIR $APPLICATION_HOME
+
+# Install dependencies:
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    unzip \
     git \
-    nmap \
-    masscan \
     iproute2 \
+    masscan \
     net-tools \
-    libnss3 \
-    libatk1.0-0 \
+    nmap \
+    unzip \
+    wget \
+    fonts-liberation \
+    libasound2 \
     libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcairo2 \
     libcups2 \
     libdrm2 \
-    libxkbcommon0 \
+    libgbm1 \
+    libnss3 \
+    libpango-1.0-0 \
     libxcomposite1 \
     libxdamage1 \
     libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libasound2 \
-    fonts-liberation \
-    && rm -rf /var/lib/apt/lists/*
+    libxkbcommon0 \
+    libxrandr2
 
-# Install naabu (latest stable release)
-RUN curl -fsSL -o /tmp/naabu.zip \
-      https://github.com/projectdiscovery/naabu/releases/download/v2.3.0/naabu_2.3.0_linux_amd64.zip \
-    && unzip /tmp/naabu.zip -d /usr/local/bin \
-    && rm /tmp/naabu.zip
+# Remove junk to save space:
+RUN apt-get autoclean && \
+    apt-get clean && \
+    apt-get autoremove && \
+    rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# Copy uv for dependency management:
+COPY --from=ghcr.io/astral-sh/uv:0.8.22 /uv /uvx /bin/
 
-# Copy Cygor into container
-COPY . /app/
+# Install the latest (stable) version of naabu:
+RUN curl -s https://api.github.com/repos/projectdiscovery/naabu/releases/latest | \
+    grep "browser_download_url.*linux_amd64.zip" | \
+    cut -d : -f 2,3 | \
+    tr -d '"' | \
+    wget -i - -O /tmp/naabu.zip && \
+    unzip /tmp/naabu.zip -d /usr/local/bin && \
+    rm /tmp/naabu.zip
 
-# Install Python dependencies
-RUN pip install --upgrade pip \
-    && pip install . \
-    && pip install --no-cache-dir playwright \
-    && playwright install --with-deps chromium
+# Copy pyproject.toml to the container
+COPY pyproject.toml $APPLICATION_HOME
 
-# Expose the default port (can be overridden with -e CYGOR_PORT=XXXX)
+# Install cygor's dependencies then cygor using uv:
+RUN uv sync
+RUN uv tool install . -e --force
+
+# Copy cygor's files to the container:
+COPY cygor/ $APPLICATION_HOME/cygor/
+
+# Expose the default port:
+# This can be overridden by updating the CYGOR_PORT environment variable
 EXPOSE ${CYGOR_PORT}
 
-ENTRYPOINT ["cygor"]
-CMD ["--help"]
+ENTRYPOINT [ "cygor" ]
+CMD [ "--help" ]
