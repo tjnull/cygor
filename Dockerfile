@@ -65,12 +65,12 @@ RUN curl -s https://api.github.com/repos/projectdiscovery/naabu/releases/latest 
 # Copy pyproject.toml to the container
 COPY pyproject.toml $APPLICATION_HOME
 
+# Copy cygor's files to the container:
+COPY cygor/ $APPLICATION_HOME/cygor/
+
 # Install cygor's dependencies then cygor using uv:
 RUN uv sync
 RUN uv tool install . -e --force
-
-# Copy cygor's files to the container:
-COPY cygor/ $APPLICATION_HOME/cygor/
 
 # Expose the default port:
 # This can be overridden by updating the CYGOR_PORT environment variable
