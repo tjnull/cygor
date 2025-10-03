@@ -86,7 +86,7 @@ def save_as_xml(results, path: Path):
     ET.ElementTree(root).write(path, encoding="utf-8", xml_declaration=True)
 
 # ----------------------------------------------------------------------
-# Playwright readiness
+# Playwright readiness / install / uninstall
 # ----------------------------------------------------------------------
 def _is_debian_like() -> bool:
     try:
@@ -147,6 +147,97 @@ def _attempt_install_browsers(auto_with_deps: bool, timeout_sec: int = 1200) -> 
         print(Fore.RED + f"[!] Error during Playwright install: {e}" + Style.RESET_ALL)
         return False
 
+
+def _fmt_bytes(n: int) -> str:
+    units = ["B","KB","MB","GB","TB"]
+    i = 0
+    val = float(n)
+    while val >= 1024 and i < len(units)-1:
+        val /= 1024.0
+        i += 1
+    return f"{val:.2f} {units[i]}"
+
+def _dir_size(path: Path) -> int:
+    total = 0
+    try:
+        for root, dirs, files in os.walk(path):
+            for f in files:
+                try:
+                    total += (Path(root) / f).stat().st_size
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return total
+
+def _collect_playwright_cache_paths() -> List[Path]:
+    paths: List[Path] = []
+    env_path = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if env_path:
+        p = Path(env_path).expanduser()
+        if str(p).strip():
+            paths.append(p)
+
+    home = Path.home()
+    # Common locations across platforms
+    paths.append(home / ".cache" / "ms-playwright")                 # Linux default
+    paths.append(home / "Library" / "Caches" / "ms-playwright")    # macOS default
+    localapp = os.environ.get("LOCALAPPDATA")
+    if localapp:
+        paths.append(Path(localapp) / "ms-playwright")             # Windows default
+
+    # Deduplicate while preserving order
+    seen = set()
+    out: List[Path] = []
+    for p in paths:
+        if p and str(p) not in seen:
+            seen.add(str(p))
+            out.append(p)
+    return out
+
+def _attempt_uninstall_browsers(timeout_sec: int = 1200) -> Tuple[bool, int, List[Path]]:
+    """
+    Try a CLI uninstall first (if supported), then remove cache dirs.
+    Returns (success, bytes_freed, removed_paths)
+    """
+    removed_paths: List[Path] = []
+    bytes_before = 0
+    bytes_after = 0
+
+    pw = _playwright_bin()
+    cli_cmd = f"{pw} uninstall chromium"
+    print(Fore.CYAN + f"[*] Attempting Playwright uninstall: {cli_cmd}" + Style.RESET_ALL)
+    try:
+        proc = run(cli_cmd, shell=True, stdout=PIPE, stderr=PIPE, text=True, timeout=timeout_sec)
+        if proc.returncode == 0:
+            print(Fore.GREEN + "[+] Playwright CLI uninstall reported success." + Style.RESET_ALL)
+        else:
+            # Many versions of Playwright don't support 'uninstall'; that's fine.
+            print(Fore.YELLOW + "[~] CLI uninstall not supported or failed; falling back to cache removal." + Style.RESET_ALL)
+    except Exception:
+        print(Fore.YELLOW + "[~] CLI uninstall failed; falling back to cache removal." + Style.RESET_ALL)
+
+    # Remove caches
+    cache_paths = _collect_playwright_cache_paths()
+    for p in cache_paths:
+        if p.exists():
+            size = _dir_size(p)
+            bytes_before += size
+            try:
+                shutil.rmtree(p, ignore_errors=True)
+                removed_paths.append(p)
+            except Exception as e:
+                print(Fore.RED + f"[!] Failed to remove {p}: {e}" + Style.RESET_ALL)
+
+    # Recheck remaining size (should be ~0 for removed paths)
+    for p in cache_paths:
+        if p.exists():
+            bytes_after += _dir_size(p)
+
+    freed = max(0, bytes_before - bytes_after)
+    success = freed > 0 or len(removed_paths) > 0
+    return success, freed, removed_paths
+
 async def ensure_playwright_ready_async(install_browsers: bool = False) -> bool:
     if await _try_launch_chromium_quick_async():
         return True
@@ -190,11 +281,17 @@ examples = f"""
     {Fore.YELLOW}# Screenshot only specific status codes{Style.RESET_ALL}
     cygor enum lockon -f scope.txt --status-filter 200 403
 
-    {Fore.YELLOW}# Screenshot all sites regardless of status{Style.RESET_ALL}
+    {Fore.YELLOW}# Screenshot all sites regardless of status{Fore.RED} (may be noisy){Style.RESET_ALL}
     cygor enum lockon -f scope.txt --status-filter 0
 
-    {Fore.YELLOW}# Screenshot all sites regardless of status with custom timeouts and extra wait time for navigation and save all output formats{Style.RESET_ALL}
+    {Fore.YELLOW}# Screenshot with custom timeouts; save all output formats{Style.RESET_ALL}
     cygor enum lockon -f scope.txt --workers 16 --http-timeout 10 --nav-timeout 50000 --extra-wait 3000 --status-filter 0 --output-format all
+
+    {Fore.YELLOW}# Install Playwright Chromium (and deps on Debian-like){Style.RESET_ALL}
+    cygor enum lockon -f scope.txt --install-browsers
+
+    {Fore.YELLOW}# Uninstall Playwright browser binaries for this user and exit{Style.RESET_ALL}
+    cygor enum lockon --uninstall-browsers
 """
 
 def parse_arguments():
@@ -219,12 +316,14 @@ def parse_arguments():
                           help="Save results in this format (default: json). Use 'all' to save every format.")
     io_group.add_argument('--scheme', choices=['http','https','both'], default='both',
         help="Scheme(s) for bare hosts (default: both).")
+
     # concurrency
     default_workers = min(32,(os.cpu_count() or 4)*4)
     conc = p.add_argument_group("Concurrency")
     conc.add_argument('--workers', type=int, default=default_workers)
     conc.add_argument('--scan-workers', type=int)
     conc.add_argument('--shot-workers', type=int)
+
     # tuning
     tune = p.add_argument_group("Timeouts/Tuning")
     tune.add_argument('--http-timeout', type=float, default=5.0, help="HTTP connect/read timeout (s).")
@@ -233,16 +332,31 @@ def parse_arguments():
     tune.add_argument('--viewport', default="1366x768", help="Viewport WxH, e.g. 1366x768.")
     tune.add_argument('--extra-wait', type=int, default=2000,
                       help="Extra wait after load before screenshot (ms). Default: 2000ms")
+
     # filtering
     filt = p.add_argument_group("Filtering")
     filt.add_argument("--status-filter", nargs="+", type=int, default=[200,301,302,307,308],
                       help="List of status codes to capture screenshots for (default: 200,301,302,307,308). "
                            "Use 0 to capture all statuses.")
-    # other
-    p.add_argument('--install-browsers', action='store_true')
+
+    # browser setup (explicit flags; mutually exclusive handled below)
+    setup = p.add_argument_group("Browser Setup")
+    setup.add_argument('--install-browsers', action='store_true',
+                       help="Attempt to install Playwright Chromium for screenshots.")
+    setup.add_argument('--uninstall-browsers', action='store_true',
+                       help="Remove Playwright browser binaries/cache for this user and exit.")
+
     args = p.parse_args()
-    if not args.file and not args.ips and not args.url:
-        p.error("Specify -f, --ips, or --url.")
+
+    # Require targets unless doing maintenance (install/uninstall)
+    if not (args.install_browsers or args.uninstall_browsers) and not (args.file or args.ips or args.url):
+        p.error("Specify -f, --ips, or --url. (Or use --install-browsers/--uninstall-browsers for maintenance only.)")
+
+
+    # Prevent contradictory usage
+    if args.install_browsers and args.uninstall_browsers:
+        p.error("Cannot use --install-browsers and --uninstall-browsers together.")
+
     return args
 
 # ----------------------------------------------------------------------
@@ -282,12 +396,10 @@ def read_targets(file: str) -> Tuple[List[str], List[str]]:
             hosts.append(line)
     print(Fore.BLUE + "[*] Targets analyzed. Initating Lockon sequence for stage 1 reachability\n"  + Style.RESET_ALL)
     return hosts, urls
-    
 
 # ----------------------------------------------------------------------
 # Stage 1: reachability
 # ----------------------------------------------------------------------
-
 def _test_one_target(target: str, schemes: List[str], timeout: float) -> List[Tuple[str,int]]:
     results=[]
     with requests.Session() as session:
@@ -392,6 +504,28 @@ def _fmt_secs(sec:float)->str:
 
 async def amain():
     args=parse_arguments()
+
+    # Maintenance mode: uninstall browsers and exit
+    if args.uninstall_browsers:
+        ok, freed, removed = _attempt_uninstall_browsers()
+        if removed:
+            print(Fore.CYAN + "\n[+] Removed the following Playwright cache directories:" + Style.RESET_ALL)
+            for p in removed:
+                print(f"    - {p}")
+        if freed:
+            print(Fore.GREEN + f"[+] Estimated disk space freed: {_fmt_bytes(freed)}" + Style.RESET_ALL)
+        if not ok:
+            print(Fore.YELLOW + "[~] Nothing to remove or uninstall failed." + Style.RESET_ALL)
+        print(Fore.BLUE + "[i] Note: This does not uninstall the Python package 'playwright'. Use 'pip uninstall playwright' to remove it." + Style.RESET_ALL)
+        return
+
+    # Maintenance mode: install browsers and exit
+    if args.install_browsers and not (args.file or args.ips or args.url):
+        print(Fore.CYAN + "[*] Installing Playwright browsers..." + Style.RESET_ALL)
+        _attempt_install_browsers(auto_with_deps=_is_debian_like())
+        return
+
+
     scan_workers=args.scan_workers if args.scan_workers else args.workers
     shot_workers=args.shot_workers if args.shot_workers else args.workers
     out_dir=Path(args.output); out_dir.mkdir(parents=True,exist_ok=True)
@@ -527,5 +661,5 @@ def main():
     try: asyncio.run(amain())
     except KeyboardInterrupt: print("\n[!] Interrupted by user")
 
-if __name__=="__main__": 
+if __name__=="__main__":
     main()

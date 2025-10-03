@@ -151,6 +151,38 @@
 </div>
 
 <style>
+/* Force dashboard card labels (like Captured Screenshots, Failures) to be visible */
+.card .card-text.small.text-muted {
+  color: #e0e0e0 !important;   /* light gray */
+  font-weight: 400;
+}
+
+/* Make dashboard numbers & status codes readable */
+.card .card-title {
+  color: #f8f9fa !important;   /* force light color for main numbers */
+  font-weight: 600;
+}
+
+.status-filter .card-title.text-success {
+  color: #4caf50 !important;   /* green for 2xx */
+}
+
+.status-filter .card-title.text-info {
+  color: #29b6f6 !important;   /* blue for 3xx */
+}
+
+.status-filter .card-title.text-warning {
+  color: #ffb74d !important;   /* amber for 4xx */
+}
+
+.status-filter .card-title.text-danger {
+  color: #ef5350 !important;   /* red for 5xx */
+}
+
+.status-filter .card-title.text-muted {
+  color: #b0bec5 !important;   /* gray for "Other" */
+}
+
 /* Gapless masonry layout using CSS Grid */
 .shots-grid {
   display: grid;
@@ -201,11 +233,14 @@
 }
 
 .screenshot-footer { 
-  position:absolute; 
-  bottom:0; left:0; right:0; 
-  background:rgba(0,0,0,0.6); 
-  padding:.5rem .7rem; 
-  font-size:.9rem; 
+  position: absolute; 
+  bottom: 0; left: 0; right: 0; 
+  background: rgba(0,0,0,0.7);   /* slightly darker for contrast */
+  padding: .5rem .7rem; 
+  font-size: .85rem; 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center;
 }
 
 .review-toggle { 
@@ -220,6 +255,22 @@
 .status-filter:hover { opacity: 1; transform: scale(1.03); }
 .status-filter.active { border: 2px solid #fff; box-shadow: 0 0 10px rgba(255,255,255,.6); transform: scale(1.05); opacity: 1; }
 .status-badge { cursor:pointer; }
+
+/* Make URL text readable in dark footer */
+.url-text {
+  color: #4fc3f7 !important;   /* cyan for readability */
+  font-weight: 500;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;     /* truncate long URLs */
+  white-space: nowrap;
+  max-width: 75%;              /* leave space for status badge */
+}
+
+.url-text:hover {
+  color: #81d4fa !important;
+  text-decoration: underline;
+}
 </style>
 
 

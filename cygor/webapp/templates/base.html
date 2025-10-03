@@ -155,6 +155,27 @@
     .progress-bar {
       color: #fff !important; /* ensure text inside bars is visible */
     }
+
+    /* ---- FIX: Ensure cards stay dark regardless of browser dark mode extensions ---- */
+    .card.bg-dark,
+    .card.bg-gradient-dark {
+      background-color: #1e1e1e !important; /* lock solid dark background */
+      color: #f8f9fa !important;
+      border: 1px solid #2a2a2a !important;
+    }
+
+    .card.bg-dark h2,
+    .card.bg-dark h5,
+    .card.bg-dark h6,
+    .card.bg-gradient-dark h2,
+    .card.bg-gradient-dark h5,
+    .card.bg-gradient-dark h6 {
+      color: #f8f9fa !important;
+    }
+
+    .card .text-secondary {
+      color: #aaa !important;
+    }
   </style>
 </head>
 <body class="d-flex flex-column h-100">
