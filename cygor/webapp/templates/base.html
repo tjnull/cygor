@@ -139,7 +139,22 @@
       overflow-y: auto;
       overflow-x: auto;
     }
-  
+
+    /* Make dark table text fully readable */
+    .table-dark td,
+    .table-dark th,
+    .table-dark .text-muted,
+    .table-dark small {
+      color: rgba(255, 255, 255, 0.85) !important;
+    }
+
+    /* Also fix progress bar text */
+    .progress {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+    .progress-bar {
+      color: #fff !important; /* ensure text inside bars is visible */
+    }
   </style>
 </head>
 <body class="d-flex flex-column h-100">
@@ -181,7 +196,6 @@
           </ul>
         </div>
       </li>
-
     </ul>
   </nav>
 
@@ -201,5 +215,75 @@
     }
     document.getElementById("globalToggleSidebar").addEventListener("click", toggleSidebar);
   </script>
+
+  {% block scripts %}
+  <!-- Page-specific JS will go here -->
+  {% endblock %}
+
+<!-- Global Dark Theme Fix for DataTables -->
+<style>
+/* General DataTables container text */
+.dataTables_wrapper {
+  color: #e0e0e0 !important;
+}
+
+/* Controls (length dropdown, search, info, pagination) */
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_paginate {
+  color: #e0e0e0 !important;
+}
+
+/* Fix dropdown + search box */
+.dataTables_wrapper .dataTables_filter input,
+.dataTables_wrapper .dataTables_length select {
+  background-color: #2c2f33 !important;
+  color: #f8f9fa !important;
+  border: 1px solid #444 !important;
+}
+.dataTables_wrapper .dataTables_filter input:focus,
+.dataTables_wrapper .dataTables_length select:focus {
+  outline: none;
+  border-color: #0d6efd !important;
+  box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25);
+}
+
+/* Table backgrounds */
+.table.dataTable,
+.table.dataTable thead th,
+.table.dataTable thead td,
+.table.dataTable tbody td {
+  background-color: #212529 !important;
+  color: #f8f9fa !important;
+  border-color: #444 !important;
+}
+
+/* Table head */
+.table.dataTable thead {
+  background-color: #2c2f33 !important;
+  color: #f8f9fa !important;
+}
+
+/* Hover rows */
+.table.dataTable tbody tr:hover {
+  background-color: #2a2d31 !important;
+}
+
+/* Pagination buttons */
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+  color: #e0e0e0 !important;
+  border: 1px solid #444 !important;
+  background: #2c2f33 !important;
+}
+.dataTables_wrapper .dataTables_paginate .paginate_button.current {
+  background: #0d6efd !important;
+  color: #fff !important;
+}
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+  background: #0b5ed7 !important;
+  color: #fff !important;
+}
+</style>
 </body>
 </html>

@@ -75,30 +75,39 @@ def _top_guess(host: "Host"):
 
 TopItem = namedtuple("TopItem", ["host", "guess"])
 
-# -------- Lifespan --------
-# -------- Lifespan --------
-@asynccontextmanager
+
+# ---------------- Lifespan ----------------
 async def lifespan(app: FastAPI):
     await db.init_db()
-    print("[✓] Database schema ensured.")
+    load_dir = os.environ.get("CYGOR_LOAD_DIR")
 
-    base = Path(settings.RESULTS_DIR)
-    lockon_shots = base / "cygor-enumeration-modules" / "lockon" / "screenshots"
-    if lockon_shots.exists():
-        print(f"[*] Mounting Lockon screenshots from: {lockon_shots}")
-        app.mount("/enum/lockon/screenshots", StaticFiles(directory=str(lockon_shots)), name="lockon_screens")
+    # Mount Lockon screenshots *after* RESULTS_DIR is known
+    lockon_dir = Path(settings.RESULTS_DIR) / "cygor-enumeration-modules" / "lockon" / "screenshots"
+    if lockon_dir.exists():
+        app.mount(
+            "/enum/lockon/screenshots",
+            StaticFiles(directory=str(lockon_dir)),
+            name="lockon_screenshots"
+        )
+        print(f"[*] Mounting Lockon screenshots from: {lockon_dir}")
     else:
-        print(f"[!] Lockon screenshots directory not found: {lockon_shots}")
+        print(f"[!] Lockon screenshots directory not found: {lockon_dir}")
 
-    results_shots = base / "web" / "screenshots"
-    if results_shots.exists():
-        app.mount("/screenshots", StaticFiles(directory=str(results_shots)), name="screenshots")
+    if load_dir:
+        print(f"[*] Background preload from {load_dir} ...")
+        async def _bg():
+            async with db.SessionLocal() as session:
+                await ingest_directory(Path(load_dir), session, dedupe=True)
+            print("[✓] Background preload complete.")
+        asyncio.create_task(_bg())
 
-    # removed background preload (no double ingestion)
-    yield
+    yield  # <- important: marks the end of lifespan setup
+
 
 
 app = FastAPI(lifespan=lifespan)
+
+
 
 @app.middleware("http")
 async def add_modules_to_request(request: Request, call_next):
@@ -154,19 +163,100 @@ async def dashboard(request: Request, session: AsyncSession = Depends(get_sessio
     })
 
 @app.get("/hosts", response_class=HTMLResponse)
-async def hosts_view(request: Request, session: AsyncSession = Depends(get_session)):
-    hosts = (await session.execute(
+async def hosts_view(
+    request: Request,
+    os: str = Query(None, description="Filter by OS family"),
+    session: AsyncSession = Depends(get_session)
+):
+    # Always fetch all hosts + related data
+    all_hosts = (await session.execute(
         select(Host).options(
             selectinload(Host.ports),
             selectinload(Host.scripts),
             selectinload(Host.os_guesses)
         )
     )).scalars().unique().all()
-    top_map = {h.id: _top_guess(h) for h in hosts}
-    return templates.TemplateResponse("hosts.html", {"request": request, "hosts": hosts, "top_os_map": top_map})
 
+    top_map = {h.id: _top_guess(h) for h in all_hosts}
+
+    # Apply filter only if ?os= is passed
+    if os:
+        os_lower = os.lower()
+        filtered_hosts = []
+        for h in all_hosts:
+            tg = top_map[h.id]
+            if not tg:
+                if os_lower == "unknown":
+                    filtered_hosts.append(h)
+            else:
+                if _bucket_family(tg).lower() == os_lower:
+                    filtered_hosts.append(h)
+        hosts = filtered_hosts
+    else:
+        hosts = all_hosts
+
+    return templates.TemplateResponse(
+        "hosts.html",
+        {
+            "request": request,
+            "hosts": hosts,
+            "top_os_map": top_map,
+            "filter_os": os
+        }
+    )
+
+
+@app.get("/hosts/{host_id}", response_class=HTMLResponse)
+async def host_detail(
+    request: Request,
+    host_id: int,
+    session: AsyncSession = Depends(get_session)
+):
+    host = (await session.execute(
+        select(Host)
+        .options(
+            selectinload(Host.ports),
+            selectinload(Host.scripts),
+            selectinload(Host.os_guesses)
+        )
+        .where(Host.id == host_id)
+    )).scalars().first()
+
+    if not host:
+        return HTMLResponse(f"<h1>Host {host_id} not found</h1>", status_code=404)
+
+    top_guess = _top_guess(host)
+
+    # Try to locate raw scan files
+    nmap_output = xml_output = gnmap_output = None
+    base = Path(settings.RESULTS_DIR) / "nmap"
+    if base.exists():
+        for sub in base.rglob(f"{host.address}*"):
+            if sub.suffix == ".nmap":
+                nmap_output = sub.read_text(errors="ignore")
+            elif sub.suffix == ".xml":
+                xml_output = sub.read_text(errors="ignore")
+            elif sub.suffix == ".gnmap":
+                gnmap_output = sub.read_text(errors="ignore")
+
+    return templates.TemplateResponse("host_detail.html", {
+        "request": request,
+        "h": host,
+        "os_guesses": host.os_guesses,
+        "top_guess": top_guess,
+        "nmap_output": nmap_output,
+        "xml_output": xml_output,
+        "gnmap_output": gnmap_output,
+    })
+
+
+
+# Services overview page
 @app.get("/services", response_class=HTMLResponse)
-async def services_view(request: Request, session: AsyncSession = Depends(get_session)):
+async def services_view(
+    request: Request,
+    session: AsyncSession = Depends(get_session)
+):
     ports = (await session.execute(
         select(Port).options(selectinload(Port.host))
     )).scalars().unique().all()
@@ -179,12 +269,46 @@ async def services_view(request: Request, session: AsyncSession = Depends(get_se
     service_summary = {svc: len(hosts) for svc, hosts in service_counts.items()}
     total_hosts = len({p.host.address for p in ports})
 
-    return templates.TemplateResponse("services.html", {
-        "request": request,
-        "ports": ports,
-        "service_summary": service_summary,
-        "total_hosts": total_hosts
-    })
+    return templates.TemplateResponse(
+        "services.html",
+        {
+            "request": request,
+            "ports": ports,
+            "service_summary": service_summary,
+            "total_hosts": total_hosts
+        }
+    )
+
+
+# Service detail page (click-through from services.html)
+@app.get("/services/{service}", response_class=HTMLResponse)
+async def service_detail(
+    request: Request,
+    service: str,
+    session: AsyncSession = Depends(get_session)
+):
+    ports = (await session.execute(
+        select(Port).options(selectinload(Port.host))
+    )).scalars().unique().all()
+
+    normalized_service = normalize_service(service)
+    host_services = []
+    for p in ports:
+        if normalize_service(p.service) == normalized_service:
+            host_services.append({"host": p.host, "ports": [p]})
+
+    total_hosts = len({p.host.address for p in ports})
+
+    return templates.TemplateResponse(
+        "service_detail.html",
+        {
+            "request": request,
+            "service": service,
+            "host_services": host_services,
+            "total_hosts": total_hosts
+        }
+    )
+
 
 @app.get("/enum/lockon", response_class=HTMLResponse)
 async def enum_lockon(request: Request):
@@ -214,8 +338,8 @@ async def enum_lockon(request: Request):
                 parsed = urlparse(url)
                 host = parsed.hostname or ""
                 port = str(parsed.port or (443 if parsed.scheme == "https" else 80))
-                sf = find_screenshot_file(host, port)
-                screenshot_url = f"/enum/lockon/screenshots/{sf}" if sf else None
+                sf = entry.get("screenshot_file")
+                screenshot_url = f"/enum/lockon/screenshots/{sf}" if sf and (shots_dir / sf).exists() else None
                 items.append({
                     "url": url,
                     "status_code": entry.get("status_code"),
@@ -342,39 +466,26 @@ def exec_argv(argv):
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--reset-db", action="store_true")
     parser.add_argument("--load-dir", type=str, help="Results directory or database file to load")
-    parser.add_argument("-v", "--verbose", action="count", default=0, help="Increase verbosity (-v shows more, -vv shows debug details)")
+    parser.add_argument("-v", "--verbose", action="count", default=0,
+                        help="Increase verbosity (-v shows more, -vv shows debug details)")
     args = parser.parse_args(argv)
 
-    if args.load_dir:
-        load_path = Path(args.load_dir).expanduser().resolve()
-        if not load_path.exists():
-            print(f"[!] Specified results directory does not exist: {load_path}")
-            return
-        if load_path.is_file():
-            if load_path.suffix != ".db":
-                print(f"[!] Invalid database file: {load_path}")
-                return
-            db_path = load_path
-            load_path = load_path.parent
-        else:
-            db_path = load_path / "cygor.db"
-            if not db_path.exists():
-                print(f"[*] No database found in {load_path}, creating {db_path} ...")
+    load_path = Path(args.load_dir or settings.RESULTS_DIR).expanduser().resolve()
+    if not load_path.exists():
+        print(f"[!] Specified results directory does not exist: {load_path}")
+        return
 
-        settings.RESULTS_DIR = str(load_path)
-        os.environ["CYGOR_LOAD_DIR"] = settings.RESULTS_DIR
-    else:
-        load_path = Path(settings.RESULTS_DIR).expanduser().resolve()
-        if not load_path.exists() or not load_path.is_dir():
-            print(f"[!] Default results directory not found: {load_path}")
-            return
-        db_path = load_path / "cygor.db"
+    db_path = load_path / "cygor.db"
+    settings.RESULTS_DIR = str(load_path)
+    os.environ["CYGOR_LOAD_DIR"] = settings.RESULTS_DIR
 
-    print(f"[*] Using results directory: {settings.RESULTS_DIR}")
-    print(f"[*] Using database at {db_path}")
+    print(f"[*] Initializing Cygor Web UI...")
+    print(f"[*] Results directory: {load_path}")
+    print(f"[*] Database file:     {db_path}")
 
-    db.init_engine(str(db_path), debug=False)
-    asyncio.run(db.init_db())
+    # init DB engine + schema
+    db.init_engine(str(db_path), debug=(args.verbose > 1))
+    asyncio.run(db.init_db())   # <-- ensure schema exists
 
     if args.reset_db:
         print("[*] Resetting database...")
@@ -382,31 +493,37 @@ def exec_argv(argv):
         print("[✓] Database reset complete.")
         return
 
-    async def _initial_ingest():
+    async def _initial_ingest(verbose: int):
         async with db.SessionLocal() as session:
-            count = await ingest_directory(load_path, session, dedupe=True, verbose=args.verbose)
+            count = await ingest_directory(load_path, session, dedupe=True, verbose=verbose)
+            await session.commit()  # <-- make sure data is written
             return count
 
-    count = asyncio.run(_initial_ingest())
-    if count == 0:
-        if db_path.exists():
-            db_path.unlink(missing_ok=True)
-            print(f"[!] No results ingested, removed empty database {db_path}")
-        if load_path.exists() and load_path.is_dir() and not any(load_path.iterdir()):
-            try:
-                shutil.rmtree(load_path)
-                print(f"[!] Removed empty results directory {load_path}")
-            except Exception as e:
-                print(f"[!] Failed to remove empty directory {load_path}: {e}")
-        print("[!] Aborting web startup — no results available.")
-        return
+    count = asyncio.run(_initial_ingest(args.verbose))
+    if args.verbose:
+        print(f"[✓] Finished ingesting {count} file(s) from {load_path}")
     else:
-        print(f"[✓] Finished ingesting {count} files from {load_path}")
+        print(f"[✓] Ingested {count} result file(s) from {load_path}")
 
+    # Print banner last
+    print("------------------------------------------------------------")
+    print(f"Cygor Web UI is running at: http://{args.host}:{args.port}")
+    print("Press CTRL+C to stop")
+    print("------------------------------------------------------------")
 
     import uvicorn
-    uvicorn.run("cygor.webapp.main:app", host=args.host, port=args.port, reload=False)
+    uvicorn.run(
+        "cygor.webapp.main:app",
+        host=args.host,
+        port=args.port,
+        reload=False,
+        log_level="debug" if args.verbose > 1 else "info"
+    )
+
+
 
 if __name__ == "__main__":
     import sys
     exec_argv(sys.argv[1:])
+
+

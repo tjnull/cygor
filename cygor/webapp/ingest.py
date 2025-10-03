@@ -12,30 +12,47 @@ from .db import (
     get_or_create_osguess,
 )
 
-async def ingest_directory(directory: Path, session: AsyncSession, dedupe: bool = True, verbose: int = 0):
-    if not directory.exists():
-        if verbose:
-            print(f"[!] Directory not found: {directory}")
-        return 0
-
-    count = 0
-    if verbose:
-        print(f"[*] Walking directory {directory} ...")
-
-    for file in directory.rglob("*"):
-        if file.suffix.lower() in (".xml", ".json"):
-            if verbose > 1:
-                print(f"[*] Trying ingestion: {file}")
-            await ingest_file(file, session, dedupe=dedupe)
-            count += 1
-
-    await session.commit()
-    if verbose:
-        print(f"[✓] Finished ingesting {count} files from {directory}")
-    return count
+def log(msg: str, level: int = 1, verbose: int = 0):
+    """
+    level=0 -> always (errors)
+    level=1 -> summary
+    level=2 -> detailed (only with -v)
+    """
+    if level == 0 or verbose >= level:
+        print(msg)
 
 
+async def ingest_directory(path, session, dedupe=True, verbose=0):
+    """
+    Walk a directory and ingest all supported files.
+    """
+    log(f"[*] Ingesting files from {path}", level=1, verbose=verbose)
 
+    ingested_count = 0
+    failed_files = []
+
+    for file in path.rglob("*"):
+        if not file.is_file():
+            continue
+
+        try:
+            if file.suffix.lower() in [".xml", ".json"]:
+                log(f"[*] Processing file: {file}", level=2, verbose=verbose)
+                await ingest_file(file, session, dedupe=dedupe)
+                ingested_count += 1
+            else:
+                log(f"[i] Skipping unsupported file format: {file}", level=2, verbose=verbose)
+
+        except Exception as e:
+            log(f"[!] Failed to ingest {file}: {e}", level=0, verbose=verbose)
+            failed_files.append(file)
+
+    log(f"[✓] Finished ingesting {ingested_count} files from {path}", level=1, verbose=verbose)
+
+    if failed_files:
+        log(f"[!] {len(failed_files)} files failed ingestion. See errors above.", level=0, verbose=verbose)
+
+    return ingested_count
 
 
 def flatten_entry(entry: dict) -> str:

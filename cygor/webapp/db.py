@@ -42,7 +42,7 @@ async def init_db():
         raise RuntimeError("Database engine is not initialized. Call init_engine first.")
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-    print("[✓] Database schema ensured.")
+    # print("[✓] Database schema ensured.")
 
 async def reset_db():
     """Drop and recreate all tables."""

@@ -9,14 +9,14 @@
 
 <!-- Summary Card -->
 <div class="card bg-dark border-0 shadow-sm mb-4">
-  <div class="card-body">
+  <div class="card-body text-light">   <!-- 👈 added text-light -->
     {% set host_count = host_services|length %}
     {% set percentage = (host_count / total_hosts * 100) if total_hosts > 0 else 0 %}
     <p class="mb-2">
       Showing <strong>{{ host_count }}</strong> unique host(s) running 
       <span class="badge bg-info">{{ service|capitalize }}</span>.
     </p>
-    <div class="d-flex justify-content-between mb-1">
+    <div class="d-flex justify-content-between mb-1 text-secondary">
       <small>{{ host_count }} of {{ total_hosts }} hosts</small>
       <small>{{ "%.1f"|format(percentage) }}%</small>
     </div>
@@ -31,6 +31,7 @@
     </div>
   </div>
 </div>
+
 
 <!-- Hosts Table -->
 <div class="card bg-dark border-0 shadow-sm">
@@ -139,4 +140,12 @@ $(document).ready(function() {
   })
 });
 </script>
+
+<style>
+.table-dark td,
+.table-dark th {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+</style>
+
 {% endblock %}
