@@ -16,7 +16,7 @@ def log(msg: str, level: int = 1, verbose: int = 0):
     """
     level=0 -> always (errors)
     level=1 -> summary
-    level=2 -> detailed (only with -v)
+    level=2 -> detailed (only with -v / -vv)
     """
     if level == 0 or verbose >= level:
         print(msg)
@@ -38,7 +38,7 @@ async def ingest_directory(path, session, dedupe=True, verbose=0):
         try:
             if file.suffix.lower() in [".xml", ".json"]:
                 log(f"[*] Processing file: {file}", level=2, verbose=verbose)
-                await ingest_file(file, session, dedupe=dedupe)
+                await ingest_file(file, session, dedupe=dedupe, verbose=verbose)
                 ingested_count += 1
             else:
                 log(f"[i] Skipping unsupported file format: {file}", level=2, verbose=verbose)
@@ -64,8 +64,8 @@ def flatten_entry(entry: dict) -> str:
     return ", ".join(parts)
 
 
-async def ingest_generic_json(file: Path, session: AsyncSession, data, module_hint: str):
-    print(f"[i] Generic JSON ingestion for {file}")
+async def ingest_generic_json(file: Path, session: AsyncSession, data, module_hint: str, verbose: int = 0):
+    log(f"[i] Generic JSON ingestion for {file}", level=2, verbose=verbose)
     module_name = module_hint or file.stem.split("_")[0] or "generic_json"
 
     if isinstance(data, list):
@@ -78,7 +78,7 @@ async def ingest_generic_json(file: Path, session: AsyncSession, data, module_hi
             or [data]
         )
     else:
-        print(f"[i] Unsupported JSON shape in {file}")
+        log(f"[i] Unsupported JSON shape in {file}", level=2, verbose=verbose)
         return
 
     for entry in entries:
@@ -92,34 +92,34 @@ async def ingest_generic_json(file: Path, session: AsyncSession, data, module_hi
         await get_or_create_script(session, db_host, None, module_name, output)
 
     await session.commit()
-    print(f"[+] Ingested {module_name} JSON: {file.name}")
+    log(f"[+] Ingested {module_name} JSON: {file.name}", level=1, verbose=verbose)
 
 
-async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True):
-    print(f"[*] Processing file: {file}")
+async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, verbose: int = 0):
+    log(f"[*] Processing file: {file}", level=2, verbose=verbose)
     if not file.exists():
-        print(f"[!] File not found: {file}")
+        log(f"[!] File not found: {file}", level=0, verbose=verbose)
         return
 
     # ---------------------------------------------------
     # Handle Nmap XML
     # ---------------------------------------------------
     if file.suffix.lower() == ".xml":
-        print(f"[i] XML detected, parsing {file}")
+        log(f"[i] XML detected, parsing {file}", level=2, verbose=verbose)
         try:
             root = ET.parse(file).getroot()
         except Exception as e:
-            print(f"[!] Failed to read XML {file}: {e}")
+            log(f"[!] Failed to read XML {file}: {e}", level=0, verbose=verbose)
             return
 
         if root.tag != "nmaprun":
-            print(f"[i] Skipping non-Nmap XML file: {file} (root={root.tag})")
+            log(f"[i] Skipping non-Nmap XML file: {file} (root={root.tag})", level=2, verbose=verbose)
             return
 
         try:
             nmap_report = NmapParser.parse_fromfile(str(file))
         except Exception as e:
-            print(f"[!] Failed to parse {file} with NmapParser: {e}")
+            log(f"[!] Failed to parse {file} with NmapParser: {e}", level=0, verbose=verbose)
             return
 
         for host in nmap_report.hosts:
@@ -151,7 +151,7 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True):
                             type=type_
                         )
             except Exception as e:
-                print(f"[!] Failed to ingest OS guesses for {host.address}: {e}")
+                log(f"[!] Failed to ingest OS guesses for {host.address}: {e}", level=0, verbose=verbose)
 
             # --- Ports & scripts ---
             for service in host.services:
@@ -177,7 +177,7 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True):
                     await get_or_create_script(session, db_host, db_port, sid, out or "")
 
         await session.commit()
-        print(f"[+] Ingested {file.name}")
+        log(f"[+] Ingested {file.name}", level=1, verbose=verbose)
         return
 
     # ---------------------------------------------------
@@ -187,16 +187,16 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True):
         module_hint = (file.parent.name or "").lower()
         fname = file.name.lower()
 
-        print(f"[i] JSON detected, module hint: {module_hint}, filename: {fname}")
+        log(f"[i] JSON detected, module hint: {module_hint}, filename: {fname}", level=2, verbose=verbose)
 
         try:
             raw = file.read_text(errors="ignore")
             if not raw.strip():
-                print(f"[i] Empty JSON file: {file}")
+                log(f"[i] Empty JSON file: {file}", level=2, verbose=verbose)
                 return
             data = json.loads(raw)
         except Exception as e:
-            print(f"[!] Failed to parse JSON {file}: {e}")
+            log(f"[!] Failed to parse JSON {file}: {e}", level=0, verbose=verbose)
             return
 
         # ---------- LOCKON ----------
@@ -243,7 +243,7 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True):
                 )
 
             await session.commit()
-            print(f"[+] Ingested lockon JSON: {file.name}")
+            log(f"[+] Ingested lockon JSON: {file.name}", level=1, verbose=verbose)
             return
 
         # ---------- SMBEXPLORER ----------
@@ -274,7 +274,7 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True):
                 await get_or_create_script(session, db_host, None, "smbexplorer", ", ".join(parts))
 
             await session.commit()
-            print(f"[+] Ingested smbexplorer JSON: {file.name}")
+            log(f"[+] Ingested smbexplorer JSON: {file.name}", level=1, verbose=verbose)
             return
 
         # ---------- NFSEXPLORER ----------
@@ -299,15 +299,15 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True):
                 await get_or_create_script(session, db_host, None, "nfsexplorer", ", ".join(parts))
 
             await session.commit()
-            print(f"[+] Ingested nfsexplorer JSON: {file.name}")
+            log(f"[+] Ingested nfsexplorer JSON: {file.name}", level=1, verbose=verbose)
             return
 
         # ---------- GENERIC FALLBACK ----------
         else:
-            await ingest_generic_json(file, session, data, module_hint)
+            await ingest_generic_json(file, session, data, module_hint, verbose=verbose)
             return
 
-    print(f"[i] Skipping unsupported file format: {file}")
+    log(f"[i] Skipping unsupported file format: {file}", level=2, verbose=verbose)
 
 
 # ---------------------------------------------------
@@ -320,6 +320,8 @@ if __name__ == "__main__":
     parser.add_argument("directory", type=str, help="Path to results directory")
     parser.add_argument("--db", type=str, default="results/cygor.db",
                         help="SQLite database path (default: results/cygor.db)")
+    parser.add_argument("-v", "--verbose", action="count", default=0,
+                        help="Increase verbosity (-v shows more, -vv shows debug details)")
     args = parser.parse_args()
 
     db_path = Path(args.db).expanduser().resolve()
@@ -332,6 +334,6 @@ if __name__ == "__main__":
     async def _main():
         async with db.SessionLocal() as session:
             await db.init_db()
-            await ingest_directory(Path(args.directory), session, dedupe=True)
+            await ingest_directory(Path(args.directory), session, dedupe=True, verbose=args.verbose)
 
     asyncio.run(_main())
