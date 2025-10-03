@@ -95,10 +95,10 @@
         <div class="lockon-card" data-status="{{ code }}" data-review="unreviewed">
           <div class="lockon-tile bg-dark shadow-sm">
             <div class="screenshot-wrap"
-                 data-img="/enum/lockon/screenshots/{{ sf }}"
+                 data-img="{{ it.screenshot_url or '/static/no-screenshot.png' }}"
                  data-url="{{ url }}"
                  data-key="{{ sf }}">
-              <img src="/enum/lockon/screenshots/{{ sf }}" alt="{{ url }}" class="screenshot-img">
+              <img src="{{ it.screenshot_url or '/static/no-screenshot.png' }}" alt="{{ url }}" class="screenshot-img">
               <div class="thumb-fallback{% if not failed %} d-none{% endif %}"><i class="bi bi-image"></i><span>No screenshot</span></div>
               <div class="screenshot-footer d-flex justify-content-between align-items-center">
                 <a href="{{ url }}" target="_blank" rel="noreferrer" class="url-text">{{ url }}</a>

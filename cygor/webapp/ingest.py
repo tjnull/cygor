@@ -4,6 +4,7 @@ from libnmap.parser import NmapParser
 import xml.etree.ElementTree as ET
 import json
 
+from . import db
 from .db import (
     get_or_create_host,
     get_or_create_port,
@@ -11,30 +12,33 @@ from .db import (
     get_or_create_osguess,
 )
 
-
-async def ingest_directory(directory: Path, session: AsyncSession, dedupe: bool = True):
+async def ingest_directory(directory: Path, session: AsyncSession, dedupe: bool = True, verbose: int = 0):
     if not directory.exists():
-        print(f"[!] Directory not found: {directory}")
-        return
+        if verbose:
+            print(f"[!] Directory not found: {directory}")
+        return 0
+
     count = 0
-    try:
-        for file in directory.rglob("*"):
-            if file.suffix.lower() in (".xml", ".json"):
-                await ingest_file(file, session, dedupe=dedupe)
-                count += 1
-        await session.commit()
+    if verbose:
+        print(f"[*] Walking directory {directory} ...")
+
+    for file in directory.rglob("*"):
+        if file.suffix.lower() in (".xml", ".json"):
+            if verbose > 1:
+                print(f"[*] Trying ingestion: {file}")
+            await ingest_file(file, session, dedupe=dedupe)
+            count += 1
+
+    await session.commit()
+    if verbose:
         print(f"[✓] Finished ingesting {count} files from {directory}")
-    except Exception as e:
-        print(f"[!] Error during ingestion: {e}")
-    finally:
-        try:
-            await session.commit()
-        except Exception:
-            pass
+    return count
+
+
+
 
 
 def flatten_entry(entry: dict) -> str:
-    """Convert dict entry into a simple key=value string"""
     parts = []
     for k, v in entry.items():
         if isinstance(v, (dict, list)):
@@ -44,10 +48,9 @@ def flatten_entry(entry: dict) -> str:
 
 
 async def ingest_generic_json(file: Path, session: AsyncSession, data, module_hint: str):
-    """Fallback JSON ingestor for new modules"""
+    print(f"[i] Generic JSON ingestion for {file}")
     module_name = module_hint or file.stem.split("_")[0] or "generic_json"
 
-    # normalize entries
     if isinstance(data, list):
         entries = data
     elif isinstance(data, dict):
@@ -85,6 +88,7 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True):
     # Handle Nmap XML
     # ---------------------------------------------------
     if file.suffix.lower() == ".xml":
+        print(f"[i] XML detected, parsing {file}")
         try:
             root = ET.parse(file).getroot()
         except Exception as e:
@@ -92,7 +96,7 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True):
             return
 
         if root.tag != "nmaprun":
-            print(f"[i] Skipping non-Nmap XML file: {file}")
+            print(f"[i] Skipping non-Nmap XML file: {file} (root={root.tag})")
             return
 
         try:
@@ -166,6 +170,8 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True):
         module_hint = (file.parent.name or "").lower()
         fname = file.name.lower()
 
+        print(f"[i] JSON detected, module hint: {module_hint}, filename: {fname}")
+
         try:
             raw = file.read_text(errors="ignore")
             if not raw.strip():
@@ -196,7 +202,6 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True):
                 db_host = await get_or_create_host(session, host)
                 parts = [f"URL: {url}"]
 
-                
                 status_code = entry.get("status_code") or entry.get("status")
                 if status_code is not None:
                     parts.append(f"Status: {status_code}")
@@ -208,13 +213,21 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True):
                 failed = entry.get("screenshot_failed", True)
                 parts.append(f"Failed: {bool(failed)}")
 
-                await get_or_create_script(session, db_host, None,"lockon",", ".join(parts),status_code=entry.get("status_code") or entry.get("status"),screenshot_file=entry.get("screenshot_file"),screenshot_failed=entry.get("screenshot_failed", True), url=url)
-
+                await get_or_create_script(
+                    session,
+                    db_host,
+                    None,
+                    "lockon",
+                    ", ".join(parts),
+                    status_code=status_code,
+                    screenshot_file=screenshot_file,
+                    screenshot_failed=entry.get("screenshot_failed", True),
+                    url=url,
+                )
 
             await session.commit()
             print(f"[+] Ingested lockon JSON: {file.name}")
             return
-
 
         # ---------- SMBEXPLORER ----------
         elif module_hint == "smbexplorer" or fname.startswith("smb_"):
@@ -248,9 +261,7 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True):
             return
 
         # ---------- NFSEXPLORER ----------
-        elif module_hint == "nfsexplorer" or fname.startswith("nfsexplorer_") or (
-            isinstance(data, list) and all("ip" in x and "share" in x for x in data if isinstance(x, dict))
-        ):
+        elif module_hint == "nfsexplorer" or fname.startswith("nfsexplorer_"):
             for entry in data:
                 if not isinstance(entry, dict):
                     continue
@@ -280,3 +291,30 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True):
             return
 
     print(f"[i] Skipping unsupported file format: {file}")
+
+
+# ---------------------------------------------------
+# CLI entrypoint
+# ---------------------------------------------------
+if __name__ == "__main__":
+    import argparse, asyncio
+
+    parser = argparse.ArgumentParser(description="Manually ingest a results directory")
+    parser.add_argument("directory", type=str, help="Path to results directory")
+    parser.add_argument("--db", type=str, default="results/cygor.db",
+                        help="SQLite database path (default: results/cygor.db)")
+    args = parser.parse_args()
+
+    db_path = Path(args.db).expanduser().resolve()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    db_url = f"sqlite+aiosqlite:///{db_path}"
+
+    print(f"[*] Using database {db_path}")
+    db.init_engine(db_url, debug=True)
+
+    async def _main():
+        async with db.SessionLocal() as session:
+            await db.init_db()
+            await ingest_directory(Path(args.directory), session, dedupe=True)
+
+    asyncio.run(_main())

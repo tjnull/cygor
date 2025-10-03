@@ -1,25 +1,68 @@
+import sys
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel, select
 from typing import Optional
-from .config import settings
+from pathlib import Path 
 from .models import Host, Port, Script, OSGuess
 
-engine = create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG, future=True)
-SessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+# Globals that will be set by init_engine()
+engine = None
+SessionLocal = None
+
+def init_engine(database_url: str, debug: bool = False):
+    """
+    Initialize the SQLAlchemy async engine + session factory.
+    Accepts either a full DB URL or a filesystem path for SQLite.
+    """
+    global engine, SessionLocal
+
+    if not database_url.startswith("sqlite+"):
+        db_path = Path(database_url).expanduser()
+
+        # If the user mistakenly passes a directory instead of a .db file
+        if db_path.is_dir():
+            raise RuntimeError(f"[!] '{db_path}' is a directory, expected a database file path")
+
+        if not db_path.parent.exists():
+            raise RuntimeError(f"[!] Database directory does not exist: {db_path.parent}")
+
+        database_url = f"sqlite+aiosqlite:///{db_path}"
+
+    print(f"[*] DB engine initialized: {database_url}")
+    engine = create_async_engine(database_url, echo=debug, future=True)
+    SessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    return engine
+
+
 
 async def init_db():
+    """Create all tables if they do not exist."""
+    if engine is None:
+        raise RuntimeError("Database engine is not initialized. Call init_engine first.")
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-
-async def get_session():
-    async with SessionLocal() as session:
-        yield session
+    print("[✓] Database schema ensured.")
 
 async def reset_db():
+    """Drop and recreate all tables."""
+    if engine is None:
+        raise RuntimeError("Database engine is not initialized. Call init_engine first.")
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.drop_all)
         await conn.run_sync(SQLModel.metadata.create_all)
+    print("[✓] Database reset complete.")
+
+async def get_session():
+    """Get a new async session."""
+    if SessionLocal is None:
+        raise RuntimeError("Database session factory is not initialized. Call init_engine first.")
+    async with SessionLocal() as session:
+        yield session
+
+# ------------------------
+# Utility helpers
+# ------------------------
 
 async def get_or_create_host(session: AsyncSession, address: str, hostname: str | None = None) -> Host:
     res = await session.execute(select(Host).where(Host.address == address))
@@ -106,8 +149,6 @@ async def get_or_create_script(
     await session.flush()
     return s
 
-
-
 async def get_or_create_osguess(session: AsyncSession, host: Host,
                                 name: str, accuracy: int = 0,
                                 type: Optional[str] = None,
@@ -115,9 +156,6 @@ async def get_or_create_osguess(session: AsyncSession, host: Host,
                                 family: Optional[str] = None,
                                 generation: Optional[str] = None,
                                 cpe: Optional[str] = None) -> OSGuess:
-    """
-    De-duplicates by (host_id, name, accuracy, cpe).
-    """
     q = select(OSGuess).where(
         OSGuess.host_id == host.id,
         OSGuess.name == name,
