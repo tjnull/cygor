@@ -11,10 +11,10 @@ Usage:
 
 Commands:
   banner  Cygor tool banner (Warning it is large!)
-  scan    Automated scanner to discover hosts and services. (Will require root/sudo privileges for scanning)
-  parse   Parses NMAP data and extracts service hosts (See parse.py for list of services it parses)
-  enum    Loads enumeration modules that are in cygor modules directory. 
-  web     Loads Cygor's Web UI and will allow you to interact with it by supplying data you have collected with Cygor
+  scan    Automated scanner to discover hosts and services. (Will require root/sudo privileges for scanning).
+  parse   Analyze a NMAP scan file (nmap, gnmap, xml) and extract each host that is running a common service. Will create seperate hostlists for each service.
+  enum    Loads enumeration modules that are located in the cygor modules directory. 
+  web     Loads Cygor's Web UI and will allow you to interact with it by supplying data you have collected with Cygor.
 """
 
 _NEEDS_ROOT = {"scan"}
