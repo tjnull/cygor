@@ -202,9 +202,9 @@ This software must not be used for unauthorized access, intrusion, or disruption
 
 By downloading, running, or modifying Cygor, you agree that:
 
-You are solely responsible for how you use it.
+- You are solely responsible for how you use it.
 
-You will restrict its use to legal and ethical scenarios.
+- You will restrict its use to legal and ethical scenarios.
 
 The authors and contributors of Cygor accept no liability for misuse, damage, or consequences arising from the use of this software.
 

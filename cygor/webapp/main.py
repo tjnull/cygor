@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from collections import namedtuple
+from importlib.resources import files  
 
 from . import db
 from .db import get_session, reset_db
@@ -16,8 +17,8 @@ from .models import Host, Port, Script, OSGuess
 from .ingest import ingest_directory
 from .config import settings
 
-# -------- Templates --------
-templates = Jinja2Templates(directory="cygor/webapp/templates")
+templates = None  # will be initialized in lifespan
+
 
 # --------- Module Discovery ---------
 MODULES_DIR = Path(__file__).resolve().parent.parent / "modules"
@@ -78,6 +79,18 @@ TopItem = namedtuple("TopItem", ["host", "guess"])
 
 # ---------------- Lifespan ----------------
 async def lifespan(app: FastAPI):
+    global templates
+    templates_dir = files("cygor.webapp") / "templates"
+    static_dir = files("cygor.webapp") / "static"
+    if static_dir.is_dir():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    else:
+        print(f"[!] Static directory not found: {static_dir}")
+
+
+    templates = Jinja2Templates(directory=str(templates_dir))
+    
+
     await db.init_db()
     load_dir = os.environ.get("CYGOR_LOAD_DIR")
 
@@ -101,11 +114,13 @@ async def lifespan(app: FastAPI):
             print("[✓] Background preload complete.")
         asyncio.create_task(_bg())
 
-    yield  # <- important: marks the end of lifespan setup
+    yield
 
 
 
 app = FastAPI(lifespan=lifespan)
+# Mount static assets
+
 
 
 
