@@ -1,0 +1,18 @@
+name: cygor-dev
+
+services:
+  cygor:
+    build: .
+    image: cygor:latest
+
+    container_name: cygor-dev
+    hostname: cygor-dev
+
+    ports:
+      - 8080:8080
+
+    volumes:
+      - ./cygor:/opt/cygor/cygor
+      - ${CYGOR_RESULTS_PATH}:/opt/cygor/results
+
+    command: web start --host 0.0.0.0 --port 8080 --load-dir /opt/cygor/results
