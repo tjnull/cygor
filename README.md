@@ -56,7 +56,31 @@ pipx install .
 ```
 
 ## Deploying Cygor Using Docker
-TO:DO
+To build the Docker image, you can run the following command:
+
+```bash
+$ docker build -t cygor .
+```
+
+This will build the image `cygor`, which can be executed using `docker run`:
+
+```bash
+$ docker run --rm -v ./results:/opt/cygor/results cygor web --host 0.0.0.0 --port 8080 --load-dir /opt/cygor/results
+```
+
+Using `docker-compose.yaml`, the web UI could be started using `docker compose`:
+
+```bash
+$ docker compose up --build
+```
+
+From there, the `docker run` could be used to run commands and write outputs to the desired folder using the `-v` flag.
+
+If you want to contribute to Cygor and its development, it might be a good idea to use the `docker-compose-dev.yaml` file instead, which mounts the `cygor` folder to the image:
+
+```bash
+$ docker compose -f docker-compose-dev.yaml up --build
+```
 
 # Running Cygor
 Use the top-level Cygor command to access the available tools. Each subcommand has its own help screen (Cygor <command> --help) that documents flags and actions.
