@@ -1,4 +1,11 @@
-# cygor
+# Cygor
+
+<div align="center">
+
+![Cygor Banner](images/cygor-banner.png)
+
+</div>
+
 
 ## General Overview
 
@@ -18,7 +25,7 @@ Powered by FastAPI and Bootstrap 5, the dashboard makes it easy to:
 
 The Web UI isn’t just for presentation — it’s about efficiency and clarity. By bringing all collected data into a single, interactive workspace, it cuts down the time spent parsing files or reconciling outputs and lets testers focus on what matters: understanding the environment and acting on it.
 
-## Why is it called cygor?
+## Why is it called Cygor?
 
 A lot of tools, techniques, and tradecrafts that I create are inspired from the Spawn Universe. If you have never read a Spawn comic, it's okay as I will share some information as to why I selected the charecter to be the name of this tool. 
 
@@ -26,9 +33,9 @@ The name Cygor draws from Cy-Gor, a tragic anti-hero in the Spawn universe. Once
 
 After escaping captivity, Cy-Gor went on violent rampages, even tearing through government data centers in fits of confusion and rage. Though hunted and recaptured multiple times, he eventually fought back against the systems that sought to control him — removing tracking implants and breaking free to forge his own path, torn between machine, beast, and man.
 
-- Reference: https://www.spawnworld.com/encyclopedia/cygor.htm
+- Reference: https://www.spawnworld.com/encyclopedia/Cygor.htm
 
-## Who should use cygor?
+## Who should use Cygor?
 
 - Red Teams & Pentesters – Automate discovery, streamline enumeration, and maintain context across large engagements.
 
@@ -52,7 +59,7 @@ After escaping captivity, Cy-Gor went on violent rampages, even tearing through 
 
 # Installing Cygor
 
-There are a few methods that are supported to install cygor: pip, pipx, uv, and docker. 
+There are a few methods that are supported to install Cygor: pip, pipx, uv, and docker. 
 
 ## Installing with pipx
 
@@ -66,12 +73,12 @@ cd cygor
 pipx install .
 ```
 
-## Deploying cygor using Docker
+## Deploying Cygor using Docker
 TO:DO
 
 # Running Cygor
 
-Use the top-level cygor command to access the available tools. Each subcommand has its own help screen (cygor <command> --help) that documents flags and actions.
+Use the top-level Cygor command to access the available tools. Each subcommand has its own help screen (Cygor <command> --help) that documents flags and actions.
 
 ```bash
 tjnull@kali:~$ cygor
@@ -82,7 +89,7 @@ Commands:
   banner  Cygor tool banner (Warning it is large!)
   scan    Automated scanner to discover hosts and services. (Will require root/sudo privileges for scanning).
   parse   Analyze a NMAP scan file (nmap, gnmap, xml) and extract each host that is running a common service. Will create seperate hostlists for each service.
-  enum    Loads enumeration modules that are located in the cygor modules directory. 
+  enum    Loads enumeration modules that are located in the Cygor modules directory. 
   web     Loads Cygor's Web UI and will allow you to interact with it by supplying data you have collected with Cygor.
 ```
 
