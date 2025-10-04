@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Cygor Banner](images/cygor-banner.png)
+[![bbot_banner](https://github.com/tjnull/cygor/blob/main/images/cygor-banner.jpg)](https://github.com/tjnull/cygor)
 
 </div>
 
