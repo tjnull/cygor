@@ -20,7 +20,7 @@ Powered by FastAPI and Bootstrap 5, the dashboard makes it easy to:
 The Web UI isn’t just for presentation — it’s about efficiency and clarity. By bringing all collected data into a single, interactive workspace, it cuts down the time spent parsing files or reconciling outputs and lets testers focus on what matters: understanding the environment and acting on it.
 
 ## Why is it Called Cygor?
-A lot of tools, techniques, and tradecrafts that I create are inspired from the Spawn Universe. If you have never read a Spawn comic, it's okay as I will share some information as to why I selected the charecter to be the name of this tool.
+A lot of tools, techniques, and tradecrafts that I create are inspired from the Spawn Universe. If you have never read a Spawn comic, it's okay as I will share some information as to why I selected the character to be the name of this tool.
 
 The name Cygor draws from Cy-Gor, a tragic anti-hero in the Spawn universe. Once Michael Konieczny — a government operative and close friend of Al Simmons — he tried to expose corruption after Simmons’s murder. However, he was captured and forced into Project Sim, the Simian experiments of Dr. Frederick Willheim, where a gorilla’s body was merged with Konieczny’s mind through invasive cybernetics. The result was the beast known as Cy-Gor — short for Cybernetic Gorilla.
 
