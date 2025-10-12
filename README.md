@@ -154,7 +154,8 @@ You will need `sudo` (`root`) privileges to run the scanner in `cygor`:
 ## Cygor Enumeration Modules
 As of now, cygor comes with three enumeration modules to help enumerate services from your scans to see if they are active.
 - Lockon – A web discovery module that captures screenshots of HTTP/S services and organizes them for fast visual triage.
-    - NOTE: if on Kali Linux, prior to first run of the LockOn module, you will have to install required chromium dependencies with, `apt install libasound2t64` and `apt install unifont` then run `apt install libasound2t64 /root/.local/share/pipx/venvs/cygor/bin/python -m playwright install --with-deps chromium`
+    - NOTE: if on Kali Linux, prior to first run of the LockOn module, you will have to install required chromium dependencies with, `apt install libasound2t64` and `apt install unifont`
+    - then run `apt install libasound2t64 /root/.local/share/pipx/venvs/cygor/bin/python -m playwright install --with-deps chromium`
 - SMB Explorer – Enumerates SMB shares, permissions, and accessible files to identify weak or misconfigured access.
 - NFS Explorer – Interacts with NFS exports to analyze access levels, test UID/GID mappings, and uncover insecure configurations.
 
