@@ -3,66 +3,59 @@
 
 <div class="container-fluid py-4">
 
-  <!-- Stat Widgets -->
-  <div class="row g-4 mb-4">
-    <div class="col-lg-4 col-md-6">
-      <div class="card bg-gradient-dark text-white shadow-sm h-100">
-        <div class="card-body d-flex align-items-center">
-          <i class="bi bi-hdd-network fs-1 text-info me-3"></i>
-          <div>
-            <h6 class="text-uppercase text-secondary fw-bold">Hosts Discovered</h6>
-            <h2 class="mb-0">{{ hosts_total }}</h2>
-          </div>
+<!-- Stat Widgets (row 1) -->
+<div class="row gx-3 gy-3 mb-3 align-items-stretch">
+  <div class="col-12 col-xl-6">
+    <div class="card bg-gradient-dark text-white shadow-sm h-100 position-relative compact">
+      <div class="card-body d-flex align-items-center">
+        <i class="bi bi-hdd-network fs-1 text-info me-3"></i>
+        <div>
+          <h6 class="text-uppercase text-secondary fw-bold">Hosts Discovered</h6>
+          <h2 class="mb-0">{{ hosts_total }}</h2>
         </div>
       </div>
+      <a href="/hosts" class="stretched-link" aria-label="View all discovered hosts"></a>
     </div>
-    <div class="col-lg-4 col-md-6">
-      <div class="card bg-gradient-dark text-white shadow-sm h-100">
-        <div class="card-body d-flex align-items-center">
-          <i class="bi bi-search fs-1 text-success me-3"></i>
-          <div>
-            <h6 class="text-uppercase text-secondary fw-bold">Hosts Scanned</h6>
-            <h2 class="mb-0">{{ hosts_scanned }}</h2>
-          </div>
+  </div>
+
+  <div class="col-12 col-xl-6">
+    <div class="card bg-gradient-dark text-white shadow-sm h-100 position-relative compact">
+      <div class="card-body d-flex align-items-center">
+        <i class="bi bi-search fs-1 text-success me-3"></i>
+        <div>
+          <h6 class="text-uppercase text-secondary fw-bold">Hosts Scanned</h6>
+          <h2 class="mb-0">{{ hosts_scanned }}</h2>
         </div>
       </div>
+      <a href="/hosts?status=scanned" class="stretched-link" aria-label="View scanned hosts"></a>
     </div>
-    <div class="col-lg-4 col-md-6">
-      <div class="card bg-gradient-dark text-white shadow-sm h-100">
-        <div class="card-body d-flex align-items-center">
-          <i class="bi bi-terminal fs-1 text-warning me-3"></i>
-          <div>
-            <h6 class="text-uppercase text-secondary fw-bold">Hosts Enumerated</h6>
-            <h2 class="mb-0">{{ hosts_enum }}</h2>
-          </div>
-        </div>
+  </div>
+</div>
+
+<!-- Charts (row 2) -->
+<div class="row gx-3 gy-3 mb-3 align-items-stretch">
+  <div class="col-12 col-xl-6">
+    <div class="card bg-dark shadow-sm h-100">
+      <div class="card-header border-0">
+        <h5 class="card-title text-white mb-0"><i class="bi bi-graph-up me-2"></i> Scan Progress</h5>
+      </div>
+      <div class="card-body">
+        <canvas id="hostsChart" style="width:100%; height:250px;"></canvas>
       </div>
     </div>
   </div>
 
-  <!-- Charts Row -->
-  <div class="row g-4 mb-4">
-    <div class="col-md-6">
-      <div class="card bg-dark shadow-sm h-100">
-        <div class="card-header border-0">
-          <h5 class="card-title text-white mb-0"><i class="bi bi-graph-up me-2"></i> Scan Progress</h5>
-        </div>
-        <div class="card-body">
-          <canvas id="hostsChart" style="width:100%; height:250px;"></canvas>
-        </div>
+  <div class="col-12 col-xl-6">
+    <div class="card bg-dark shadow-sm h-100">
+      <div class="card-header border-0">
+        <h5 class="card-title text-white mb-0"><i class="bi bi-diagram-3 me-2"></i> Top Services</h5>
       </div>
-    </div>
-    <div class="col-md-6">
-      <div class="card bg-dark shadow-sm h-100">
-        <div class="card-header border-0">
-          <h5 class="card-title text-white mb-0"><i class="bi bi-diagram-3 me-2"></i> Top Services</h5>
-        </div>
-        <div class="card-body">
-          <canvas id="servicesChart" style="width:100%; height:250px;"></canvas>
-        </div>
+      <div class="card-body">
+        <canvas id="servicesChart" style="width:100%; height:250px;"></canvas>
       </div>
     </div>
   </div>
+</div>
 
 
 <!-- OS Discovery Card -->

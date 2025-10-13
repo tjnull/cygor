@@ -5,184 +5,140 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Cygor UI</title>
 
-  <!-- Bootstrap 5 Dark Theme -->
+  <!-- Bootstrap 5 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
 
   <style>
-    :root {
+    :root{
       --sidebar-width: 240px;
-      --navbar-height: 56px;
-      --accent-color: #0d6efd; /* Sidebar accent */
+      --sidebar-buffer: 12px;      /* breathing room when sidebar is visible */
+      --page-gutter: 16px;         /* left margin when sidebar is collapsed */
+      --navbar-height: 44px;       /* tighter top bar */
+      --accent-color: #0d6efd;
+
+      --icon-rail: 16px;
+      --icon-box: 24px;
+      --row-gap: .20rem;
+      --submenu-indent: 2.25rem;
+      --container-side-pad: 1rem;  /* neutralize Bootstrap row negative margins */
     }
 
-    body {
-      background-color: #121212;
-      color: #e0e0e0;
-    }
+    body{ background:#121212; color:#e0e0e0; }
 
-    /* Top navbar */
-    .topbar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: var(--navbar-height);
-      background: #0f0f14;
-      z-index: 1100;
-      display: flex;
-      align-items: center;
-      padding: 0 .75rem;
+    /* ===== Top navbar (short, no shadow) ===== */
+    .topbar{
+      position:fixed; inset:0 0 auto 0; height:var(--navbar-height);
+      background:#0f0f14; z-index:1100; display:flex; align-items:center;
+      padding:0 .5rem; border-bottom:0 !important; box-shadow:none !important;
     }
+    .topbar .brand-inline{ display:flex; align-items:center; gap:.5rem; font-weight:600; color:#e0e0e0; text-decoration:none; font-size:1rem; }
+    .topbar .brand-inline:hover{ color:#fff; }
+    .modal-open .topbar{ display:none !important; } /* prevent overlap with modals */
 
-    .topbar .brand-inline {
-      display: flex;
-      align-items: center;
-      gap: .5rem;
-      font-weight: 600;
-      color: #e0e0e0;
-      text-decoration: none;
-      font-size: 1.1rem;
+    /* ===== Sidebar ===== */
+    .sidebar{
+      position:fixed; top:var(--navbar-height); left:0; width:var(--sidebar-width);
+      height:calc(100vh - var(--navbar-height)); background:#0d0d12;
+      padding:1rem 0; transition:transform .3s ease; z-index:1000; overflow-y:auto;
     }
+    .sidebar.collapsed{ transform:translateX(-100%); }
 
-    .topbar .brand-inline:hover {
-      color: #fff;
+    .sidebar .nav.flex-column{ display:flex; flex-direction:column; row-gap:var(--row-gap); padding:0 !important; margin:0 !important; list-style:none; }
+    .sidebar .nav.flex-column > li{ margin:0 !important; padding:0 !important; }
+
+    /* Sidebar rows with hard icon rail */
+    #sidebar .nav > li > a.nav-link{
+      position:relative !important;
+      display:flex !important; align-items:center !important; gap:.6rem !important;
+      width:100% !important;
+      padding:.44rem 1rem .44rem calc(var(--icon-rail) + var(--icon-box) + 8px) !important;
+      color:#adb5bd !important; background:transparent !important; border:none !important;
+      font-size:.95rem !important; font-weight:500 !important; line-height:1.3 !important; text-align:left !important;
+      transition:background-color .2s,color .2s !important;
     }
-
-    /* Sidebar */
-    .sidebar {
-      position: fixed;
-      top: var(--navbar-height);
-      left: 0;
-      width: var(--sidebar-width);
-      height: calc(100vh - var(--navbar-height));
-      background: #0d0d12;
-      padding: 1rem 0;
-      transition: transform .3s ease;
-      z-index: 1000;
-      overflow-y: auto;
+    #sidebar .nav > li > a.nav-link:hover,
+    #sidebar .nav > li > a.nav-link.active,
+    #sidebar .nav > li > a.nav-link[aria-expanded="true"]{
+      color:#fff !important; background-color:rgba(255,255,255,.05) !important;
     }
-
-    .sidebar.collapsed {
-      transform: translateX(-100%);
+    #sidebar .nav > li > a.nav-link::before{
+      content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
+      background:var(--accent-color); opacity:0; transition:opacity .2s;
     }
+    #sidebar .nav > li > a.nav-link:hover::before,
+    #sidebar .nav > li > a.nav-link.active::before,
+    #sidebar .nav > li > a.nav-link[aria-expanded="true"]::before{ opacity:1; }
 
-    .sidebar .nav-link {
-      color: #adb5bd;
-      white-space: nowrap;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      padding: .6rem 1rem;
-      border-radius: 0;
-      position: relative;
-      transition: color .2s ease, background-color .2s ease;
+    #sidebar .nav > li > a.nav-link .nav-icon{
+      position:absolute !important; left:var(--icon-rail) !important; top:50% !important; transform:translateY(-50%) !important;
+      width:var(--icon-box) !important; height:var(--icon-box) !important;
+      display:flex !important; align-items:center !important; justify-content:flex-start !important;
     }
-
-    .sidebar .nav-link.active,
-    .sidebar .nav-link:hover {
-      color: #fff;
-      background-color: rgba(255,255,255,0.03);
+    #sidebar .nav > li > a.nav-link .nav-icon i{
+      width:var(--icon-box) !important; height:var(--icon-box) !important;
+      font-size:1.2rem !important; line-height:1 !important; transform:translateY(1px) !important; text-align:left !important;
     }
+    #sidebar .nav > li > a.nav-link .nav-label{ flex:1 1 auto !important; display:flex !important; align-items:center !important; min-width:0 !important; }
+    #sidebar .nav > li > a.nav-link .nav-chevron{ margin-left:auto !important; display:flex !important; align-items:center !important; }
+    .rotate-chevron{ transition:transform .25s ease; }
+    #sidebar .nav > li > a.nav-link[aria-expanded="true"] .rotate-chevron{ transform:rotate(90deg); }
 
-    /* Left accent bar on hover/active */
-    .sidebar .nav-link::before {
-      content: "";
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 3px;
-      background-color: var(--accent-color);
-      opacity: 0;
-      transition: opacity .2s ease;
-    }
+    #sidebar .collapse .nav-link{ padding-left: calc(var(--submenu-indent) + var(--icon-box) + 8px) !important; }
+    #sidebar .collapse .nav-link .nav-icon{ left: var(--submenu-indent) !important; }
 
-    .sidebar .nav-link.active::before,
-    .sidebar .nav-link:hover::before {
-      opacity: 1;
-    }
-
-    /* Content */
-    .content {
+    /* ===== Content (expands when sidebar collapses) ===== */
+    .content{
       margin-top: var(--navbar-height);
-      margin-left: var(--sidebar-width);
-      padding: 2rem;
-      transition: margin-left .3s ease;
+      margin-left: calc(var(--sidebar-width) + var(--sidebar-buffer));   /* default with sidebar open */
+      padding: .25rem 1.25rem 2rem 1.25rem !important;
       min-height: calc(100vh - var(--navbar-height));
+      transition: margin-left .3s ease;
+    }
+    /* when we add .expanded to main content, it uses a small page gutter */
+    .content.expanded{
+      margin-left: var(--page-gutter) !important;
     }
 
-    .content.expanded {
-      margin-left: 0;
+    /* neutralize Bootstrap's row negative margins at the left/right edges */
+    .content > .container-fluid:first-child,
+    .content > .container:first-child{
+      padding-left: var(--container-side-pad) !important;
+      padding-right: var(--container-side-pad) !important;
+      padding-top: 0 !important;
+      margin-top: 0 !important;
     }
-    
-    /* Default modal fixes */
-    .modal {
-      z-index: 2000 !important;
-    }
+    .content > *:first-child,
+    .content .row:first-child,
+    .content .card:first-child{ margin-top: 0 !important; }
 
-    /* Fullscreen mode (applied via JS toggle) */
-    .modal-dialog.fullscreen {
-      max-width: 98vw !important;
-      width: 98vw !important;
-      height: 95vh !important;
-      margin: auto;
-    }
+    /* ===== Dark theme helpers ===== */
+    .card.bg-dark, .card.bg-gradient-dark{ background:#1e1e1e !important; color:#f8f9fa !important; border:1px solid #2a2a2a !important; }
+    .card.bg-dark h2,.card.bg-dark h5,.card.bg-dark h6,
+    .card.bg-gradient-dark h2,.card.bg-gradient-dark h5,.card.bg-gradient-dark h6{ color:#f8f9fa !important; }
+    .card .text-secondary{ color:#aaa !important; }
 
-    .modal-dialog.fullscreen .modal-content {
-      height: 100%;
-    }
+    .table, .table thead th, .table thead td, .table tbody td{ background:#212529 !important; color:#f8f9fa !important; border-color:#444 !important; }
+    .table thead{ background:#2c2f33 !important; color:#f8f9fa !important; }
+    .table tbody tr:hover{ background:#2a2d31 !important; }
+    .dataTables_wrapper{ color:#e0e0e0 !important; }
+    .dataTables_wrapper .dataTables_length select,
+    .dataTables_wrapper .dataTables_filter input{ background:#2c2f33 !important; color:#f8f9fa !important; border:1px solid #444 !important; }
+    .dataTables_wrapper .dataTables_filter input:focus,
+    .dataTables_wrapper .dataTables_length select:focus{ outline:none; border-color:#0d6efd !important; box-shadow:0 0 0 .2rem rgba(13,110,253,.25) !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button{ color:#e0e0e0 !important; border:1px solid #444 !important; background:#2c2f33 !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current{ background:#0d6efd !important; color:#fff !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button:hover{ background:#0b5ed7 !important; color:#fff !important; }
 
-    .modal-dialog.fullscreen .modal-body {
-      max-height: calc(95vh - 80px); /* room for header */
-      overflow-y: auto;
-      overflow-x: auto;
-    }
-
-    /* Make dark table text fully readable */
-    .table-dark td,
-    .table-dark th,
-    .table-dark .text-muted,
-    .table-dark small {
-      color: rgba(255, 255, 255, 0.85) !important;
-    }
-
-    /* Also fix progress bar text */
-    .progress {
-      background-color: rgba(255, 255, 255, 0.1);
-    }
-    .progress-bar {
-      color: #fff !important; /* ensure text inside bars is visible */
-    }
-
-    /* ---- FIX: Ensure cards stay dark regardless of browser dark mode extensions ---- */
-    .card.bg-dark,
-    .card.bg-gradient-dark {
-      background-color: #1e1e1e !important; /* lock solid dark background */
-      color: #f8f9fa !important;
-      border: 1px solid #2a2a2a !important;
-    }
-
-    .card.bg-dark h2,
-    .card.bg-dark h5,
-    .card.bg-dark h6,
-    .card.bg-gradient-dark h2,
-    .card.bg-gradient-dark h5,
-    .card.bg-gradient-dark h6 {
-      color: #f8f9fa !important;
-    }
-
-    .card .text-secondary {
-      color: #aaa !important;
-    }
+    .progress{ background:#1e232a !important; border:1px solid #2b2f36; border-radius:10px; }
+    .progress .progress-bar{ border-radius:10px; }
   </style>
 </head>
 <body class="d-flex flex-column h-100">
 
   <!-- Top Navbar -->
   <nav class="topbar">
-    <button id="globalToggleSidebar" class="btn btn-outline-light btn-sm me-3" title="Toggle sidebar" aria-label="Toggle sidebar">
+    <button id="globalToggleSidebar" class="btn btn-outline-light btn-sm me-2" title="Toggle sidebar" aria-label="Toggle sidebar">
       <i class="bi bi-list"></i>
     </button>
     <a href="/" class="brand-inline">Cygor</a>
@@ -190,29 +146,47 @@
 
   <!-- Sidebar -->
   <nav id="sidebar" class="sidebar">
-    <ul class="nav nav-pills flex-column mb-auto px-2">
-      <li class="mb-1"><a href="/" class="nav-link text-white"><i class="bi bi-speedometer2"></i><span>Dashboard</span></a></li>
-      <li class="mb-1"><a href="/hosts" class="nav-link text-white"><i class="bi bi-hdd-network"></i><span>Nmap Scans</span></a></li>
-      <li class="mb-1"><a href="/services" class="nav-link text-white"><i class="bi bi-diagram-3"></i><span>Services</span></a></li>
-      <!-- Enumeration (auto-detected) -->
-      <li class="mb-1">
-        <button class="btn w-100 text-start text-white" data-bs-toggle="collapse" data-bs-target="#enumMenu" aria-expanded="false">
-          <i class="bi bi-collection"></i><span class="ms-2">Modules</span>
-        </button>
+    <ul class="nav flex-column mb-auto">
+      <li>
+        <a href="/" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-speedometer2"></i></div>
+          <div class="nav-label">Dashboard</div>
+        </a>
+      </li>
+      <li>
+        <a href="/hosts" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-hdd-network"></i></div>
+          <div class="nav-label">Nmap Scans</div>
+        </a>
+      </li>
+      <li>
+        <a href="/services" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-diagram-3"></i></div>
+          <div class="nav-label">Services</div>
+        </a>
+      </li>
+
+      <!-- Modules -->
+      <li>
+        <a class="nav-link text-white" data-bs-toggle="collapse" href="#enumMenu" role="button" aria-expanded="false" aria-controls="enumMenu">
+          <div class="nav-icon"><i class="bi bi-grid-3x3-gap"></i></div>
+          <div class="nav-label">Modules</div>
+          <div class="nav-chevron"><i class="bi bi-chevron-right rotate-chevron"></i></div>
+        </a>
         <div class="collapse" id="enumMenu">
-          <ul class="nav flex-column ps-3">
+          <ul class="nav flex-column" style="padding-left:0;margin-left:0;">
             {% set modules = request.state.modules if request.state.modules is defined else [] %}
             {% if modules %}
               {% for m in modules %}
-                <li class="mb-1">
+                <li>
                   <a href="/enum/{{ m }}" class="nav-link text-white">
-                    <i class="bi bi-chevron-right"></i>
-                    <span class="ms-1">{{ m }}</span>
+                    <div class="nav-icon"><i class="bi bi-chevron-right"></i></div>
+                    <div class="nav-label">{{ m }}</div>
                   </a>
                 </li>
               {% endfor %}
             {% else %}
-              <li class="text-muted ms-2">No modules found</li>
+              <li class="text-muted" style="padding-left: calc(var(--submenu-indent) + var(--icon-box) + 8px);">No modules found</li>
             {% endif %}
           </ul>
         </div>
@@ -228,83 +202,15 @@
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    function toggleSidebar() {
+    // Collapse/expand behavior: slide sidebar and let content stretch
+    document.getElementById("globalToggleSidebar").addEventListener("click", () => {
       const sidebar = document.getElementById("sidebar");
       const content = document.getElementById("mainContent");
       sidebar.classList.toggle("collapsed");
-      content.classList.toggle("expanded");
-    }
-    document.getElementById("globalToggleSidebar").addEventListener("click", toggleSidebar);
+      content.classList.toggle("expanded");  // margin-left switches to --page-gutter
+    });
   </script>
 
-  {% block scripts %}
-  <!-- Page-specific JS will go here -->
-  {% endblock %}
-
-<!-- Global Dark Theme Fix for DataTables -->
-<style>
-/* General DataTables container text */
-.dataTables_wrapper {
-  color: #e0e0e0 !important;
-}
-
-/* Controls (length dropdown, search, info, pagination) */
-.dataTables_wrapper .dataTables_length,
-.dataTables_wrapper .dataTables_filter,
-.dataTables_wrapper .dataTables_info,
-.dataTables_wrapper .dataTables_paginate {
-  color: #e0e0e0 !important;
-}
-
-/* Fix dropdown + search box */
-.dataTables_wrapper .dataTables_filter input,
-.dataTables_wrapper .dataTables_length select {
-  background-color: #2c2f33 !important;
-  color: #f8f9fa !important;
-  border: 1px solid #444 !important;
-}
-.dataTables_wrapper .dataTables_filter input:focus,
-.dataTables_wrapper .dataTables_length select:focus {
-  outline: none;
-  border-color: #0d6efd !important;
-  box-shadow: 0 0 0 0.2rem rgba(13,110,253,.25);
-}
-
-/* Table backgrounds */
-.table.dataTable,
-.table.dataTable thead th,
-.table.dataTable thead td,
-.table.dataTable tbody td {
-  background-color: #212529 !important;
-  color: #f8f9fa !important;
-  border-color: #444 !important;
-}
-
-/* Table head */
-.table.dataTable thead {
-  background-color: #2c2f33 !important;
-  color: #f8f9fa !important;
-}
-
-/* Hover rows */
-.table.dataTable tbody tr:hover {
-  background-color: #2a2d31 !important;
-}
-
-/* Pagination buttons */
-.dataTables_wrapper .dataTables_paginate .paginate_button {
-  color: #e0e0e0 !important;
-  border: 1px solid #444 !important;
-  background: #2c2f33 !important;
-}
-.dataTables_wrapper .dataTables_paginate .paginate_button.current {
-  background: #0d6efd !important;
-  color: #fff !important;
-}
-.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
-  background: #0b5ed7 !important;
-  color: #fff !important;
-}
-</style>
+  {% block scripts %}{% endblock %}
 </body>
 </html>
