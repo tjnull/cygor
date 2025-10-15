@@ -1,253 +1,1020 @@
 {% extends "base.html" %}
 {% block content %}
 
+<style>
+/* Chart card helpers */
+.chart-card .card-body { display: flex; flex-direction: column; padding: 1rem; }
+
+/* Dashboard canvas sizing */
+.chart-canvas-wrap {
+  position: relative;
+  width: 100%;
+  min-height: 200px;
+  max-height: 420px;
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+}
+.chart-canvas-wrap canvas { width: 100% !important; height: 100% !important; display: block; }
+
+/* small popup/expand button - placed in card header area */
+.card-header .chart-popup-btn {
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: #fff;
+  padding: 0.18rem 0.36rem;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+}
+.card-header .chart-popup-btn:hover { background: rgba(255,255,255,0.04); color: #eaeaea; }
+.card-header .chart-popup-btn svg { width: 16px; height: 16px; display:block; }
+
+/* HIDE any popup buttons that mistakenly end up inside the canvas area (prevents duplicates) */
+.chart-canvas-wrap .chart-popup-btn { display: none !important; }
+
+/* Custom HTML legend placed in header (top-right) */
+.custom-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0,0,0,0.18);
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: #ffffff !important;
+  font-weight: 600;
+  font-size: 13px;
+  user-select: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.03);
+}
+.custom-legend .legend-item { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; opacity: 1; transition: opacity .15s ease; }
+.custom-legend .legend-item.dim { opacity: 0.45; }
+.custom-legend .legend-swatch { width: 14px; height: 14px; border-radius: 4px; display: inline-block; box-shadow: 0 2px 8px rgba(0,0,0,0.45); border: 2px solid rgba(0,0,0,0.12); }
+.custom-legend .legend-text { color: #ffffff; font-weight: 600; }
+
+/* Modal holder scroll area: horizontal scroll for timeline popup; services popup will not show scrollbar */
+#chartPopupModal .modal-body { padding: 0.6rem; }
+#popupCanvasHolder {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 8px;
+  box-sizing: border-box;
+}
+#popupCanvasHolder::-webkit-scrollbar { height: 10px; }
+#popupCanvasHolder::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 6px; }
+
+/* Make legend and labels readable */
+.modal-content .chartjs-legend { text-align:center; margin-top:6px; }
+.chartjs-legend, .chartjs-legend ul, .chartjs-legend li { color: #ffffff !important; }
+
+/* Tooltip high contrast fallback */
+.chartjs-tooltip,
+.chartjs-tooltip * { color: #ffffff !important; }
+
+/* minor responsive tidy */
+@media (max-width: 991px) {
+  .chart-canvas-wrap { min-height: 180px; }
+}
+
+/* small helper text under Hosts Discovered when adjusted */
+.hosts-adjusted-note {
+  color: #f1c40f; /* yellow */
+  font-weight: 600;
+  font-size: 12px;
+  margin-top: 6px;
+}
+</style>
+
 <div class="container-fluid py-4">
 
-<!-- Stat Widgets (row 1) -->
-<div class="row gx-3 gy-3 mb-3 align-items-stretch">
-  <div class="col-12 col-xl-6">
-    <div class="card bg-gradient-dark text-white shadow-sm h-100 position-relative compact">
-      <div class="card-body d-flex align-items-center">
-        <i class="bi bi-hdd-network fs-1 text-info me-3"></i>
-        <div>
-          <h6 class="text-uppercase text-secondary fw-bold">Hosts Discovered</h6>
-          <h2 class="mb-0">{{ hosts_total }}</h2>
+  <!-- Stat widgets -->
+  <div class="row gx-3 gy-3 mb-3 align-items-stretch">
+    <div class="col-12 col-xl-6">
+      <div class="card bg-gradient-dark text-white shadow-sm h-100 position-relative compact">
+        <div class="card-body d-flex align-items-center">
+          <i class="bi bi-hdd-network fs-1 text-info me-3"></i>
+          <div>
+            <h6 class="text-uppercase text-secondary fw-bold">Hosts Discovered</h6>
+            <h2 id="hostsTotalValue" class="mb-0">{{ hosts_total }}</h2>
+            <div id="hostsAdjustedNote" class="hosts-adjusted-note" style="display:none;">
+              Adjusted to unique hosts (from scan files)
+            </div>
+          </div>
         </div>
+        <a href="/hosts" class="stretched-link" aria-label="View all discovered hosts"></a>
       </div>
-      <a href="/hosts" class="stretched-link" aria-label="View all discovered hosts"></a>
     </div>
-  </div>
 
-  <div class="col-12 col-xl-6">
-    <div class="card bg-gradient-dark text-white shadow-sm h-100 position-relative compact">
-      <div class="card-body d-flex align-items-center">
-        <i class="bi bi-search fs-1 text-success me-3"></i>
-        <div>
-          <h6 class="text-uppercase text-secondary fw-bold">Hosts Scanned</h6>
-          <h2 class="mb-0">{{ hosts_scanned }}</h2>
+    <div class="col-12 col-xl-6">
+      <div class="card bg-gradient-dark text-white shadow-sm h-100 position-relative compact">
+        <div class="card-body d-flex align-items-center">
+          <i class="bi bi-search fs-1 text-success me-3"></i>
+          <div>
+            <h6 class="text-uppercase text-secondary fw-bold">Hosts Scanned</h6>
+            <h2 id="hostsScannedValue" class="mb-0">{{ hosts_scanned }}</h2>
+          </div>
         </div>
-      </div>
-      <a href="/hosts?status=scanned" class="stretched-link" aria-label="View scanned hosts"></a>
-    </div>
-  </div>
-</div>
-
-<!-- Charts (row 2) -->
-<div class="row gx-3 gy-3 mb-3 align-items-stretch">
-  <div class="col-12 col-xl-6">
-    <div class="card bg-dark shadow-sm h-100">
-      <div class="card-header border-0">
-        <h5 class="card-title text-white mb-0"><i class="bi bi-graph-up me-2"></i> Scan Progress</h5>
-      </div>
-      <div class="card-body">
-        <canvas id="hostsChart" style="width:100%; height:250px;"></canvas>
+        <a href="/hosts?status=scanned" class="stretched-link" aria-label="View scanned hosts"></a>
       </div>
     </div>
   </div>
 
-  <div class="col-12 col-xl-6">
-    <div class="card bg-dark shadow-sm h-100">
-      <div class="card-header border-0">
-        <h5 class="card-title text-white mb-0"><i class="bi bi-diagram-3 me-2"></i> Top Services</h5>
-      </div>
-      <div class="card-body">
-        <canvas id="servicesChart" style="width:100%; height:250px;"></canvas>
-      </div>
-    </div>
-  </div>
-</div>
+  <!-- Scan Timeline (full width on top) -->
+  <div class="row gx-3 gy-3 mb-3">
+    <div class="col-12">
+      <div class="card bg-gradient-dark text-white shadow-sm h-100 chart-card">
+        <!-- header with title (left) and legend + popup (right) -->
+        <div class="card-header border-0 d-flex align-items-start justify-content-between">
+          <div>
+            <h6 class="text-uppercase text-secondary fw-bold mb-1">Scan Timeline</h6>
+            <div class="small text-secondary">Shows when scans started and (if available) finished</div>
+          </div>
 
+          <div class="d-flex align-items-center">
+            <!-- html legend (top-right) -->
+            <div class="custom-legend" id="scanTimelineLegend" role="list" aria-label="Scan timeline legend" style="margin-right:10px;">
+              <span class="legend-item" data-group="started" role="listitem" title="Toggle Scan started">
+                <span class="legend-swatch" style="background:#0d6efd;"></span>
+                <span class="legend-text">Scan started</span>
+              </span>
+              <span class="legend-item" data-group="completed" role="listitem" title="Toggle Scan completed">
+                <span class="legend-swatch" style="background:#ffc107;"></span>
+                <span class="legend-text">Scan completed</span>
+              </span>
+            </div>
 
-<!-- OS Discovery Card -->
-<div class="col-12">
-  <div class="card bg-dark text-white shadow-sm h-100">
-    <div class="card-header border-0">
-      <h5 class="mb-0"><i class="bi bi-laptop me-2"></i> OS Discovery</h5>
-    </div>
-    <div class="card-body">
-      {% set c = os_summary.counts %}
-      <div class="row text-center">
-        <div class="col">
-          <div class="display-6"><a href="/hosts?os=Windows" class="text-white text-decoration-none">{{ c['Windows'] }}</a></div>
-          <div class="text-secondary">Windows</div>
+            <!-- popup button -->
+            <button class="chart-popup-btn" id="scanPopupBtn" aria-label="Expand timeline">
+              <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M1 9v6h6" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M9 1h6v6" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M6.5 9.5L15 1" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M1 15L9.5 6.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
         </div>
-        <div class="col">
-          <div class="display-6"><a href="/hosts?os=Linux" class="text-white text-decoration-none">{{ c['Linux'] }}</a></div>
-          <div class="text-secondary">Linux</div>
-        </div>
-        <div class="col">
-          <div class="display-6"><a href="/hosts?os=macOS" class="text-white text-decoration-none">{{ c['macOS'] }}</a></div>
-          <div class="text-secondary">macOS</div>
-        </div>
-        <div class="col">
-          <div class="display-6"><a href="/hosts?os=BSD/Unix" class="text-white text-decoration-none">{{ c['BSD/Unix'] }}</a></div>
-          <div class="text-secondary">BSD/Unix</div>
-        </div>
-        <div class="col">
-          <div class="display-6"><a href="/hosts?os=Android" class="text-white text-decoration-none">{{ c['Android'] }}</a></div>
-          <div class="text-secondary">Android</div>
-        </div>
-        <div class="col">
-          <div class="display-6"><a href="/hosts?os=iOS" class="text-white text-decoration-none">{{ c['iOS'] }}</a></div>
-          <div class="text-secondary">iOS</div>
-        </div>
-      </div>
 
-      <div class="row text-center mt-3">
-        <div class="col">
-          <div class="display-6"><a href="/hosts?os=Network Device" class="text-white text-decoration-none">{{ c['Network Device'] }}</a></div>
-          <div class="text-secondary">Network Device</div>
-        </div>
-        <div class="col">
-          <div class="display-6"><a href="/hosts?os=Virtualization/Hypervisor" class="text-white text-decoration-none">{{ c['Virtualization/Hypervisor'] }}</a></div>
-          <div class="text-secondary">Virtualization/Hypervisor</div>
-        </div>
-        <div class="col">
-          <div class="display-6"><a href="/hosts?os=Printer/Peripheral" class="text-white text-decoration-none">{{ c['Printer/Peripheral'] }}</a></div>
-          <div class="text-secondary">Printer/Peripheral</div>
-        </div>
-        <div class="col">
-          <div class="display-6"><a href="/hosts?os=Specialized Device" class="text-white text-decoration-none">{{ c['Specialized Device'] }}</a></div>
-          <div class="text-secondary">Specialized Device</div>
-        </div>
-        <div class="col">
-          <div class="display-6"><a href="/hosts?os=Other" class="text-white text-decoration-none">{{ c['Other'] }}</a></div>
-          <div class="text-secondary">Other</div>
-        </div>
-        <div class="col">
-          <div class="display-6"><a href="/hosts?os=Unknown" class="text-white text-decoration-none">{{ c['Unknown'] }}</a></div>
-          <div class="text-secondary">Unknown</div>
-        </div>
-      </div>
+        <div class="card-body">
+          <div id="scanTimelineWrap" class="chart-canvas-wrap">
+            <canvas id="scanTimeline" data-scantimes='{{ scan_times | tojson | safe }}' style="width:100%; height:100%; display:block;"></canvas>
+          </div>
 
-      {% if os_summary.top_items %}
-      <hr class="border-secondary my-4"/>
-      <div class="row">
-        <div class="col-12">
-          <h6 class="text-secondary mb-3">Top 10 OS Guesses</h6>
-          <div class="table-responsive">
-            <table class="table table-dark table-striped align-middle">
-              <thead>
-                <tr>
-                  <th>IP Address</th>
-                  <th>Hostname</th>
-                  <th>OS Guess</th>
-                  <th>Accuracy</th>
-                  <th class="text-center">Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for item in os_summary.top_items %}
-                <tr>
-                  <td>{{ item.host.address }}</td>
-                  <td>{{ item.host.hostname or "—" }}</td>
-                  <td>{{ item.guess.name or "—" }}</td>
-                  <td><span class="badge bg-secondary">{{ item.guess.accuracy }}%</span></td>
-                  <td class="text-center">
-                    <a href="/hosts/{{ item.host.id }}" class="btn btn-sm btn-outline-info">
-                      View Host →
-                    </a>
-                  </td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
+          <div class="mt-2 small text-secondary">
+            Parsed from collected nmap data. Other files were used as fallback to forecast scan times.
           </div>
         </div>
       </div>
-      {% else %}
-      <div class="text-secondary mt-3">No OS guesses available yet.</div>
-      {% endif %}
     </div>
   </div>
+
+  <!-- Top Services (full width below) -->
+  <div class="row gx-3 gy-3 mb-3">
+    <div class="col-12">
+      <div class="card bg-dark shadow-sm h-100 chart-card">
+        <div class="card-header border-0 d-flex align-items-center justify-content-between">
+          <h5 class="card-title text-white mb-0"><i class="bi bi-diagram-3 me-2"></i> Top Services</h5>
+          <div class="d-flex align-items-center">
+            <button class="chart-popup-btn" id="servicesPopupBtn" aria-label="Expand services">
+              <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M1 9v6h6" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M9 1h6v6" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M6.5 9.5L15 1" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M1 15L9.5 6.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="card-body d-flex flex-column" style="position:relative;">
+          <div id="servicesWrap" class="chart-canvas-wrap">
+            <canvas id="servicesChart" style="width:100%; height:100%; display:block;"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OS Discovery (unchanged) -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card bg-dark text-white shadow-sm h-100">
+        <div class="card-header border-0"><h5 class="mb-0"><i class="bi bi-laptop me-2"></i> OS Discovery</h5></div>
+        <div class="card-body">
+          {% set c = (os_summary.counts if os_summary is defined and os_summary and os_summary.counts is defined else {}) %}
+          <div class="row text-center">
+            <div class="col"><div class="display-6"><a href="/hosts?os=Windows" class="text-white text-decoration-none">{{ c['Windows'] }}</a></div><div class="text-secondary">Windows</div></div>
+            <div class="col"><div class="display-6"><a href="/hosts?os=Linux" class="text-white text-decoration-none">{{ c['Linux'] }}</a></div><div class="text-secondary">Linux</div></div>
+            <div class="col"><div class="display-6"><a href="/hosts?os=macOS" class="text-white text-decoration-none">{{ c['macOS'] }}</a></div><div class="text-secondary">macOS</div></div>
+            <div class="col"><div class="display-6"><a href="/hosts?os=BSD/Unix" class="text-white text-decoration-none">{{ c['BSD/Unix'] }}</a></div><div class="text-secondary">BSD/Unix</div></div>
+            <div class="col"><div class="display-6"><a href="/hosts?os=Android" class="text-white text-decoration-none">{{ c['Android'] }}</a></div><div class="text-secondary">Android</div></div>
+            <div class="col"><div class="display-6"><a href="/hosts?os=iOS" class="text-white text-decoration-none">{{ c['iOS'] }}</a></div><div class="text-secondary">iOS</div></div>
+          </div>
+
+          <div class="row text-center mt-3">
+            <div class="col"><div class="display-6"><a href="/hosts?os=Network Device" class="text-white text-decoration-none">{{ c['Network Device'] }}</a></div><div class="text-secondary">Network Device</div></div>
+            <div class="col"><div class="display-6"><a href="/hosts?os=Virtualization/Hypervisor" class="text-white text-decoration-none">{{ c['Virtualization/Hypervisor'] }}</a></div><div class="text-secondary">Virtualization/Hypervisor</div></div>
+            <div class="col"><div class="display-6"><a href="/hosts?os=Printer/Peripheral" class="text-white text-decoration-none">{{ c['Printer/Peripheral'] }}</a></div><div class="text-secondary">Printer/Peripheral</div></div>
+            <div class="col"><div class="display-6"><a href="/hosts?os=Specialized Device" class="text-white text-decoration-none">{{ c['Specialized Device'] }}</a></div><div class="text-secondary">Specialized Device</div></div>
+            <div class="col"><div class="display-6"><a href="/hosts?os=Other" class="text-white text-decoration-none">{{ c['Other'] }}</a></div><div class="text-secondary">Other</div></div>
+            <div class="col"><div class="display-6"><a href="/hosts?os=Unknown" class="text-white text-decoration-none">{{ c['Unknown'] }}</a></div><div class="text-secondary">Unknown</div></div>
+          </div>
+
+          {% if os_summary.top_items %}
+          <hr class="border-secondary my-4"/>
+          <div class="row"><div class="col-12">
+            <h6 class="text-secondary mb-3">Top 10 OS Guesses</h6>
+            <div class="table-responsive">
+              <table class="table table-dark table-striped align-middle">
+                <thead><tr><th>IP Address</th><th>Hostname</th><th>OS Guess</th><th>Accuracy</th><th class="text-center">Details</th></tr></thead>
+                <tbody>
+                  {% for item in os_summary.top_items %}
+                  <tr>
+                    <td>{{ item.host.address }}</td>
+                    <td>{{ item.host.hostname or "—" }}</td>
+                    <td>{{ item.guess.name or "—" }}</td>
+                    <td><span class="badge bg-secondary">{{ item.guess.accuracy }}%</span></td>
+                    <td class="text-center"><a href="/hosts/{{ item.host.id }}" class="btn btn-sm btn-outline-info">View Host →</a></td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div></div>
+          {% else %}
+          <div class="text-secondary mt-3">No OS guesses available yet.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
+<!-- Chart libs -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
 
-
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-function renderDonutChart() {
-  const scanned = {{ hosts_scanned }};
-  const enumerated = {{ hosts_enum }};
-  const remaining = {{ hosts_total - hosts_scanned }};
-
-  if ((scanned + enumerated + remaining) === 0) {
-    document.getElementById("hostsChart").outerHTML =
-      "<div class='text-center text-secondary py-5'>No data yet</div>";
-    return;
-  }
-
-  new Chart(document.getElementById("hostsChart"), {
-    type: 'doughnut',
-    data: {
-      labels: ["Scanned", "Enumerated", "Remaining"],
-      datasets: [{
-        data: [scanned, enumerated, remaining],
-        backgroundColor: ["#0d6efd", "#ffc107", "#6c757d"]
-      }]
-    },
-    options: { 
-      cutout: "70%",
-      responsive: true, 
-      maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { color: "#e0e0e0" } } }
-    }
-  });
+/* Theme defaults for dark UI */
+if (typeof Chart !== 'undefined') {
+  Chart.defaults.color = '#cfcfcf';
+  Chart.defaults.font.family = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial';
+  Chart.defaults.font.size = 12;
+  Chart.defaults.plugins.legend.labels.color = '#e0e0e0';
+  Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
+  Chart.defaults.plugins.tooltip.bodyColor = '#e6e6e6';
+  Chart.defaults.plugins.legend.labels.usePointStyle = true;
 }
 
+/* ---- Services chart ---- */
 function renderServicesChart() {
-  const labels = {{ service_summary.keys()|list|tojson }};
-  const values = {{ service_summary.values()|list|tojson }};
+  try {
+    const labels = {{ service_summary.keys()|list|tojson }};
+    const values = {{ service_summary.values()|list|tojson }};
 
-  if (!values || values.length === 0 || values.every(v => v === 0)) {
-    document.getElementById("servicesChart").outerHTML =
-      "<div class='text-center text-secondary py-5'>No data yet</div>";
-    return;
-  }
+    if (!values || values.length === 0 || values.every(v => v === 0)) {
+      const el = document.getElementById("servicesChart");
+      if (el) el.outerHTML = "<div class='text-center text-secondary py-5'>No data yet</div>";
+      return;
+    }
 
-  const ctx = document.getElementById("servicesChart");
-  const chart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{
-        data: values,
-        backgroundColor: "#0d6efd"
-      }]
-    },
-    options: { 
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      onClick: (evt, elements) => {
-        if (elements.length > 0) {
-          const idx = elements[0].index;
-          const serviceName = labels[idx].toLowerCase();
-          window.location.href = `/services/${serviceName}`;
-        }
-      },
-      scales: {
-        x: {
-          ticks: { color: "#e0e0e0" },
-          grid: { color: "rgba(255,255,255,0.1)" }
+    const ctx = document.getElementById("servicesChart").getContext('2d');
+    try { if (ctx._chartInstance) ctx._chartInstance.destroy(); } catch (e) {}
+    const chart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ data: values, backgroundColor: "#0d6efd" }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        onClick: (evt, elements) => {
+          if (elements.length > 0) {
+            const idx = elements[0].index;
+            window.location.href = `/services/${String(labels[idx]).toLowerCase()}`;
+          }
         },
-        y: {
-          ticks: { color: "#e0e0e0", precision: 0 },
-          grid: { color: "rgba(255,255,255,0.1)" }
+        scales: {
+          x: { ticks: { color: "#e0e0e0" }, grid: { color: "rgba(255,255,255,0.06)" } },
+          y: { ticks: { color: "#e0e0e0", precision: 0 }, grid: { color: "rgba(255,255,255,0.06)" } }
         }
       }
+    });
+    ctx._chartInstance = chart;
+  } catch (err) { console.error("renderServicesChart error:", err); }
+}
+
+/* ---- helpers ---- */
+function debounce(fn, wait) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); }; }
+
+function syncChartHeights() {
+  try {
+    const leftWrap  = document.querySelector('#scanTimeline')?.closest('.chart-canvas-wrap');
+    const rightWrap = document.querySelector('#servicesChart')?.closest('.chart-canvas-wrap');
+    if (!leftWrap || !rightWrap) return;
+    const leftH  = leftWrap.getBoundingClientRect().height;
+    const rightH = rightWrap.getBoundingClientRect().height;
+    let target = Math.max(leftH, rightH);
+    target = Math.min(target, 420);
+    target = Math.max(target, 160);
+    leftWrap.style.minHeight  = target + 'px';
+    rightWrap.style.minHeight = target + 'px';
+    const leftCanvas  = document.getElementById('scanTimeline');
+    const rightCanvas = document.getElementById('servicesChart');
+    if (leftCanvas)  leftCanvas.style.height  = target + 'px';
+    if (rightCanvas) rightCanvas.style.height = target + 'px';
+    [leftCanvas, rightCanvas].forEach(c => { if (c && c._chartInstance && typeof c._chartInstance.resize === 'function') c._chartInstance.resize(); });
+  } catch (e) { console.error(e); }
+}
+
+function computeServicesCanvasWidth(labelCount) {
+  const perLabel = 70;
+  const minW = 900, maxW = 3000;
+  let w = Math.max(minW, labelCount * perLabel);
+  w = Math.min(w, maxW);
+  return w;
+}
+function computeTimelineCanvasWidth(durationMs) {
+  const minW = 900, maxW = 4000;
+  const base = 900;
+  const days = Math.max(0, durationMs / (1000*60*60*24));
+  const extra = Math.round((Math.log10(days + 1) / Math.log10(8)) * (maxW - base));
+  let w = base + extra;
+  if (days < 0.25) w = 700;
+  if (w < minW) w = minW;
+  if (w > maxW) w = maxW;
+  return w;
+}
+
+/* Robust retrieval of the templated scan_times variable (client-side) */
+function _getScanTimesFromPage() {
+  try {
+    if (typeof scan_times !== 'undefined' && Array.isArray(scan_times)) return scan_times;
+  } catch (e) {}
+  try {
+    if (typeof scan_times_json !== 'undefined') {
+      if (typeof scan_times_json === 'string' && scan_times_json.trim().length) return JSON.parse(scan_times_json);
+      if (Array.isArray(scan_times_json)) return scan_times_json;
     }
-  });
+  } catch (e) { console.warn("failed parsing scan_times_json:", e); }
+  try {
+    const canvas = document.getElementById('scanTimeline');
+    if (canvas && canvas.dataset && canvas.dataset.scantimes) return JSON.parse(canvas.dataset.scantimes);
+  } catch (e) { console.warn("failed parsing data-scantimes:", e); }
+  return [];
+}
+
+/* Extract host key (IPv4 preferred, otherwise base filename w/o extensions) */
+function _extractHostKey(label) {
+  if (!label) return null;
+  const ipv4 = String(label).match(/(\d{1,3}(?:\.\d{1,3}){3})/);
+  if (ipv4 && ipv4[1]) return ipv4[1];
+  let base = String(label).split('/').pop();
+  base = base.replace(/\.(xml|nmap|gnmap|xml\.gz|nmap\.gz|gnmap\.gz)$/i, '');
+  return base || label;
+}
+
+/* Client-side: compute deduplicated unique hosts from scan_times and update tiles */
+function adjustTilesToUniqueHosts() {
+  try {
+    const scanTimes = _getScanTimesFromPage();
+    if (!Array.isArray(scanTimes) || scanTimes.length === 0) {
+      // no scan files found; leave server values intact
+      return;
+    }
+
+    const hostSet = new Set();
+    for (const s of scanTimes) {
+      const key = _extractHostKey(s.label || s.path || '');
+      if (key) hostSet.add(key);
+    }
+
+    const uniqueCount = hostSet.size || 0;
+
+    if (uniqueCount > 0) {
+      const totalEl = document.getElementById('hostsTotalValue');
+      const scannedEl = document.getElementById('hostsScannedValue');
+      if (totalEl) {
+        totalEl.textContent = uniqueCount;
+        const note = document.getElementById('hostsAdjustedNote');
+        if (note) note.style.display = 'block';
+      }
+      if (scannedEl) {
+        scannedEl.textContent = uniqueCount;
+      }
+    }
+  } catch (e) {
+    console.warn("adjustTilesToUniqueHosts:", e);
+  }
+}
+
+/* Improved jitter to make markers more clickable */
+function jitterByTime(points, baseStepMs = 2500, maxSpreadMs = 90000, yJitter = 0.4) {
+  const buckets = new Map();
+
+  // Group points into 2s windows (more forgiving for near-simultaneous scans)
+  for (const p of points) {
+    const key = Math.round(p.x / 2000);
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(p);
+  }
+
+  const result = [];
+  for (const group of buckets.values()) {
+    const n = group.length;
+    if (n === 1) {
+      result.push({ ...group[0], trueX: group[0].x });
+      continue;
+    }
+
+    const spread = Math.min(maxSpreadMs, baseStepMs * n * 3);
+    const step = spread / Math.max(1, n - 1);
+    const center = group[0].x;
+    const half = spread / 2;
+
+    group.forEach((p, i) => {
+      const offsetX = -half + i * step;
+      const offsetY = ((i - (n - 1) / 2) * yJitter); // subtle vertical spread
+      result.push({ ...p, x: center + offsetX, y: (p.y || 0) + offsetY, trueX: p.x });
+    });
+  }
+
+  return result.sort((a, b) => a.x - b.x);
 }
 
 
-document.addEventListener("DOMContentLoaded", () => {
-  renderDonutChart();
-  renderServicesChart();
+
+
+
+
+/* ---- Full renderScanTimeline implementation (host-level cumulative progression) ---- */
+function renderScanTimeline() {
+  try {
+    // load scan_times (Jinja -> JSON) with robust fallbacks
+    let scanTimes = [];
+    try {
+      scanTimes = {{ scan_times | tojson | safe }};
+    } catch (e1) {
+      try {
+        scanTimes = JSON.parse({{ scan_times_json | default('[]') | tojson | safe }});
+      } catch (e2) {
+        scanTimes = _getScanTimesFromPage();
+      }
+    }
+
+    // filter out noisy files
+    if (Array.isArray(scanTimes) && scanTimes.length) {
+      scanTimes = scanTimes.filter(s => {
+        try {
+          const lbl = String(s.label || s.path || '').toLowerCase();
+          if (!lbl) return true;
+          if (lbl.includes('fullscan.nmap') || lbl.includes('top-ports.nmap')) return false;
+          return true;
+        } catch (e) { return true; }
+      });
+    }
+
+    const canvas = document.getElementById("scanTimeline");
+    if (!canvas) return;
+    const ctxTimeline = canvas.getContext('2d');
+
+  
+
+    // no data
+    if (!Array.isArray(scanTimes) || scanTimes.length === 0) {
+      canvas.style.display = "none";
+      const msg = document.createElement("div");
+      msg.className = "text-secondary small pt-5 pb-5";
+      msg.textContent = "No scan timeline data (check results/nmap).";
+      canvas.parentNode.appendChild(msg);
+      return;
+    }
+
+    // robust timestamp parser
+    const parseMs = raw => {
+      if (raw == null) return null;
+      try {
+        if (typeof raw === 'number') {
+          if (isNaN(raw)) return null;
+          return raw > 1e12 ? Math.floor(raw) : Math.floor(raw * 1000);
+        }
+        const s = String(raw).trim();
+        if (/^\d{10}$/.test(s)) return parseInt(s,10) * 1000;
+        if (/^\d{13}$/.test(s)) return parseInt(s,10);
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) return d.getTime();
+        return null;
+      } catch (e) { return null; }
+    };
+
+    const parsed = scanTimes.map((s, idx) => ({
+      label: s.label || s.path || `scan-${idx+1}`,
+      startMs: parseMs(s.start),
+      endMs: parseMs(s.end),
+      host_count: (typeof s.host_count === 'number' && s.host_count > 0) ? s.host_count : 1
+    })).filter(x => x.startMs !== null);
+
+    if (parsed.length === 0) {
+      canvas.style.display = "none";
+      return;
+    }
+
+    parsed.sort((a,b) => a.startMs - b.startMs);
+
+    const explicitEnds = parsed.map(p => p.endMs).filter(Boolean);
+    const latestEndCandidate = explicitEnds.length ? Math.max(...explicitEnds) : Math.max(...parsed.map(p => p.startMs));
+    const ranges = parsed.map((p, i, arr) => {
+      let end = p.endMs;
+      if (!end) end = (i + 1 < arr.length) ? arr[i+1].startMs : (latestEndCandidate || p.startMs);
+      if (end < p.startMs) end = p.startMs;
+      return { label: p.label, startMs: p.startMs, endMs: end, host_count: p.host_count };
+    });
+
+    function extractHostKey(label) {
+      if (!label) return label;
+      const ipv4 = label.match(/(\d{1,3}(?:\.\d{1,3}){3})/);
+      if (ipv4 && ipv4[1]) return ipv4[1];
+      let base = label.split('/').pop();
+      base = base.replace(/\.(xml|nmap|gnmap|xml\.gz|nmap\.gz|gnmap\.gz)$/i, '');
+      return base || label;
+    }
+
+    const hostMap = {};
+    ranges.forEach(r => {
+      const key = extractHostKey(r.label);
+      const niceLabel = (key && key !== r.label) ? key : r.label;
+      if (!hostMap[key]) {
+        hostMap[key] = { label: niceLabel, startMs: r.startMs, endMs: r.endMs, host_count: 1 };
+      } else {
+        hostMap[key].startMs = Math.min(hostMap[key].startMs, r.startMs);
+        hostMap[key].endMs = Math.max(hostMap[key].endMs || hostMap[key].startMs, r.endMs || hostMap[key].startMs);
+        if (!hostMap[key].host_id && r.host_id) hostMap[key].host_id = r.host_id;
+      }
+    });
+
+    const hostRanges = Object.keys(hostMap).map(k => ({
+      label: hostMap[k].label,
+      startMs: hostMap[k].startMs,
+      endMs: hostMap[k].endMs,
+      host_count: 1,
+      host_id: hostMap[k].host_id || null,  // ✅ preserve host_id
+    }));
+
+
+    if (hostRanges.length === 0) { canvas.style.display = "none"; return; }
+
+    // compute domain safely
+    const startVals = hostRanges.map(r => r.startMs).filter(v => typeof v === 'number' && isFinite(v));
+    const endVals   = hostRanges.map(r => r.endMs).filter(v => typeof v === 'number' && isFinite(v));
+    const earliestStart = startVals.length ? Math.min(...startVals) : Date.now();
+    const latestEnd     = endVals.length ? Math.max(...endVals) : earliestStart + 1000;
+
+    const completions = hostRanges.slice().filter(r => typeof r.endMs === 'number' && isFinite(r.endMs))
+      .sort((a,b) => a.endMs - b.endMs);
+
+    function isValidMs(v) { return typeof v === "number" && isFinite(v) && !isNaN(v); }
+
+    let cumPoints = []
+    let cumulative = 0;
+    if (isValidMs(earliestStart)) cumPoints.push({ x: earliestStart, y: 0 });
+
+    completions.forEach((c) => {
+      if (!isValidMs(c.endMs)) return;
+      cumulative += 1;
+      cumPoints.push({ x: c.endMs, y: cumulative, label: c.label, hosts: 1 });
+    });
+
+    if (isValidMs(latestEnd) && cumPoints.length && cumPoints[cumPoints.length - 1].x < latestEnd)
+      cumPoints.push({ x: latestEnd, y: cumulative });
+
+    const markerData = completions
+      .filter(c => isValidMs(c.endMs))
+      .map((c, idx) => ({ x: c.endMs, y: idx + 1, label: c.label, hosts: 1 }));
+
+    const validCum = cumPoints.filter(p => isValidMs(p.x));
+    const validMarkers = markerData.filter(p => isValidMs(p.x));
+    if (!validCum.length) {
+      console.error("No valid points left for timeline; aborting render.");
+      canvas.style.display = "none";
+      const msg = document.createElement("div");
+      msg.className = "text-danger small pt-3";
+      msg.textContent = "Invalid or missing timestamps in scan data.";
+      canvas.parentNode.appendChild(msg);
+      return;
+    }
+
+    const domainMin = Math.min(...validCum.map(p => p.x));
+    const domainMax = Math.max(...validCum.map(p => p.x));
+
+    // >>> padding & unit selection
+    const span = Math.max(1, domainMax - domainMin);
+    const timeUnit = (function() {
+      if (span < 60 * 1000) return 'second';
+      if (span < 60 * 60 * 1000) return 'minute';
+      if (span < 24 * 60 * 60 * 1000) return 'hour';
+      return 'day';
+    })();
+    
+
+    const blueLine = {
+    label: "Scan started",
+    group: "started",
+    data: cumPoints,
+    parsing: false,
+    stepped: true,
+    fill: 'start',
+    backgroundColor: 'rgba(13,110,253,0.14)',
+    borderColor: '#0d6efd',
+    borderWidth: 2,
+    pointRadius: 0,
+    tension: 0
+  };
+
+  const yellowLine = {
+    label: "Scan completed",
+    group: "completed",
+    data: cumPoints,
+    parsing: false,
+    stepped: true,
+    fill: 'start',
+    backgroundColor: 'rgba(255,193,7,0.10)',
+    borderColor: '#ffc107',
+    borderWidth: 2,
+    pointRadius: 0,
+    tension: 0
+  };
+
+
+    // completions is your array sorted by endMs
+    const completionPoints = completions.map((c, idx) => ({
+      x: c.endMs,
+      y: idx + 1,
+      label: c.label,
+      hosts: 1,
+      host_id: c.host_id || null,   // add id for click linking
+    }));
+
+
+   // Only the markers are jittered; the lines stay untouched
+   const jitteredCompletionPoints = jitterByTime(completionPoints, 4000, 120000, 0.5)
+
+
+    cumPoints.length = 0;
+    cumulative = 0;
+
+    // Force line to start exactly at 0 on the visible timeline
+    const firstX = Math.min(earliestStart, ...jitteredCompletionPoints.map(p => p.x));
+    const lastX  = Math.max(latestEnd, ...jitteredCompletionPoints.map(p => p.x));
+
+    // define padding boundaries
+    const paddedMin = Math.min(firstX, domainMin) - Math.min(60 * 1000, span * 0.08);
+    const paddedMax = Math.max(lastX, domainMax) + Math.min(60 * 1000, span * 0.05);
+
+    // ensure a visible origin baseline at y=0
+    const zeroStartX = paddedMin;  // timeline's far-left boundary
+    cumPoints.push({ x: zeroStartX, y: 0 });
+    cumPoints.push({ x: firstX, y: 0 });  // keep flat until first real event
+
+
+    for (const p of jitteredCompletionPoints.sort((a,b) => a.x - b.x)) {
+      cumulative += 1;
+      cumPoints.push({
+        x: p.x,
+        y: cumulative,
+        label: p.label,
+        hosts: 1,
+        trueX: p.trueX || p.x
+      });
+    }
+
+    // ensure the blue line reaches chart’s end
+    cumPoints.push({ x: lastX, y: cumulative });
+
+
+
+
+
+    const yellowMarkers = {
+      label: "Scan completed",
+      group: "completed",
+      data: jitteredCompletionPoints,
+      parsing: false,
+      type: "scatter",
+      pointRadius: 6,
+      pointHitRadius: 28,       // larger click area
+      pointHoverRadius: 11,     // easier hover
+      pointBackgroundColor: "#ffc107",
+      pointHoverBackgroundColor: "#ffee58",
+      pointBorderColor: "#e0a800",
+      borderWidth: 1.5,
+      showLine: false,
+      order: 9999,               // render above the lines
+    };
+
+    const datasets = [blueLine, yellowLine, yellowMarkers];
+
+
+
+    const chart = new Chart(ctxTimeline, {
+      type: 'line',
+      data: { datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { left: 12, right: 48, top: 6, bottom: 6 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            titleColor: '#ffffff',
+            bodyColor: '#ffffff',
+            callbacks: {
+              title: items => {
+                if (!items || items.length === 0) return '';
+                const raw = items[0].raw;
+                return raw && raw.label ? raw.label : items[0].dataset.label;
+              },
+              label: ctx => {
+                const raw = ctx.raw;
+                if (!raw || raw.x == null || isNaN(raw.x)) return '';
+                const dt = new Date(raw.x);
+                const y = raw.y != null ? raw.y : '';
+                const hostsPart = raw.hosts ? ` (${raw.hosts} hosts)` : '';
+                return `${y ? `#${y} ` : ''}${dt.toLocaleString()}${hostsPart}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: 'time',
+            time: {
+              unit: timeUnit,
+              tooltipFormat: 'PPpp',
+              displayFormats: {
+                second: 'h:mm:ss a',
+                minute: 'h:mm a',
+                hour: 'h:mm a',
+                day: 'MM/dd/yyyy'
+              }
+            },
+            position: 'bottom',
+            min: paddedMin,     
+            max: paddedMax,     
+            offset: false,
+            alignToPixels: true,
+            ticks: {
+              color: "#ffffff",
+              autoSkip: true,
+              maxTicksLimit: 6,
+              source: 'auto',
+              callback: function(value) {
+                try {
+                  const dt = new Date(value);
+                  const datePart = dt.toLocaleDateString([], { month: '2-digit', day: '2-digit', year: 'numeric' });
+                  const timePart = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                  return [datePart, timePart]; // two-line label
+                } catch (e) {
+                  return String(value);
+                }
+              },
+              rotation: 0,
+              align: 'center'
+            },
+            grid: { color: "rgba(255,255,255,0.04)" }
+          },
+          y: {
+            type: 'linear',
+            beginAtZero: true,
+            grace: '20%', // give extra 20% vertical space
+            min: 0,
+            suggestedMax: Math.max(...cumPoints.map(p => p.y)) + 5, // pad top by ~5 units
+            ticks: { color: "#ffffff", precision: 0 },
+            grid: { color: "rgba(255,255,255,0.03)" }
+          }
+        },
+        interaction: { mode: 'point', intersect: false },
+        elements: { point: { hoverRadius: 8 } }
+      }
+    });
+
+    // --- make the dots feel clickable ---
+    canvas.style.cursor = "pointer";
+
+    canvas.addEventListener("click", function (evt) {
+      // Only look for actual points (not lines)
+      const points = chart.getElementsAtEventForMode(evt, "point", { intersect: false }, false);
+      if (!points.length) return;
+
+      const firstPoint = points[0];
+      const ds = chart.data.datasets[firstPoint.datasetIndex];
+      const raw = ds.data[firstPoint.index];
+      if (ds.group !== "completed" || !raw) return;
+
+      // Flash highlight
+      const meta = chart.getDatasetMeta(firstPoint.datasetIndex);
+      const element = meta.data[firstPoint.index];
+      if (element) {
+        const orig = element.options.backgroundColor;
+        element.options.backgroundColor = "#ffee58";
+        chart.update("none");
+        setTimeout(() => {
+          element.options.backgroundColor = orig;
+          chart.update("none");
+        }, 250);
+      }
+
+      // Build redirect URL
+      let targetUrl = null;
+      if (raw.host_id != null && Number.isInteger(raw.host_id)) {
+        targetUrl = `/hosts/${raw.host_id}`;
+      } else if (raw.label) {
+        const ipMatch = String(raw.label).match(/(\d{1,3}(?:\.\d{1,3}){3})/);
+        const ip = ipMatch ? ipMatch[1] : raw.label;
+        targetUrl = `/hosts?ip=${encodeURIComponent(ip)}`;
+      }
+      if (!targetUrl) return;
+
+      // Open in new tab
+      const win = window.open(targetUrl, "_blank", "noopener,noreferrer");
+      if (win) win.focus();
+    });
+
+
+
+
+    canvas._chartInstance = chart;
+    canvas._timelineDomain = { min: domainMin, max: domainMax };
+    attachScanLegendHandlers();
+
+    console.info("[ScanTimeline] rendered host-level progression:", hostRanges.length, "hosts");
+  } catch (err) {
+    console.error("renderScanTimeline host-level exception:", err);
+    const canvas = document.getElementById("scanTimeline");
+    if (canvas) {
+      canvas.style.display = "none";
+      const msg = document.createElement("div");
+      msg.className = "text-danger small pt-3";
+      msg.textContent = "Failed to render scan timeline (see console).";
+      canvas.parentNode.appendChild(msg);
+    }
+  }
+}
+
+/* Toggle datasets in timeline by group via header legend clicks */
+function attachScanLegendHandlers() {
+  try {
+    const legend = document.getElementById('scanTimelineLegend');
+    const canvas = document.getElementById('scanTimeline');
+    if (!legend || !canvas || !canvas._chartInstance) return;
+    const chart = canvas._chartInstance;
+
+    function indicesForGroup(group) {
+      const ds = chart.data.datasets || [];
+      const out = [];
+      for (let i = 0; i < ds.length; i++) {
+        if ((ds[i] && ds[i].group) === group) out.push(i);
+      }
+      return out;
+    }
+
+    legend.querySelectorAll('.legend-item').forEach(el => {
+      const newEl = el.cloneNode(true);
+      el.parentNode.replaceChild(newEl, el);
+    });
+
+    legend.querySelectorAll('.legend-item').forEach(el => {
+      el.addEventListener('click', (ev) => {
+        const group = el.getAttribute('data-group');
+        const idxs = indicesForGroup(group);
+        if (!idxs || idxs.length === 0) return;
+        const currentlyVisible = chart.isDatasetVisible(idxs[0]);
+        const newVis = !currentlyVisible;
+        idxs.forEach(i => {
+          try { chart.setDatasetVisibility(i, newVis); } catch (e) {
+            const meta = chart.getDatasetMeta(i); meta.hidden = !newVis;
+          }
+        });
+        chart.update();
+        if (!newVis) el.classList.add('dim'); else el.classList.remove('dim');
+      });
+    });
+  } catch (e) {
+    console.warn("attachScanLegendHandlers:", e);
+  }
+}
+
+/* ---- Popup modal behavior ---- */
+document.addEventListener('DOMContentLoaded', () => {
+  try { renderServicesChart(); } catch (e) { console.error(e); }
+  try { renderScanTimeline(); } catch (e) { console.error(e); }
+
+  try { adjustTilesToUniqueHosts(); } catch (e) { console.warn(e); }
+
+  setTimeout(syncChartHeights, 220);
+
+  const scanBtn = document.getElementById('scanPopupBtn');
+  const svcBtn  = document.getElementById('servicesPopupBtn');
+
+  let popupModal = null;
+  function ensurePopupModal() {
+    if (popupModal) return popupModal;
+    const div = document.createElement('div');
+    div.id = 'chartPopupModal';
+    div.className = 'modal fade';
+    div.tabIndex = -1;
+    div.innerHTML = `
+      <div class="modal-dialog modal-dialog-centered" role="document" style="max-width:1200px;">
+        <div class="modal-content bg-dark text-white">
+          <div class="modal-header border-0 d-flex justify-content-between align-items-center">
+            <h5 class="modal-title" id="chartPopupTitle">Chart</h5>
+            <div class="d-flex align-items-center">
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+          </div>
+          <div class="modal-body"><div id="popupCanvasHolder"></div></div>
+        </div>
+      </div>`;
+    document.body.appendChild(div);
+    popupModal = div;
+    return popupModal;
+  }
+
+  function openPopupForCanvas(canvasId, title) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const modalEl = ensurePopupModal();
+    const holder = modalEl.querySelector('#popupCanvasHolder');
+    const titleEl = modalEl.querySelector('#chartPopupTitle');
+
+    const placeholder = document.createElement('div');
+    placeholder.className = 'canvas-placeholder';
+    placeholder.style.width = canvas.getBoundingClientRect().width + 'px';
+    placeholder.style.height = canvas.getBoundingClientRect().height + 'px';
+    canvas.parentNode.insertBefore(placeholder, canvas);
+
+    holder.innerHTML = '';
+    holder.appendChild(canvas);
+
+    if (canvasId === 'servicesChart') {
+      const modalInnerW = Math.min(window.innerWidth * 0.95, 1100);
+      canvas.style.width = (modalInnerW - 40) + 'px';
+      canvas.style.height = Math.max(480, window.innerHeight * 0.55) + 'px';
+      holder.style.overflowX = 'hidden';
+    } else if (canvasId === 'scanTimeline') {
+      const domain = canvas._timelineDomain || {};
+      let dur = 0;
+      if (domain && domain.max && domain.min) dur = Math.max(0, domain.max - domain.min);
+      const w = computeTimelineCanvasWidth(dur);
+      canvas.style.width = w + 'px';
+      canvas.style.height = Math.max(520, window.innerHeight * 0.58) + 'px';
+      holder.style.overflowX = 'auto';
+    } else {
+      canvas.style.width = '900px';
+      canvas.style.height = '480px';
+      holder.style.overflowX = 'auto';
+    }
+
+    titleEl.textContent = title || 'Chart';
+    modalEl._activeCanvas = canvas;
+    modalEl._placeholder = placeholder;
+
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+
+    modalEl.addEventListener('shown.bs.modal', function onShown() {
+      try { if (canvas._chartInstance && typeof canvas._chartInstance.resize === 'function') canvas._chartInstance.resize(); } catch (e) { console.error(e); }
+      modalEl.removeEventListener('shown.bs.modal', onShown);
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', function onHidden() {
+      try {
+        if (modalEl._activeCanvas && modalEl._placeholder) {
+          modalEl._placeholder.parentNode.insertBefore(modalEl._activeCanvas, modalEl._placeholder);
+          modalEl._placeholder.parentNode.removeChild(modalEl._placeholder);
+          modalEl._activeCanvas.style.width = '100%';
+          modalEl._activeCanvas.style.height = '';
+          try { if (modalEl._activeCanvas._chartInstance) modalEl._activeCanvas._chartInstance.resize(); } catch (e) { console.error(e); }
+          modalEl._activeCanvas = null;
+          modalEl._placeholder = null;
+          setTimeout(syncChartHeights, 80);
+        }
+      } catch (e) { console.error("restore error:", e); }
+      modalEl.removeEventListener('hidden.bs.modal', onHidden);
+    });
+  }
+
+  if (scanBtn) scanBtn.addEventListener('click', () => openPopupForCanvas('scanTimeline', 'Scan Timeline Overview'));
+  if (svcBtn)  svcBtn.addEventListener('click', () => openPopupForCanvas('servicesChart', 'Top Services Overview'));
 });
+
+window.addEventListener('resize', debounce(syncChartHeights, 150));
 </script>
-
-
 
 {% endblock %}
