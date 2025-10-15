@@ -64,7 +64,15 @@ async def get_session():
 # Utility helpers
 # ------------------------
 
-async def get_or_create_host(session: AsyncSession, address: str, hostname: str | None = None) -> Host:
+async def get_or_create_host(
+    session: AsyncSession,
+    address: str,
+    hostname: str | None = None,
+    create_if_missing: bool = True,  # <-- NEW FLAG
+) -> Optional[Host]:
+    """
+    Fetch a host from the database. Optionally create it if not found.
+    """
     res = await session.execute(select(Host).where(Host.address == address))
     host = res.scalar_one_or_none()
     if host:
@@ -72,10 +80,16 @@ async def get_or_create_host(session: AsyncSession, address: str, hostname: str 
             host.hostname = hostname
             await session.flush()
         return host
+
+    if not create_if_missing:
+        # Safely return None without creating new host rows
+        return None
+
     host = Host(address=address, hostname=hostname)
     session.add(host)
     await session.flush()
     return host
+
 
 async def get_or_create_port(session: AsyncSession, host: Host, port: int, service: str | None = None,
                              protocol: str | None = None, banner: str | None = None) -> Port:
@@ -149,34 +163,51 @@ async def get_or_create_script(
     await session.flush()
     return s
 
-async def get_or_create_osguess(session: AsyncSession, host: Host,
-                                name: str, accuracy: int = 0,
-                                type: Optional[str] = None,
-                                vendor: Optional[str] = None,
-                                family: Optional[str] = None,
-                                generation: Optional[str] = None,
-                                cpe: Optional[str] = None) -> OSGuess:
-    q = select(OSGuess).where(
-        OSGuess.host_id == host.id,
-        OSGuess.name == name,
-        OSGuess.accuracy == accuracy,
-        OSGuess.cpe == cpe
-    )
-    res = await session.execute(q)
+async def get_or_create_osguess(
+    session: AsyncSession,
+    host: Host,
+    name: str,
+    accuracy: int = 0,
+    type: Optional[str] = None,
+    vendor: Optional[str] = None,
+    family: Optional[str] = None,
+    generation: Optional[str] = None,
+    cpe: Optional[str] = None,
+) -> OSGuess:
+    """
+    Ensure each host only has a single OSGuess.
+    Updates existing guess if new accuracy is higher.
+    """
+    # Fetch the existing OS guess for this host (if any)
+    res = await session.execute(select(OSGuess).where(OSGuess.host_id == host.id))
     existing = res.scalar_one_or_none()
-    if existing:
-        return existing
 
-    rec = OSGuess(
-        host_id=host.id,
-        name=name,
-        accuracy=accuracy or 0,
-        type=type,
-        vendor=vendor,
-        family=family,
-        generation=generation,
-        cpe=cpe
-    )
-    session.add(rec)
-    await session.flush()
-    return rec
+    # Case 1: no existing record → create it
+    if not existing:
+        rec = OSGuess(
+            host_id=host.id,
+            name=name,
+            accuracy=accuracy or 0,
+            type=type,
+            vendor=vendor,
+            family=family,
+            generation=generation,
+            cpe=cpe,
+        )
+        session.add(rec)
+        await session.flush()
+        return rec
+
+    # Case 2: existing record → update only if accuracy is higher
+    if (accuracy or 0) > (existing.accuracy or 0):
+        existing.name = name
+        existing.accuracy = accuracy or 0
+        existing.type = type
+        existing.vendor = vendor
+        existing.family = family
+        existing.generation = generation
+        existing.cpe = cpe
+        await session.flush()
+
+    return existing
+

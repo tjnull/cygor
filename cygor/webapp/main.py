@@ -477,53 +477,33 @@ async def add_modules_to_request(request: Request, call_next):
 # -------- ROUTES --------
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, session: AsyncSession = Depends(get_session)):
-    # ----- Accurate tile counts (deduplicated by address) -----
-    try:
-        hosts_total = await session.scalar(
-            select(func.count(func.distinct(Host.address))).select_from(Host)
-        )
-    except Exception:
-        # fallback to row-count if anything goes wrong
-        hosts_total = await session.scalar(select(func.count(Host.id)))
+    # ==========================================================
+    # Accurate tile counts  — exclude script-only hosts
+    # ==========================================================
+    from sqlalchemy import exists
 
-    try:
-        hosts_scanned = await session.scalar(
-            select(func.count(func.distinct(Host.address)))
-            .select_from(Host)
-            .where(
-                exists().where(Port.host_id == Host.id)
-                | exists().where(Script.host_id == Host.id)
-                | exists().where(OSGuess.host_id == Host.id)
-            )
-        )
-    except Exception:
-        # fallback to previous behavior
-        scanned_ids_q = (
-            select(Host.id)
-            .where(
-                exists().where(Port.host_id == Host.id)
-                | exists().where(Script.host_id == Host.id)
-                | exists().where(OSGuess.host_id == Host.id)
-            )
-        )
-        hosts_scanned = await session.scalar(select(func.count()).select_from(scanned_ids_q.subquery()))
+    # Hosts that have at least one Port OR OSGuess (real Nmap/Masscan data)
+    base_host_filter = exists().where(Port.host_id == Host.id) | exists().where(OSGuess.host_id == Host.id)
 
-    # If you removed "Enumerated", comment the line below & adjust donut in index.html
-    hosts_enum = 0  # <- set 0 if you dropped the enumerated tile
+    # Total/scanned = real scanned hosts only
+    hosts_total = await session.scalar(
+        select(func.count(func.distinct(Host.id))).where(base_host_filter)
+    )
+    hosts_scanned = hosts_total
+    hosts_enum = 0  # keep 0 if you dropped the enumerated tile
 
-    # clamps & defaulting
-    hosts_total = (hosts_total or 0)
-    hosts_scanned = min((hosts_scanned or 0), hosts_total)
-    hosts_enum = min(hosts_enum or 0, hosts_scanned)
+    # Donut math (2-slice version)
+    not_scanned = 0
+    scanned_only = hosts_scanned
 
-    # Donut parts (choose 2-slice or 3-slice depending on whether you keep enumerated)
-    not_scanned = max(hosts_total - hosts_scanned, 0)
-    scanned_only = max(hosts_scanned - hosts_enum, 0)  # only used if you still display enumerated
-
-    # ----- Build OS + Services summaries (ALWAYS provide these) -----
+    # ==========================================================
+    # Fetch filtered hosts for OS & Service summaries
+    # ==========================================================
     hosts = (
         await session.execute(
-            select(Host).options(
+            select(Host)
+            .where(base_host_filter)
+            .options(
                 selectinload(Host.ports),
                 selectinload(Host.scripts),
                 selectinload(Host.os_guesses),
@@ -531,7 +511,9 @@ async def dashboard(request: Request, session: AsyncSession = Depends(get_sessio
         )
     ).scalars().unique().all()
 
-    # OS buckets
+    # ==========================================================
+    # OS Discovery  — accurate, deduplicated by host_id
+    # ==========================================================
     buckets = {
         k: 0
         for k in [
@@ -541,56 +523,92 @@ async def dashboard(request: Request, session: AsyncSession = Depends(get_sessio
         ]
     }
 
-    top_items = []
-    for h in hosts:
-        tg = _top_guess(h)  # your helper already in main.py
-        if tg:
-            buckets[_bucket_family(tg)] += 1  # your helper already in main.py
-            top_items.append(TopItem(host=h, guess=tg))
-        else:
-            buckets["Unknown"] += 1
+    # 1. Gather all OS guesses (for filtered hosts) and deduplicate by host_id
+    os_rows = (
+        await session.execute(
+            select(OSGuess)
+            .where(OSGuess.host_id.in_([h.id for h in hosts]))
+            .options(selectinload(OSGuess.host))
+        )
+    ).scalars().all()
 
-    # Services summary = unique host count per normalized service
-    ports = (await session.execute(select(Port).options(selectinload(Port.host)))).scalars().unique().all()
+    best_guess_per_host = {}
+    for g in os_rows:
+        hid = g.host_id
+        if hid not in best_guess_per_host or (g.accuracy or 0) > (best_guess_per_host[hid].accuracy or 0):
+            best_guess_per_host[hid] = g
+
+    # 2. Tally by OS family
+    top_items = []
+    for guess in best_guess_per_host.values():
+        fam = _bucket_family(guess)
+        buckets[fam] = buckets.get(fam, 0) + 1
+        if len(top_items) < 10:
+            top_items.append(TopItem(host=guess.host, guess=guess))
+
+    # 3. Include hosts that have ports but no OS guesses as "Unknown"
+    guessed_host_ids = {g.host_id for g in best_guess_per_host.values()}
+
+    unknown_hosts = (
+        await session.execute(
+            select(Host)
+            .where(
+                (exists().where(Port.host_id == Host.id))
+                & (~exists().where(OSGuess.host_id == Host.id))
+            )
+            .where(base_host_filter)
+        )
+    ).scalars().unique().all()
+
+    buckets["Unknown"] = len(unknown_hosts)
+
+
+    # ==========================================================
+    # Services summary  — unique host count per normalized service
+    # ==========================================================
+    ports = (
+        await session.execute(select(Port).options(selectinload(Port.host)))
+    ).scalars().unique().all()
     service_counts = {}
     for p in ports:
-        svc = normalize_service(p.service)  # your helper already in main.py
+        svc = normalize_service(p.service)
         service_counts.setdefault(svc, set()).add(p.host.address)
-    service_summary = {svc: len(hosts_set) for svc, hosts_set in service_counts.items()}
+    service_summary = {
+        svc: len(hosts_set) for svc, hosts_set in service_counts.items()
+    }
     service_summary = dict(sorted(service_summary.items(), key=lambda x: -x[1]))
 
-    # ----- Scan timeline data -----
+    # ==========================================================
+    # Scan timeline
+    # ==========================================================
     try:
         scan_times = gather_scan_times(settings.RESULTS_DIR)
     except Exception:
         scan_times = []
 
-    # Build IP → ID lookup so the JS can link dots to /hosts/<id>
     ip_to_id = {h.address: h.id for h in hosts}
-
     for entry in scan_times:
         key = extract_host_key(entry.get("label") or entry.get("path"))
-        if key in ip_to_id:
-            entry["host_id"] = ip_to_id[key]
-        else:
-            entry["host_id"] = None
+        entry["host_id"] = ip_to_id.get(key)
 
-
-    # ----- Render -----
+    # ==========================================================
+    # Render
+    # ==========================================================
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
-            "hosts_total": hosts_total,
-            "hosts_scanned": hosts_scanned,
-            "hosts_enum": hosts_enum,       # keep if you still show that tile; else remove in template
+            "hosts_total": hosts_total or 0,
+            "hosts_scanned": hosts_scanned or 0,
+            "hosts_enum": hosts_enum,
             "not_scanned": not_scanned,
-            "scanned_only": scanned_only,   # only used if you still show enumerated/3-slice donut
+            "scanned_only": scanned_only,
             "os_summary": {"counts": buckets, "top_items": top_items},
             "scan_times": scan_times,
             "service_summary": service_summary,
         },
     )
+
 
 @app.get("/hosts", response_class=HTMLResponse)
 async def hosts_view(

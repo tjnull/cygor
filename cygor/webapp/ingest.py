@@ -1,5 +1,7 @@
 from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from .models import Host
 from libnmap.parser import NmapParser
 import xml.etree.ElementTree as ET
 import json
@@ -12,6 +14,9 @@ from .db import (
     get_or_create_osguess,
 )
 
+# ---------------------------------------------------
+# Logging Helper
+# ---------------------------------------------------
 def log(msg: str, level: int = 1, verbose: int = 0):
     """
     level=0 -> always (errors)
@@ -22,6 +27,9 @@ def log(msg: str, level: int = 1, verbose: int = 0):
         print(msg)
 
 
+# ---------------------------------------------------
+# Directory Walker
+# ---------------------------------------------------
 async def ingest_directory(path, session, dedupe=True, verbose=0):
     """
     Walk a directory and ingest all supported files.
@@ -42,7 +50,6 @@ async def ingest_directory(path, session, dedupe=True, verbose=0):
                 ingested_count += 1
             else:
                 log(f"[i] Skipping unsupported file format: {file}", level=2, verbose=verbose)
-
         except Exception as e:
             log(f"[!] Failed to ingest {file}: {e}", level=0, verbose=verbose)
             failed_files.append(file)
@@ -55,6 +62,9 @@ async def ingest_directory(path, session, dedupe=True, verbose=0):
     return ingested_count
 
 
+# ---------------------------------------------------
+# Generic JSON Fallback
+# ---------------------------------------------------
 def flatten_entry(entry: dict) -> str:
     parts = []
     for k, v in entry.items():
@@ -95,6 +105,9 @@ async def ingest_generic_json(file: Path, session: AsyncSession, data, module_hi
     log(f"[+] Ingested {module_name} JSON: {file.name}", level=1, verbose=verbose)
 
 
+# ---------------------------------------------------
+# Ingestion Core
+# ---------------------------------------------------
 async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, verbose: int = 0):
     log(f"[*] Processing file: {file}", level=2, verbose=verbose)
     if not file.exists():
@@ -129,31 +142,35 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
             hostname = host.hostnames[0] if getattr(host, "hostnames", None) else None
             db_host = await get_or_create_host(session, host.address, hostname=hostname)
 
-            # --- OS Guesses ---
+            # --- OS Guesses (top match only) ---
             try:
-                if getattr(host, "os", None):
-                    for osmatch in getattr(host.os, "osmatches", []):
-                        guess_name = getattr(osmatch, "name", None)
-                        accuracy = getattr(osmatch, "accuracy", 0)
+                if getattr(host, "os", None) and getattr(host.os, "osmatches", []):
+                    top_guess = sorted(
+                        host.os.osmatches,
+                        key=lambda g: int(getattr(g, "accuracy", 0)),
+                        reverse=True,
+                    )[0]
 
-                        osclass = osmatch.osclasses[0] if osmatch.osclasses else None
-                        family = getattr(osclass, "osfamily", None) if osclass else None
-                        vendor = getattr(osclass, "vendor", None) if osclass else None
-                        type_ = getattr(osclass, "type", None) if osclass else None
+                    guess_name = getattr(top_guess, "name", None)
+                    accuracy = getattr(top_guess, "accuracy", 0)
+                    osclass = top_guess.osclasses[0] if top_guess.osclasses else None
+                    family = getattr(osclass, "osfamily", None) if osclass else None
+                    vendor = getattr(osclass, "vendor", None) if osclass else None
+                    type_ = getattr(osclass, "type", None) if osclass else None
 
-                        await get_or_create_osguess(
-                            session,
-                            db_host,
-                            name=guess_name,
-                            accuracy=int(accuracy or 0),
-                            family=family,
-                            vendor=vendor,
-                            type=type_
-                        )
+                    await get_or_create_osguess(
+                        session,
+                        db_host,
+                        name=guess_name,
+                        accuracy=int(accuracy or 0),
+                        family=family,
+                        vendor=vendor,
+                        type=type_,
+                    )
             except Exception as e:
                 log(f"[!] Failed to ingest OS guesses for {host.address}: {e}", level=0, verbose=verbose)
 
-            # --- Ports & scripts ---
+            # --- Ports & Scripts ---
             for service in host.services:
                 if service.state != "open":
                     continue
@@ -181,7 +198,7 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
         return
 
     # ---------------------------------------------------
-    # Handle JSON files
+    # Handle JSON Modules
     # ---------------------------------------------------
     if file.suffix.lower() == ".json":
         module_hint = (file.parent.name or "").lower()
@@ -216,9 +233,13 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
                 except Exception:
                     host = url
 
-                db_host = await get_or_create_host(session, host)
-                parts = [f"URL: {url}"]
+                res = await session.execute(select(Host).where(Host.address == host))
+                db_host = res.scalar_one_or_none()
+                if not db_host:
+                    log(f"[i] Skipping Lockon result for {host} (not in Nmap/Masscan data)", level=2, verbose=verbose)
+                    continue
 
+                parts = [f"URL: {url}"]
                 status_code = entry.get("status_code") or entry.get("status")
                 if status_code is not None:
                     parts.append(f"Status: {status_code}")
@@ -257,10 +278,16 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
             for entry in entries:
                 if not isinstance(entry, dict):
                     continue
+
                 ip = entry.get("ip") or data.get("ip") or entry.get("server")
                 if not ip:
                     continue
-                db_host = await get_or_create_host(session, ip)
+
+                res = await session.execute(select(Host).where(Host.address == ip))
+                db_host = res.scalar_one_or_none()
+                if not db_host:
+                    log(f"[i] Skipping SMBExplorer result for {ip} (not in Nmap/Masscan data)", level=2, verbose=verbose)
+                    continue
 
                 share = entry.get("share") or entry.get("name") or entry.get("path")
                 perms = entry.get("permissions")
@@ -285,7 +312,12 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
                 ip = entry.get("ip")
                 if not ip:
                     continue
-                db_host = await get_or_create_host(session, ip)
+
+                res = await session.execute(select(Host).where(Host.address == ip))
+                db_host = res.scalar_one_or_none()
+                if not db_host:
+                    log(f"[i] Skipping NFSExplorer result for {ip} (not in Nmap/Masscan data)", level=2, verbose=verbose)
+                    continue
 
                 share = entry.get("share")
                 name = entry.get("name")
@@ -302,12 +334,10 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
             log(f"[+] Ingested nfsexplorer JSON: {file.name}", level=1, verbose=verbose)
             return
 
-        # ---------- GENERIC FALLBACK ----------
+        # ---------- GENERIC JSON FALLBACK ----------
         else:
             await ingest_generic_json(file, session, data, module_hint, verbose=verbose)
             return
-
-    log(f"[i] Skipping unsupported file format: {file}", level=2, verbose=verbose)
 
 
 # ---------------------------------------------------
