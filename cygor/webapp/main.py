@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-import os, argparse, asyncio, pkgutil, shutil, json, re
+import os, argparse, asyncio, pkgutil, shutil, json, re, gzip
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from fastapi import FastAPI, Request, Depends, Query
