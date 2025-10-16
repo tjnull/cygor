@@ -179,9 +179,9 @@
             {% if modules %}
               {% for m in modules %}
                 <li>
-                  <a href="/enum/{{ m }}" class="nav-link text-white">
+                  <a href="/modules/{{ m.slug }}" class="nav-link text-white">
                     <div class="nav-icon"><i class="bi bi-chevron-right"></i></div>
-                    <div class="nav-label">{{ m }}</div>
+                    <div class="nav-label">{{ m.name }}</div>
                   </a>
                 </li>
               {% endfor %}

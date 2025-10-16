@@ -16,23 +16,12 @@ from importlib.resources import files
 from . import db
 from .db import get_session, reset_db
 from .models import Host, Port, Script, OSGuess
+from ..module_loader import discover_modules, resolve_legacy_context
 from .ingest import ingest_directory
 from .config import settings
 
 templates = None  # will be initialized in lifespan
-
-
-# --------- Module Discovery ---------
-MODULES_DIR = Path(__file__).resolve().parent.parent / "modules"
-
-def discover_modules() -> list[str]:
-    if MODULES_DIR.exists():
-        return sorted(
-            name
-            for _, name, ispkg in pkgutil.iter_modules([str(MODULES_DIR)])
-            if not ispkg and not name.startswith("_")
-        )
-    return []
+DISCOVERED_MODULES = []  # filled during startup
 
 # -------- Service normalization --------
 SERVICE_NAME_MAP = {
@@ -421,29 +410,27 @@ def gather_scan_times(results_dir: str):
     return scans
 
 
-
 # ---------------- Lifespan ----------------
 async def lifespan(app: FastAPI):
     global templates
-    templates_dir = files("cygor.webapp") / "templates"
-    static_dir = files("cygor.webapp") / "static"
+    base_dir = Path(__file__).resolve().parent  # cygor/webapp
+    templates_dir = base_dir / "templates"
+    static_dir = base_dir / "static"
     if static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     else:
         print(f"[!] Static directory not found: {static_dir}")
 
-
     templates = Jinja2Templates(directory=str(templates_dir))
-    
 
+    # Initialize database
     await db.init_db()
-    load_dir = os.environ.get("CYGOR_LOAD_DIR")
 
-    # Mount Lockon screenshots *after* RESULTS_DIR is known
+    # Mount Lockon screenshots after RESULTS_DIR is known
     lockon_dir = Path(settings.RESULTS_DIR) / "cygor-enumeration-modules" / "lockon" / "screenshots"
     if lockon_dir.exists():
         app.mount(
-            "/enum/lockon/screenshots",
+            "/modules/lockon/screenshots",
             StaticFiles(directory=str(lockon_dir)),
             name="lockon_screenshots"
         )
@@ -451,6 +438,19 @@ async def lifespan(app: FastAPI):
     else:
         print(f"[!] Lockon screenshots directory not found: {lockon_dir}")
 
+    # ---- Dynamic module discovery and route registration ----
+    global DISCOVERED_MODULES
+    try:
+        from importlib.resources import files
+        print("[DEBUG] Module loader: using default modules path from module_loader")
+        DISCOVERED_MODULES = discover_modules()
+        _register_module_routes(app)
+        print(f"[✓] Registered {len(DISCOVERED_MODULES)} dynamic module routes: {[m.slug for m in DISCOVERED_MODULES]}")
+    except Exception as e:
+        print(f"[!] Error during module discovery: {e}")
+
+    # Background preload (if applicable)
+    load_dir = os.environ.get("CYGOR_LOAD_DIR")
     if load_dir:
         print(f"[*] Background preload from {load_dir} ...")
         async def _bg():
@@ -461,18 +461,76 @@ async def lifespan(app: FastAPI):
 
     yield
 
-
-
+# ---------------- FastAPI App ----------------
 app = FastAPI(lifespan=lifespan)
-# Mount static assets
-
-
-
 
 @app.middleware("http")
 async def add_modules_to_request(request: Request, call_next):
-    request.state.modules = discover_modules()
+    request.state.modules = DISCOVERED_MODULES
     return await call_next(request)
+
+# ---- Safe dynamic route registration ----
+def _register_module_routes(app: FastAPI):
+    import inspect
+    from cygor.module_loader import resolve_legacy_context
+
+    global DISCOVERED_MODULES
+
+    # Skip dynamic routes for legacy modules
+    legacy_slugs = set()
+
+    for spec in DISCOVERED_MODULES:
+        if spec.slug in legacy_slugs:
+            print(f"[-] Skipping legacy module route for {spec.slug} (handled by /enum/{spec.slug})")
+            continue
+
+        route_path = f"/modules/{spec.slug}"
+
+        async def handler(request: Request, slug=spec.slug):
+            context = {}
+            try:
+                if spec.get_context:
+                    result = spec.get_context(request, None)
+                    if inspect.iscoroutine(result):
+                        result = await result
+                    context.update(result)
+                else:
+                    context.update(resolve_legacy_context(spec.slug, settings.RESULTS_DIR))
+            except Exception as e:
+                print(f"[!] Error rendering module {spec.slug}: {e}")
+
+            return templates.TemplateResponse(
+                spec.template,
+                {
+                    "request": request,
+                    "module": spec,
+                    "ctx": context,
+                    **context,
+                },
+            )
+
+        app.add_api_route(
+            route_path,
+            handler,
+            name=f"module_{spec.slug}",
+            include_in_schema=False
+        )
+        print(f"[+] Registered dynamic module route: {route_path}")
+
+
+
+    @app.get("/modules", response_class=HTMLResponse)
+    async def modules_index(request: Request):
+        print("[DEBUG] Rendering /modules index")
+        return templates.TemplateResponse(
+            "modules_index.html",
+            {"request": request, "modules": DISCOVERED_MODULES},
+        )
+
+
+
+
+
 
 # -------- ROUTES --------
 @app.get("/", response_class=HTMLResponse)
@@ -779,7 +837,7 @@ async def service_detail(
     )
 
 
-@app.get("/enum/lockon", response_class=HTMLResponse)
+@app.get("/modules/lockon", response_class=HTMLResponse)
 async def enum_lockon(request: Request):
     base = Path(settings.RESULTS_DIR) / "cygor-enumeration-modules" / "lockon"
     urls_file = base / "tested-urls.txt"
@@ -808,7 +866,7 @@ async def enum_lockon(request: Request):
                 host = parsed.hostname or ""
                 port = str(parsed.port or (443 if parsed.scheme == "https" else 80))
                 sf = entry.get("screenshot_file")
-                screenshot_url = f"/enum/lockon/screenshots/{sf}" if sf and (shots_dir / sf).exists() else None
+                screenshot_url = f"/modules/lockon/screenshots/{sf}" if sf and (shots_dir / sf).exists() else None
                 items.append({
                     "url": url,
                     "status_code": entry.get("status_code"),
@@ -827,7 +885,7 @@ async def enum_lockon(request: Request):
             host = parsed.hostname or ""
             port = str(parsed.port or (443 if parsed.scheme == "https" else 80))
             sf = find_screenshot_file(host, port)
-            screenshot_url = f"/enum/lockon/screenshots/{sf}" if sf else None
+            screenshot_url = f"/modules/lockon/screenshots/{sf}" if sf else None
             items.append({
                 "url": u,
                 "status_code": None,
@@ -843,7 +901,7 @@ async def enum_lockon(request: Request):
         "has_urls": bool(items),
     })
 
-@app.get("/enum/smbexplorer", response_class=HTMLResponse)
+@app.get("/modules/smbexplorer", response_class=HTMLResponse)
 async def enum_smbexplorer(request: Request, session: AsyncSession = Depends(get_session)):
     import json
     base = Path(settings.RESULTS_DIR) / "cygor-enumeration-modules" / "smbexplorer"
@@ -899,7 +957,7 @@ async def enum_smbexplorer(request: Request, session: AsyncSession = Depends(get
         "hosts_with_445": hosts_with_445,
     })
 
-@app.get("/enum/nfsexplorer", response_class=HTMLResponse)
+@app.get("/modules/nfsexplorer", response_class=HTMLResponse)
 async def enum_nfsexplorer(request: Request):
     import json
     base = Path(settings.RESULTS_DIR) / "cygor-enumeration-modules" / "nfsexplorer"
@@ -953,7 +1011,7 @@ def exec_argv(argv):
     print(f"[*] Database file:     {db_path}")
 
     # init DB engine + schema
-    db.init_engine(str(db_path), debug=(args.verbose > 1))
+    db.init_engine(str(db_path), debug=False)  # Disable verbose DB logging
     asyncio.run(db.init_db())   # <-- ensure schema exists
 
     if args.reset_db:

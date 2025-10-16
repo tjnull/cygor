@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h2 class="mb-3">Modules</h2>
+
+  {% if not modules %}
+    <div class="alert alert-info">
+      No modules found in the <code>modules/</code> directory.
+    </div>
+  {% else %}
+    <div class="row g-3">
+      {% for m in modules %}
+        {% set legacy = m.slug in ["lockon", "smbexplorer", "nfsexplorer"] %}
+        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+          <div class="card h-100 shadow-sm">
+            <div class="card-body">
+              <h5 class="card-title mb-1">
+                <a href="/modules/{{ m.slug }}" class="text-decoration-none">
+                  {{ m.name }}
+                </a>
+              </h5>
+              {% if m.description %}
+                <p class="card-text small text-secondary">{{ m.description }}</p>
+              {% endif %}
+            </div>
+            <div class="card-footer bg-transparent border-0 pt-0">
+              <small class="text-muted">
+                {% if m.version %}v{{ m.version }}{% endif %}
+                {% if m.author %} • {{ m.author }}{% endif %}
+              </small>
+              <a class="btn btn-sm btn-outline-primary float-end"
+                 href="/modules/{{ m.slug }}">
+                Open
+              </a>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

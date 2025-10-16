@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h2 class="mb-0">{{ module.name }}</h2>
+      <div class="text-secondary small">
+        {% if module.description %}{{ module.description }}{% endif %}
+        {% if module.version %}<span class="ms-2">v{{ module.version }}</span>{% endif %}
+        {% if module.author %}<span class="ms-2">by {{ module.author }}</span>{% endif %}
+      </div>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="/modules">All modules</a>
+  </div>
+
+  {% if module.view == "gallery" %}
+    {% set items = ctx.items or [] %}
+    {% if items|length == 0 %}
+      <div class="alert alert-warning">No items to display yet.</div>
+    {% else %}
+      <div class="row g-3">
+        {% for it in items %}
+          <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+            <div class="card h-100">
+              {% if it.screenshot_url %}
+                <img class="card-img-top" src="{{ it.screenshot_url }}" alt="screenshot">
+              {% else %}
+                <div class="card-img-top d-flex align-items-center justify-content-center" style="height:160px;background:#111;">
+                  <span class="text-secondary">No screenshot</span>
+                </div>
+              {% endif %}
+              <div class="card-body p-2">
+                <a href="{{ it.url }}" target="_blank" rel="noopener">{{ it.url }}</a>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% else %}
+    {% set rows = ctx.rows or [] %}
+    {% if rows|length == 0 %}
+      <div class="alert alert-warning">No rows to display yet.</div>
+    {% else %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              {% if module.columns and module.columns|length>0 %}
+                {% for c in module.columns %}
+                  <th>{{ c.label }}</th>
+                {% endfor %}
+              {% else %}
+                {% for k in rows[0].keys() %}
+                  <th>{{ k }}</th>
+                {% endfor %}
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+              <tr>
+                {% if module.columns and module.columns|length>0 %}
+                  {% for c in module.columns %}
+                    <td>{{ r[c.key] }}</td>
+                  {% endfor %}
+                {% else %}
+                  {% for v in r.values() %}
+                    <td>{{ v }}</td>
+                  {% endfor %}
+                {% endif %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

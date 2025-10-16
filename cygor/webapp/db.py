@@ -1,3 +1,4 @@
+import logging
 import sys
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -13,27 +14,55 @@ SessionLocal = None
 def init_engine(database_url: str, debug: bool = False):
     """
     Initialize the SQLAlchemy async engine + session factory.
-    Accepts either a full DB URL or a filesystem path for SQLite.
     """
     global engine, SessionLocal
 
+    # Build proper sqlite+aiosqlite URL if a file path is passed
     if not database_url.startswith("sqlite+"):
         db_path = Path(database_url).expanduser()
-
-        # If the user mistakenly passes a directory instead of a .db file
         if db_path.is_dir():
             raise RuntimeError(f"[!] '{db_path}' is a directory, expected a database file path")
-
         if not db_path.parent.exists():
             raise RuntimeError(f"[!] Database directory does not exist: {db_path.parent}")
-
         database_url = f"sqlite+aiosqlite:///{db_path}"
 
     print(f"[*] DB engine initialized: {database_url}")
-    engine = create_async_engine(database_url, echo=debug, future=True)
-    SessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-    return engine
 
+    # SQLAlchemy echo only when debug
+    engine = create_async_engine(
+        database_url,
+        echo=debug,          # SQL text
+        echo_pool=debug,     # pool chatter
+        pool_pre_ping=True,
+        future=True,
+    )
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    SessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+
+    # ---- Quiet noisy loggers unless debug is requested ----
+    level = logging.DEBUG if debug else logging.WARNING
+
+    for name in (
+        "sqlalchemy",          # parent
+        "sqlalchemy.engine",   # SQL emits
+        "sqlalchemy.pool",     # pool events
+        "sqlalchemy.dialects", # dialect chatter
+        "aiosqlite",           # the functools.partial spam
+    ):
+        logging.getLogger(name).setLevel(level)
+
+    # Optional: surgically filter the specific aiosqlite DEBUG spam line
+    class _AioSqliteSpamFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            msg = record.getMessage()
+            return "functools.partial" not in msg
+
+    aiosqlite_logger = logging.getLogger("aiosqlite")
+    aiosqlite_logger.addFilter(_AioSqliteSpamFilter())
+
+    return engine
 
 
 async def init_db():
