@@ -307,14 +307,15 @@ def ensure_directory_owned(directory):
 
 
 
-def run_masscan(host, interface=None, base_outdir='results', ports=None, rate=1000):
+def run_masscan(host, interface=None, base_outdir='results', ports=None, rate=1000, exclusions=None):
     """
     Run Masscan on a single host or CIDR.
+    Supports exclusions via --excludefile.
     Produces machine-readable (-oL) output and returns the output file path if scan succeeded.
     """
     output_dir = os.path.join(base_outdir, 'masscan')
     ensure_directory_exists(output_dir)
-    ensure_directory_owned(output_dir) 
+    ensure_directory_owned(output_dir)
 
     safe_host = host.replace('/', '_')
     output_file = os.path.join(output_dir, f"masscan_{safe_host}.txt")
@@ -323,6 +324,21 @@ def run_masscan(host, interface=None, base_outdir='results', ports=None, rate=10
     ports_option = f"-p {ports}" if ports else (
         "-p 21,22,23,25,80,88,111,135,139,389,443,445,636,1099,1433,2049,3389,4786,5900,5985,8080,9100"
     )
+
+    # --- NEW: exclusions support ---
+    exclude_file = None
+    exclude_option = ""
+    if exclusions:
+        ip_exclude, net_exclude, dom_exclude = exclusions
+        tmp_exclude_path = os.path.join(output_dir, "masscan_exclude.txt")
+        with open(tmp_exclude_path, "w", encoding="utf-8") as ef:
+            for i in sorted(ip_exclude):
+                ef.write(f"{i}\n")
+            for n in sorted(net_exclude, key=lambda x: str(x)):
+                ef.write(f"{n}\n")
+        exclude_file = tmp_exclude_path
+        exclude_option = f"--excludefile {exclude_file}"
+    # ------------------------------
 
     try:
         if '/' in host:
@@ -333,18 +349,15 @@ def run_masscan(host, interface=None, base_outdir='results', ports=None, rate=10
         print(f"{Fore.RED}Invalid IP/CIDR {host}: {e}")
         return None
 
-    # Use --open-only to keep only open port results
-    # Redirect stderr to suppress Masscan summaries that could confuse parsing
     command = (
-        f"masscan {host} {interface_option} {ports_option} --rate {rate} "
-        f"--wait 0 --open-only -oL {output_file}"
+        f"masscan {host} {interface_option} {ports_option} {exclude_option} "
+        f"--rate {rate} --wait 0 --open-only -oL {output_file}"
     )
 
     print(f"{Fore.YELLOW}[masscan] {command}{Style.RESET_ALL}\n")
     try:
         subprocess.run(command, shell=True, check=True)
         if os.path.exists(output_file):
-            # Verify the file has at least one "open" line
             with open(output_file, "r", encoding="utf-8") as fh:
                 if any(line.startswith("open") for line in fh):
                     print(f"{Fore.GREEN}Masscan completed for {host}. Output: {output_file}\n")
@@ -358,13 +371,17 @@ def run_masscan(host, interface=None, base_outdir='results', ports=None, rate=10
     except subprocess.CalledProcessError as e:
         print(f"{Fore.RED}Error running masscan for {host}: {e}")
         return None
-
-
+    finally:
+        if exclude_file and os.path.exists(exclude_file):
+            try:
+                os.remove(exclude_file)
+            except Exception:
+                pass
 
 def run_naabu(host, interface=None, base_outdir='results', ports=None, rate=10000, exclusions=None):
     """
     Run Naabu for a given host or CIDR, writing a temporary target file and passing it with -list.
-    Respects exclusions (tuple: ip_set, net_set, dom_set) if provided.
+    Supports exclusions via -exclude-file.
     Returns path to validated output file or None.
     """
     output_dir = os.path.join(base_outdir, 'naabu')
@@ -374,66 +391,37 @@ def run_naabu(host, interface=None, base_outdir='results', ports=None, rate=1000
 
     interface_option = f"-interface {interface}" if interface else ""
     ports_option = f"-p {ports}" if ports else (
-        "-p 21,22,23,25,80,88,111,135,139,389,443,445,636,1099,1433,2049,4786,5900,5985,3389,8080,9100"
+        "-p 21,22,23,25,80,88,111,135,139,389,443,445,636,1099,1433,2049,3389,4786,5900,5985,3389,8080,9100"
     )
 
-    # Build target_ips applying exclusions
-    target_ips = []
-    excluded_count = 0
-    try:
-        if '/' in host:
-            network = ipaddress.ip_network(host, strict=False)
-            for ip in network.hosts():
-                skip = False
-                if exclusions:
-                    ip_exclude, net_exclude, _ = exclusions
-                    if str(ip) in ip_exclude or any(ip in net for net in net_exclude):
-                        skip = True
-                if skip:
-                    excluded_count += 1
-                else:
-                    target_ips.append(str(ip))
-        else:
-            skip = False
-            if exclusions:
-                ip_exclude, net_exclude, dom_exclude = exclusions
-                try:
-                    ip_obj = ipaddress.ip_address(host)
-                    if str(ip_obj) in ip_exclude or any(ip_obj in net for net in net_exclude):
-                        skip = True
-                except ValueError:
-                    if host.lower() in dom_exclude:
-                        skip = True
-            if skip:
-                excluded_count += 1
-            else:
-                target_ips.append(host)
-    except ValueError:
-        print(f"{Fore.RED}[!] Invalid target: {host}")
-        return None
+    # --- NEW: exclusions support ---
+    exclude_file = None
+    exclude_option = ""
+    if exclusions:
+        ip_exclude, net_exclude, dom_exclude = exclusions
+        tmp_exclude_path = os.path.join(output_dir, "naabu_exclude.txt")
+        with open(tmp_exclude_path, "w", encoding="utf-8") as ef:
+            for i in sorted(ip_exclude):
+                ef.write(f"{i}\n")
+            for n in sorted(net_exclude, key=lambda x: str(x)):
+                ef.write(f"{n}\n")
+        exclude_file = tmp_exclude_path
+        exclude_option = f"-exclude-file {exclude_file}"
+    # -------------------------------
 
-    if not target_ips:
-        print(f"{Fore.YELLOW}[!] Skipping {host} — all IPs excluded by exclusion list.{Style.RESET_ALL}")
-        return None
-
-    # Write targets to a temp file in the output directory (so same fs/permissions)
+    # Write targets to a temp file
     fd, tmp_path = tempfile.mkstemp(prefix="naabu_targets_", suffix=".txt", dir=output_dir)
     os.close(fd)
+    with open(tmp_path, "w", encoding="utf-8") as tf:
+        tf.write(f"{host}\n")
+
+    print(f"{Fore.YELLOW}[naabu] Scanning target(s) from {host} -> targets file: {tmp_path}{Style.RESET_ALL}")
+
     try:
-        with open(tmp_path, "w", encoding="utf-8") as tf:
-            tf.write("\n".join(target_ips) + "\n")
+        command = f"naabu {interface_option} {ports_option} {exclude_option} -rate {rate} -o {output_file} -list {tmp_path}"
+        subprocess.run(command, shell=True, check=True)
 
-        print(f"{Fore.YELLOW}[naabu] Scanning {len(target_ips)} target(s) from {host} (excluded {excluded_count}) -> targets file: {tmp_path}{Style.RESET_ALL}")
-
-        # Use the temp file with -list <file>
-        command = f"naabu {interface_option} {ports_option} -rate {rate} -o {output_file} -list {tmp_path} "
-        try:
-            subprocess.run(command, shell=True, check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"{Fore.RED}Error running naabu for {host}: {e}")
-            return None
-
-        # Validate and clean results (ip:port lines)
+        # Validate and clean results
         valid_lines = []
         if os.path.exists(output_file):
             with open(output_file, "r", encoding="utf-8") as fh:
@@ -464,13 +452,18 @@ def run_naabu(host, interface=None, base_outdir='results', ports=None, rate=1000
             print(f"{Fore.RED}[!] Naabu did not create output file for {host}{Style.RESET_ALL}")
             return None
 
+    except subprocess.CalledProcessError as e:
+        print(f"{Fore.RED}Error running naabu for {host}: {e}")
+        return None
+
     finally:
-        # cleanup temp file
-        try:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except Exception:
-            pass
+        # Always cleanup temporary files
+        for f in [tmp_path, exclude_file]:
+            if f and os.path.exists(f):
+                try:
+                    os.remove(f)
+                except Exception:
+                    pass
 
 
 
@@ -479,21 +472,31 @@ def ensure_nmap_directory_exists(directory):
         os.makedirs(directory, exist_ok=True)
 
 def run_nmap(ip, base_outdir='results', scan_type='top-ports', ports=None):
+    """
+    Run Nmap on a single host.
+    Ensures all output directories are writable and owned by the invoking user (not root),
+    even if executed with sudo.
+    """
     output_dir = os.path.join(base_outdir, 'nmap')
     ensure_directory_exists(output_dir)
+    ensure_directory_owned(output_dir)
+
     scan_directory = os.path.join(output_dir, scan_type)
-    ensure_nmap_directory_exists(scan_directory)
+    ensure_directory_exists(scan_directory)
     ensure_directory_owned(scan_directory)
+
     safe_ip = ip.replace('/', '_')
     output_file_prefix = os.path.join(scan_directory, safe_ip)
+
+    # Detect IPv6
     ip_option = ""
     try:
         ip_obj = ipaddress.ip_address(ip)
         ip_option = "-6" if ip_obj.version == 6 else ""
     except Exception:
-        # domain or invalid ip - leave ip_option blank
         ip_option = ""
 
+    # Choose Nmap command
     if ports:
         command = f"nmap {ip_option} -Pn -sC -sV -O -T4 -p {ports} {ip} -oA {output_file_prefix}"
     elif scan_type == 'top-ports':
@@ -502,11 +505,19 @@ def run_nmap(ip, base_outdir='results', scan_type='top-ports', ports=None):
         command = f"nmap {ip_option} -Pn -sC -sV -O -T4 -p- {ip} -oA {output_file_prefix}"
 
     print(f"{Fore.YELLOW}[nmap] {command}{Style.RESET_ALL}")
+
     try:
         subprocess.run(command, shell=True, check=True)
         print(f"{Fore.GREEN}Nmap completed for {ip}.")
     except subprocess.CalledProcessError as e:
         print(f"{Fore.RED}Error running nmap for {ip}: {e}")
+    finally:
+        # Ensure Nmap results and subdirs are owned by invoking user
+        try:
+            set_owner_recursive(scan_directory)
+        except Exception as e:
+            print(f"{Fore.YELLOW}[!] Warning: could not reset ownership on {scan_directory}: {e}{Style.RESET_ALL}")
+
 
 
 def run_nmap_parallel(ips, processes, base_outdir='results', scan_type='top-ports', ports=None):
@@ -777,11 +788,16 @@ def main():
     else:
         nmap_targets = list(discovered_hosts_merge)
 
+    # NEW: Apply exclusions again before Nmap
+    if args.exclusions:
+        before_nmap = len(nmap_targets)
+        nmap_targets = filter_excluded_hosts(nmap_targets, exclusions)
+        print(f"{Fore.YELLOW}[Exclusions Summary]{Style.RESET_ALL} kept {len(nmap_targets)}/{before_nmap} targets before Nmap")
+
     if not nmap_targets:
         print(f"{Fore.RED}No hosts to scan with Nmap")
         return
 
-    # banner for nmap phase
     print(f"\n{Fore.CYAN}[+] Starting Nmap phase on {len(nmap_targets)} targets (scan-type={args.scan_type}){Style.RESET_ALL}")
 
     run_nmap_parallel(nmap_targets, args.processes, base_outdir=args.outdir, scan_type=args.scan_type, ports=args.ports)
@@ -790,6 +806,7 @@ def main():
 
     overall_end_time = time.time()
     print_time_taken(overall_start_time, overall_end_time, "Total scan process")
+
 
 try:
     if __name__ == '__main__':
