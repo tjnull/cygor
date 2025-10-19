@@ -3,14 +3,14 @@
 <div class="container-fluid py-3">
   <div class="d-flex align-items-center justify-content-between mb-3">
     <div>
-      <h2 class="mb-0">{{ module.name }}</h2>
+      <h2 class="mb-0 text-uppercase fw-bold">{{ module.name }}</h2>
       <div class="text-secondary small">
         {% if module.description %}{{ module.description }}{% endif %}
         {% if module.version %}<span class="ms-2">v{{ module.version }}</span>{% endif %}
         {% if module.author %}<span class="ms-2">by {{ module.author }}</span>{% endif %}
       </div>
     </div>
-    <a class="btn btn-outline-secondary btn-sm" href="/modules">All modules</a>
+    <div class="text-muted small">&nbsp;</div>
   </div>
 
   {% if module.view == "gallery" %}

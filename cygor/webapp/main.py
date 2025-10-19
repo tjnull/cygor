@@ -444,7 +444,7 @@ async def lifespan(app: FastAPI):
         from importlib.resources import files
         print("[DEBUG] Module loader: using default modules path from module_loader")
         DISCOVERED_MODULES = discover_modules()
-        _register_module_routes(app)
+        _register_module_routes(app, templates_dir, settings.RESULTS_DIR)
         print(f"[✓] Registered {len(DISCOVERED_MODULES)} dynamic module routes: {[m.slug for m in DISCOVERED_MODULES]}")
     except Exception as e:
         print(f"[!] Error during module discovery: {e}")
@@ -469,67 +469,122 @@ async def add_modules_to_request(request: Request, call_next):
     request.state.modules = DISCOVERED_MODULES
     return await call_next(request)
 
+def register_static_page(app: FastAPI, slug: str, title: str, template: str):
+    """
+    Dynamically register a simple static page route.
+    Example:
+        register_static_page(app, "about", "About Cygor", "page_about.html")
+        -> available at /pages/about
+    """
+    @app.get(f"/pages/{slug}", response_class=HTMLResponse)
+    async def static_page(request: Request):
+        return templates.TemplateResponse(
+            template,
+            {"request": request, "title": title},
+        )
+
+    print(f"[+] Registered static page: /pages/{slug}")
+
+
+
 # ---- Safe dynamic route registration ----
-def _register_module_routes(app: FastAPI):
+def _register_module_routes(app: FastAPI, templates_dir: Path, results_dir: Path):
+    """
+    Dynamically register /modules/<slug> routes for all discovered modules.
+    Automatically selects the best template based on the context returned
+    by each module (rows, items, chart, etc.).
+    """
     import inspect
     from cygor.module_loader import resolve_legacy_context
+    from jinja2 import TemplateNotFound
 
     global DISCOVERED_MODULES
 
-    # Skip dynamic routes for legacy modules
-    legacy_slugs = set()
-
     for spec in DISCOVERED_MODULES:
-        if spec.slug in legacy_slugs:
-            print(f"[-] Skipping legacy module route for {spec.slug} (handled by /enum/{spec.slug})")
-            continue
-
         route_path = f"/modules/{spec.slug}"
 
-        async def handler(request: Request, slug=spec.slug):
+        async def handler(request: Request, spec=spec):
             context = {}
             try:
+                # --- Collect context from module ---
                 if spec.get_context:
                     result = spec.get_context(request, None)
                     if inspect.iscoroutine(result):
                         result = await result
-                    context.update(result)
+                    if isinstance(result, dict):
+                        context.update(result)
                 else:
-                    context.update(resolve_legacy_context(spec.slug, settings.RESULTS_DIR))
+                    # legacy compatibility
+                    context.update(resolve_legacy_context(spec.slug, results_dir))
+
+                # --- Determine best template automatically ---
+                has_rows = "rows" in context
+                has_items = "items" in context
+                has_chart = "chart" in context
+
+                # Prefer explicit module_<slug>.html if present
+                template_file = f"module_{spec.slug}.html"
+                if not (templates_dir / template_file).exists():
+                    if has_items:
+                        template_file = "modules_gallery.html"
+                    elif has_chart:
+                        template_file = "modules_chart.html"
+                    else:
+                        template_file = "modules_common.html"
+
+                # Add optional summary helpers
+                if has_rows and not context["rows"]:
+                    context["message"] = "No rows to display yet."
+                if has_items and not context["items"]:
+                    context["message"] = "No items to display yet."
+
+                # --- Render the final template ---
+                # Make a lightweight copy without the live module object
+                safe_spec = {k: v for k, v in spec.__dict__.items() if k != "module"}
+
+                return templates.TemplateResponse(
+                    template_file,
+                    {
+                        "request": request,
+                        "module": safe_spec,
+                        "ctx": context,
+                        **context,
+                    },
+                )
+
+
+            except TemplateNotFound as e:
+                print(f"[!] Missing template for {spec.slug}: {e.name}")
+                return HTMLResponse(
+                    f"<h3>Template not found for module '{spec.slug}'</h3>", status_code=500
+                )
+
             except Exception as e:
                 print(f"[!] Error rendering module {spec.slug}: {e}")
-
-            return templates.TemplateResponse(
-                spec.template,
-                {
-                    "request": request,
-                    "module": spec,
-                    "ctx": context,
-                    **context,
-                },
-            )
+                return HTMLResponse(
+                    f"<h3>Error rendering module '{spec.slug}'</h3><pre>{e}</pre>",
+                    status_code=500,
+                )
 
         app.add_api_route(
             route_path,
             handler,
             name=f"module_{spec.slug}",
-            include_in_schema=False
+            include_in_schema=False,
         )
+
         print(f"[+] Registered dynamic module route: {route_path}")
 
-
-
+    # ----------------------------------------------------------------
+    # Index route for all modules
+    # ----------------------------------------------------------------
     @app.get("/modules", response_class=HTMLResponse)
     async def modules_index(request: Request):
-        print("[DEBUG] Rendering /modules index")
+        """Render overview of all discovered modules."""
         return templates.TemplateResponse(
             "modules_index.html",
             {"request": request, "modules": DISCOVERED_MODULES},
         )
-
-
-
-
 
 
 # -------- ROUTES --------
