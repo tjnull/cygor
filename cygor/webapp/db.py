@@ -31,7 +31,7 @@ def get_default_database_url() -> str:
         return env_url
 
     if detect_postgresql():
-        return f"postgresql+asyncpg://cygor:cygorpass@localhost/cygor"
+        return f"postgresql+psycopg_async://cygor:cygorpass@localhost/cygor"
     return "sqlite+aiosqlite:///cygor.db"
 
 
@@ -60,61 +60,64 @@ def detect_postgresql() -> bool:
     return _pg_available
 
 
-def setup_postgres(user="cygor", password="cygorpass", db_name="cygor", host="localhost") -> str:
-    """Ensure PostgreSQL user/database exist (safe/idempotent)."""
+def setup_postgres(user="cygor", password="cygorpass", db_name="cygor", host="localhost"):
+    """
+    Create PostgreSQL role and database if not present.
+    Avoids 'CREATE DATABASE cannot be executed from a function' errors.
+    """
     global _postgres_initialized
     if _postgres_initialized:
-        return f"postgresql+asyncpg://{user}:{password}@{host}/{db_name}"
+        return f"postgresql+psycopg_async://{user}:{password}@{host}/{db_name}"
+
 
     print(f"[*] Setting up PostgreSQL database '{db_name}' for user '{user}'...")
 
-    create_user_cmd = [
-        "psql", "-U", "postgres", "-c",
-        f"DO $$ BEGIN "
-        f"IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{user}') THEN "
-        f"CREATE ROLE {user} LOGIN PASSWORD '{password}'; "
-        f"END IF; END $$;"
-    ]
+    # Ensure we can run psql as postgres
+    base_cmd = ["sudo", "-u", "postgres"]
 
-    create_db_cmd = [
-        "psql", "-U", "postgres", "-c",
-        f"DO $$ BEGIN "
-        f"IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '{db_name}') THEN "
-        f"CREATE DATABASE {db_name} OWNER {user}; "
-        f"END IF; END $$;"
-    ]
+    # --- Create user if missing ---
+    check_user = subprocess.run(
+        base_cmd + ["psql", "-tAc", f"SELECT 1 FROM pg_roles WHERE rolname='{user}'"],
+        capture_output=True, text=True
+    )
+    if not check_user.stdout.strip():
+        subprocess.run(
+            base_cmd + ["psql", "-c", f"CREATE ROLE {user} LOGIN PASSWORD '{password}';"],
+            check=False
+        )
+        print(f"[+] Created PostgreSQL role '{user}'")
 
-    subprocess.run(["sudo", "-u", "postgres"] + create_user_cmd, check=False)
-    subprocess.run(["sudo", "-u", "postgres"] + create_db_cmd, check=False)
+    # --- Create database if missing ---
+    check_db = subprocess.run(
+        base_cmd + ["psql", "-tAc", f"SELECT 1 FROM pg_database WHERE datname='{db_name}'"],
+        capture_output=True, text=True
+    )
+    if not check_db.stdout.strip():
+        subprocess.run(
+            base_cmd + ["createdb", "-O", user, db_name],
+            check=False
+        )
+        print(f"[+] Created PostgreSQL database '{db_name}' owned by '{user}'")
 
     print(f"[✓] PostgreSQL setup complete for user '{user}' and database '{db_name}'.")
     _postgres_initialized = True
-    return f"postgresql+asyncpg://{user}:{password}@{host}/{db_name}"
+    return f"postgresql+psycopg_async://{user}:{password}@{host}/{db_name}"
+
 
 
 # -------------------------------------------------------------------
 # Engine Initialization
 # -------------------------------------------------------------------
 def init_engine(database_url: str, debug: bool = False):
-    """
-    Initialize a SQLAlchemy async engine for the current running event loop.
-    If an old engine exists from a different loop, it will be disposed safely.
-    """
+    """Initialize SQLAlchemy async engine (psycopg_async)."""
     global engine, SessionLocal
 
-    # Detect and dispose any leftover engine from a previous loop
     if engine is not None:
         try:
-            loop = asyncio.get_event_loop()
-            if not loop.is_closed():
-                loop.create_task(engine.dispose())
-            else:
-                import anyio
-                anyio.from_thread.run(engine.dispose)
+            asyncio.get_running_loop().create_task(engine.dispose())
         except Exception:
             pass
 
-    # Create a fresh engine attached to this loop
     engine = create_async_engine(
         database_url,
         echo=debug,
@@ -125,10 +128,10 @@ def init_engine(database_url: str, debug: bool = False):
         future=True,
     )
 
-    # New sessionmaker bound to this engine
     SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    print(f"[✓] Engine bound to event loop {id(asyncio.get_running_loop()) if asyncio.get_running_loop().is_running() else 'N/A'}")
+    print(f"[✓] Engine bound using psycopg_async driver.")
     return engine
+
 
 
 # -------------------------------------------------------------------
@@ -197,6 +200,7 @@ async def get_or_create_host(session: AsyncSession, address: str, hostname: str 
     host = Host(address=address, hostname=hostname)
     session.add(host)
     await session.flush()
+    await session.commit()   # force write to DB
     return host
 
 

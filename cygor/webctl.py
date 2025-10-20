@@ -73,27 +73,13 @@ def detect_postgresql() -> bool:
 
 
 def setup_postgres(user="cygor", password="cygorpass", db_name="cygor", host="localhost"):
-    print(f"[*] Setting up PostgreSQL database '{db_name}' for user '{user}'...")
-    base_cmd = ["sudo", "-u", "postgres", "psql", "-q", "-t", "-c"]
+    """
+    Delegate PostgreSQL setup to cygor.webapp.db.setup_postgres()
+    to avoid using the old DO $$ CREATE DATABASE function.
+    """
+    from cygor.webapp import db
+    return db.setup_postgres(user=user, password=password, db_name=db_name, host=host)
 
-    user_cmd = base_cmd + [(
-        f"DO $$ BEGIN "
-        f"IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{user}') THEN "
-        f"CREATE ROLE {user} LOGIN PASSWORD '{password}'; "
-        f"END IF; END $$;"
-    )]
-    db_cmd = base_cmd + [(
-        f"DO $$ BEGIN "
-        f"IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '{db_name}') THEN "
-        f"CREATE DATABASE {db_name} OWNER {user}; "
-        f"END IF; END $$;"
-    )]
-
-    subprocess.run(user_cmd, check=False)
-    subprocess.run(db_cmd, check=False)
-
-    print(f"[✓] PostgreSQL setup complete for user '{user}' and database '{db_name}'.")
-    return f"postgresql+asyncpg://{user}:{password}@{host}/{db_name}"
 
 
 async def initialize_database(database_url: Optional[str] = None, reset: bool = False, verbose: bool = False):

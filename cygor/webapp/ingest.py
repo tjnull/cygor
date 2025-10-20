@@ -33,7 +33,7 @@ def get_default_database_url(fallback_sqlite: str = "results/cygor.db") -> str:
     try:
         import subprocess
         subprocess.run(["pg_isready", "-q"], check=True)
-        return "postgresql+asyncpg://cygor:cygorpass@localhost/cygor"
+        return "postgresql+psycopg_async://cygor:cygorpass@localhost/cygor"
     except Exception:
         pass
 

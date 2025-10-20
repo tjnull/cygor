@@ -477,51 +477,54 @@ async def lifespan(app: FastAPI):
         print(f"[✓] Registered {len(DISCOVERED_MODULES)} dynamic module routes: {[m.slug for m in DISCOVERED_MODULES]}")
     except Exception as e:
         print(f"[!] Error during module discovery: {e}")
-
+    
     # -------------------------
-    # Background Ingestion
+    # Ingestion (runs on FastAPI's loop at startup)
     # -------------------------
     load_dir = os.environ.get("CYGOR_LOAD_DIR")
     verbose = int(os.environ.get("CYGOR_VERBOSE", "0"))
-    if load_dir:
-        print(f"[*] Background preload from {load_dir} scheduled...")
 
-        async def _preload():
-            await asyncio.sleep(1.0)
+    if load_dir:
+        print(f"[*] Preloading results from {load_dir} ...")
+
+        @app.on_event("startup")
+        async def preload_results():
             try:
                 async with db.SessionLocal() as session:
                     count = await ingest_directory(Path(load_dir), session, dedupe=True, verbose=verbose)
                     await session.commit()
-                print(f"[✓] Finished ingesting {count} file(s) from {load_dir}")
+                print(f"[✓] Ingested {count} result file(s) from {load_dir}")
             except Exception as e:
-                print(f"[!] Background preload error: {e}")
+                print(f"[!] Ingestion error: {e}")
 
-        @app.on_event("startup")
-        async def _kickoff_preload():
-            asyncio.create_task(_preload())
 
     # -------------------------
     # Yield to FastAPI
     # -------------------------
+    # Attach event-loop-close handler for Python 3.13 noise
     try:
         yield
     finally:
         # -------------------------
-        #  Clean shutdown
+        # Clean shutdown (safe for Python 3.13)
         # -------------------------
-        try:
-            if db.engine:
-                print("[*] Disposing database engine...")
-                try:
+        if getattr(db, "engine", None):
+            print("[*] Disposing database engine...")
+            try:
+                # attempt graceful dispose, but guard against closed loop
+                loop = asyncio.get_running_loop()
+                if loop.is_closed():
+                    print("[!] Event loop already closed — skipping engine dispose.")
+                else:
                     await db.engine.dispose()
                     print("[✓] Database engine disposed cleanly.")
-                except RuntimeError as e:
-                    if "Event loop is closed" in str(e) or "attached to a different loop" in str(e):
-                        print("[!] Ignored asyncpg shutdown bug (loop closed too early).")
-                    else:
-                        raise
-        except Exception as e:
-            print(f"[!] Error during engine disposal: {e}")
+            except (RuntimeError, Exception) as e:
+                # swallow known asyncpg loop-closed race
+                if "Event loop is closed" in str(e) or "attached to a different loop" in str(e):
+                    print("[!] Ignored asyncpg loop-closed cleanup noise.")
+                else:
+                    print(f"[!] Unhandled dispose error: {e}")
+
 
 
 
@@ -927,34 +930,54 @@ async def services_view(
     )
 
 
-# Service detail page (click-through from services.html)
-@app.get("/services/{service}", response_class=HTMLResponse)
+# --------------------------------------------------------
+# Service detail page: /services/{service_name}
+# --------------------------------------------------------
+@app.get("/services/{service_name}", response_class=HTMLResponse)
 async def service_detail(
     request: Request,
-    service: str,
+    service_name: str,
     session: AsyncSession = Depends(get_session)
 ):
-    ports = (await session.execute(
-        select(Port).options(selectinload(Port.host))
-    )).scalars().unique().all()
+    # Load all ports with host so we can normalize in Python
+    result = await session.execute(
+        select(Port)
+        .options(selectinload(Port.host))
+        .order_by(Port.port)
+    )
+    all_ports = result.scalars().all()
 
-    normalized_service = normalize_service(service)
-    host_services = []
-    for p in ports:
-        if normalize_service(p.service) == normalized_service:
-            host_services.append({"host": p.host, "ports": [p]})
+    # Keep rows whose *normalized* service matches the URL segment
+    matching_ports = [p for p in all_ports if normalize_service(p.service) == service_name]
 
-    total_hosts = len({p.host.address for p in ports})
+    # Unique host count for the summary card
+    unique_host_ids = {p.host.id for p in matching_ports if p.host}
+    host_count = len(unique_host_ids)
+
+    # Total hosts (for the percentage bar)
+    total_hosts_result = await session.execute(select(func.count(Host.id)))
+    total_hosts = total_hosts_result.scalar_one_or_none() or 0
+
+    # Optional: if you prefer one row per host instead of per port, dedupe here:
+    # seen = set(); host_services = []
+    # for p in matching_ports:
+    #     if p.host and p.host.id not in seen:
+    #         host_services.append(p); seen.add(p.host.id)
+    # else:
+    host_services = matching_ports  # one row per port is often clearer
 
     return templates.TemplateResponse(
         "service_detail.html",
         {
             "request": request,
-            "service": service,
+            "service": service_name,
             "host_services": host_services,
-            "total_hosts": total_hosts
-        }
+            "host_count": host_count,   # <-- pass this so the template doesn't have to infer
+            "total_hosts": total_hosts,
+        },
     )
+
+
 
 
 @app.get("/modules/lockon", response_class=HTMLResponse)
