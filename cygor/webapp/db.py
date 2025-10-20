@@ -1,107 +1,188 @@
+import asyncio
 import logging
-import sys
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+import os
+import subprocess
+from pathlib import Path
+from typing import Optional, AsyncGenerator
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel, select
-from typing import Optional
-from pathlib import Path 
 from .models import Host, Port, Script, OSGuess
 
-# Globals that will be set by init_engine()
+# -------------------------------------------------------------------
+# Globals and One-Time Guards
+# -------------------------------------------------------------------
 engine = None
 SessionLocal = None
 
+_postgres_initialized = False
+_pg_checked = False
+_pg_available = False
+_engine_initialized = False
+_db_initialized = False
+
+
+# -------------------------------------------------------------------
+# Default DB URL
+# -------------------------------------------------------------------
+def get_default_database_url() -> str:
+    """Select database backend. Env > PostgreSQL > SQLite."""
+    env_url = os.getenv("CYGOR_DB_URL")
+    if env_url:
+        return env_url
+
+    if detect_postgresql():
+        return f"postgresql+asyncpg://cygor:cygorpass@localhost/cygor"
+    return "sqlite+aiosqlite:///cygor.db"
+
+
+# -------------------------------------------------------------------
+# PostgreSQL Detection & Setup
+# -------------------------------------------------------------------
+def detect_postgresql() -> bool:
+    """Detect PostgreSQL installation once per process."""
+    global _pg_checked, _pg_available
+    if _pg_checked:
+        return _pg_available
+
+    try:
+        result = subprocess.run(["psql", "--version"], capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"[✓] PostgreSQL detected: {result.stdout.strip()}")
+            _pg_available = True
+        else:
+            print("[!] PostgreSQL not detected.")
+            _pg_available = False
+    except FileNotFoundError:
+        print("[!] psql binary not found — PostgreSQL not installed.")
+        _pg_available = False
+
+    _pg_checked = True
+    return _pg_available
+
+
+def setup_postgres(user="cygor", password="cygorpass", db_name="cygor", host="localhost") -> str:
+    """Ensure PostgreSQL user/database exist (safe/idempotent)."""
+    global _postgres_initialized
+    if _postgres_initialized:
+        return f"postgresql+asyncpg://{user}:{password}@{host}/{db_name}"
+
+    print(f"[*] Setting up PostgreSQL database '{db_name}' for user '{user}'...")
+
+    create_user_cmd = [
+        "psql", "-U", "postgres", "-c",
+        f"DO $$ BEGIN "
+        f"IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{user}') THEN "
+        f"CREATE ROLE {user} LOGIN PASSWORD '{password}'; "
+        f"END IF; END $$;"
+    ]
+
+    create_db_cmd = [
+        "psql", "-U", "postgres", "-c",
+        f"DO $$ BEGIN "
+        f"IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '{db_name}') THEN "
+        f"CREATE DATABASE {db_name} OWNER {user}; "
+        f"END IF; END $$;"
+    ]
+
+    subprocess.run(["sudo", "-u", "postgres"] + create_user_cmd, check=False)
+    subprocess.run(["sudo", "-u", "postgres"] + create_db_cmd, check=False)
+
+    print(f"[✓] PostgreSQL setup complete for user '{user}' and database '{db_name}'.")
+    _postgres_initialized = True
+    return f"postgresql+asyncpg://{user}:{password}@{host}/{db_name}"
+
+
+# -------------------------------------------------------------------
+# Engine Initialization
+# -------------------------------------------------------------------
 def init_engine(database_url: str, debug: bool = False):
     """
-    Initialize the SQLAlchemy async engine + session factory.
+    Initialize a SQLAlchemy async engine for the current running event loop.
+    If an old engine exists from a different loop, it will be disposed safely.
     """
     global engine, SessionLocal
 
-    # Build proper sqlite+aiosqlite URL if a file path is passed
-    if not database_url.startswith("sqlite+"):
-        db_path = Path(database_url).expanduser()
-        if db_path.is_dir():
-            raise RuntimeError(f"[!] '{db_path}' is a directory, expected a database file path")
-        if not db_path.parent.exists():
-            raise RuntimeError(f"[!] Database directory does not exist: {db_path.parent}")
-        database_url = f"sqlite+aiosqlite:///{db_path}"
+    # Detect and dispose any leftover engine from a previous loop
+    if engine is not None:
+        try:
+            loop = asyncio.get_event_loop()
+            if not loop.is_closed():
+                loop.create_task(engine.dispose())
+            else:
+                import anyio
+                anyio.from_thread.run(engine.dispose)
+        except Exception:
+            pass
 
-    print(f"[*] DB engine initialized: {database_url}")
-
-    # SQLAlchemy echo only when debug
+    # Create a fresh engine attached to this loop
     engine = create_async_engine(
         database_url,
-        echo=debug,          # SQL text
-        echo_pool=debug,     # pool chatter
+        echo=debug,
         pool_pre_ping=True,
+        pool_recycle=300,
+        pool_size=10,
+        max_overflow=20,
         future=True,
     )
 
-    from sqlalchemy.ext.asyncio import AsyncSession
-    from sqlalchemy.orm import sessionmaker
-    SessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-
-    # ---- Quiet noisy loggers unless debug is requested ----
-    level = logging.DEBUG if debug else logging.WARNING
-
-    for name in (
-        "sqlalchemy",          # parent
-        "sqlalchemy.engine",   # SQL emits
-        "sqlalchemy.pool",     # pool events
-        "sqlalchemy.dialects", # dialect chatter
-        "aiosqlite",           # the functools.partial spam
-    ):
-        logging.getLogger(name).setLevel(level)
-
-    # Optional: surgically filter the specific aiosqlite DEBUG spam line
-    class _AioSqliteSpamFilter(logging.Filter):
-        def filter(self, record: logging.LogRecord) -> bool:
-            msg = record.getMessage()
-            return "functools.partial" not in msg
-
-    aiosqlite_logger = logging.getLogger("aiosqlite")
-    aiosqlite_logger.addFilter(_AioSqliteSpamFilter())
-
+    # New sessionmaker bound to this engine
+    SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    print(f"[✓] Engine bound to event loop {id(asyncio.get_running_loop()) if asyncio.get_running_loop().is_running() else 'N/A'}")
     return engine
 
 
+# -------------------------------------------------------------------
+# Database Initialization / Reset / Shutdown
+# -------------------------------------------------------------------
 async def init_db():
-    """Create all tables if they do not exist."""
+    """Create tables if not exist. Must run on FastAPI event loop."""
+    global _db_initialized
+    if _db_initialized:
+        return
     if engine is None:
-        raise RuntimeError("Database engine is not initialized. Call init_engine first.")
+        raise RuntimeError("Engine not initialized — call init_engine() first.")
+
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-    # print("[✓] Database schema ensured.")
+    print("[✓] Database schema ensured.")
+    _db_initialized = True
+
 
 async def reset_db():
-    """Drop and recreate all tables."""
+    """Drop and recreate tables."""
     if engine is None:
-        raise RuntimeError("Database engine is not initialized. Call init_engine first.")
+        raise RuntimeError("Engine not initialized — call init_engine() first.")
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.drop_all)
         await conn.run_sync(SQLModel.metadata.create_all)
     print("[✓] Database reset complete.")
 
-async def get_session():
-    """Get a new async session."""
+
+async def dispose_engine():
+    """Cleanly dispose of engine on shutdown."""
+    global engine
+    if engine:
+        await engine.dispose()
+        engine = None
+        print("[✓] Database connections closed.")
+
+
+# -------------------------------------------------------------------
+# Async Session Factory
+# -------------------------------------------------------------------
+async def get_session()-> AsyncGenerator[AsyncSession, None]:
+    """Yield a new async session (context manager)."""
     if SessionLocal is None:
-        raise RuntimeError("Database session factory is not initialized. Call init_engine first.")
+        raise RuntimeError("Session factory not initialized. Call init_engine first.")
     async with SessionLocal() as session:
         yield session
 
-# ------------------------
-# Utility helpers
-# ------------------------
 
-async def get_or_create_host(
-    session: AsyncSession,
-    address: str,
-    hostname: str | None = None,
-    create_if_missing: bool = True,  # <-- NEW FLAG
-) -> Optional[Host]:
-    """
-    Fetch a host from the database. Optionally create it if not found.
-    """
+# -------------------------------------------------------------------
+# ORM Utility Helpers (unchanged)
+# -------------------------------------------------------------------
+async def get_or_create_host(session: AsyncSession, address: str, hostname: str | None = None,
+                             create_if_missing: bool = True) -> Optional[Host]:
     res = await session.execute(select(Host).where(Host.address == address))
     host = res.scalar_one_or_none()
     if host:
@@ -111,7 +192,6 @@ async def get_or_create_host(
         return host
 
     if not create_if_missing:
-        # Safely return None without creating new host rows
         return None
 
     host = Host(address=address, hostname=hostname)
@@ -120,8 +200,9 @@ async def get_or_create_host(
     return host
 
 
-async def get_or_create_port(session: AsyncSession, host: Host, port: int, service: str | None = None,
-                             protocol: str | None = None, banner: str | None = None) -> Port:
+async def get_or_create_port(session: AsyncSession, host: Host, port: int,
+                             service: str | None = None, protocol: str | None = None,
+                             banner: str | None = None) -> Port:
     res = await session.execute(select(Port).where(Port.host_id == host.id, Port.port == port))
     p = res.scalar_one_or_none()
     if p:
@@ -135,27 +216,18 @@ async def get_or_create_port(session: AsyncSession, host: Host, port: int, servi
         if changed:
             await session.flush()
         return p
+
     p = Port(host_id=host.id, port=port, service=service, protocol=protocol, banner=banner)
     session.add(p)
     await session.flush()
     return p
 
-async def get_or_create_script(
-    session: AsyncSession,
-    host: Host,
-    port: Port | None,
-    name: str,
-    output: str,
-    url: str | None = None,
-    status_code: int | None = None,
-    screenshot_file: str | None = None,
-    screenshot_failed: bool | None = None,
-) -> Script:
-    q = select(Script).where(
-        Script.host_id == host.id,
-        Script.name == name,
-        Script.output == output
-    )
+
+async def get_or_create_script(session: AsyncSession, host: Host, port: Port | None,
+                               name: str, output: str, url: str | None = None,
+                               status_code: int | None = None, screenshot_file: str | None = None,
+                               screenshot_failed: bool | None = None) -> Script:
+    q = select(Script).where(Script.host_id == host.id, Script.name == name, Script.output == output)
     if port:
         q = q.where(Script.port_id == port.id)
     else:
@@ -186,48 +258,28 @@ async def get_or_create_script(
         url=url,
         status_code=status_code,
         screenshot_file=screenshot_file,
-        screenshot_failed=screenshot_failed
+        screenshot_failed=screenshot_failed,
     )
     session.add(s)
     await session.flush()
     return s
 
-async def get_or_create_osguess(
-    session: AsyncSession,
-    host: Host,
-    name: str,
-    accuracy: int = 0,
-    type: Optional[str] = None,
-    vendor: Optional[str] = None,
-    family: Optional[str] = None,
-    generation: Optional[str] = None,
-    cpe: Optional[str] = None,
-) -> OSGuess:
-    """
-    Ensure each host only has a single OSGuess.
-    Updates existing guess if new accuracy is higher.
-    """
-    # Fetch the existing OS guess for this host (if any)
+
+async def get_or_create_osguess(session: AsyncSession, host: Host, name: str,
+                                accuracy: int = 0, type: Optional[str] = None,
+                                vendor: Optional[str] = None, family: Optional[str] = None,
+                                generation: Optional[str] = None, cpe: Optional[str] = None) -> OSGuess:
     res = await session.execute(select(OSGuess).where(OSGuess.host_id == host.id))
     existing = res.scalar_one_or_none()
 
-    # Case 1: no existing record → create it
     if not existing:
-        rec = OSGuess(
-            host_id=host.id,
-            name=name,
-            accuracy=accuracy or 0,
-            type=type,
-            vendor=vendor,
-            family=family,
-            generation=generation,
-            cpe=cpe,
-        )
+        rec = OSGuess(host_id=host.id, name=name, accuracy=accuracy or 0,
+                      type=type, vendor=vendor, family=family,
+                      generation=generation, cpe=cpe)
         session.add(rec)
         await session.flush()
         return rec
 
-    # Case 2: existing record → update only if accuracy is higher
     if (accuracy or 0) > (existing.accuracy or 0):
         existing.name = name
         existing.accuracy = accuracy or 0
@@ -239,4 +291,3 @@ async def get_or_create_osguess(
         await session.flush()
 
     return existing
-

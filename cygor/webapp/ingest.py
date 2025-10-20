@@ -5,6 +5,7 @@ from .models import Host
 from libnmap.parser import NmapParser
 import xml.etree.ElementTree as ET
 import json
+import os
 
 from . import db
 from .db import (
@@ -13,6 +14,31 @@ from .db import (
     get_or_create_script,
     get_or_create_osguess,
 )
+
+# ---------------------------------------------------
+# Database URL Auto-Detector
+# ---------------------------------------------------
+def get_default_database_url(fallback_sqlite: str = "results/cygor.db") -> str:
+    """
+    Determine which database backend to use.
+    Priority:
+      1. CYGOR_DB_URL (exported by webctl)
+      2. PostgreSQL (if pg_isready is reachable)
+      3. Fallback to local SQLite file
+    """
+    env_url = os.getenv("CYGOR_DB_URL")
+    if env_url:
+        return env_url
+
+    try:
+        import subprocess
+        subprocess.run(["pg_isready", "-q"], check=True)
+        return "postgresql+asyncpg://cygor:cygorpass@localhost/cygor"
+    except Exception:
+        pass
+
+    return f"sqlite+aiosqlite:///{fallback_sqlite}"
+
 
 # ---------------------------------------------------
 # Logging Helper
@@ -142,7 +168,7 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
             hostname = host.hostnames[0] if getattr(host, "hostnames", None) else None
             db_host = await get_or_create_host(session, host.address, hostname=hostname)
 
-            # --- OS Guesses (top match only) ---
+            # --- OS Guesses ---
             try:
                 if getattr(host, "os", None) and getattr(host.os, "osmatches", []):
                     top_guess = sorted(
@@ -150,7 +176,6 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
                         key=lambda g: int(getattr(g, "accuracy", 0)),
                         reverse=True,
                     )[0]
-
                     guess_name = getattr(top_guess, "name", None)
                     accuracy = getattr(top_guess, "accuracy", 0)
                     osclass = top_guess.osclasses[0] if top_guess.osclasses else None
@@ -341,7 +366,7 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
 
 
 # ---------------------------------------------------
-# CLI entrypoint
+# CLI Entrypoint
 # ---------------------------------------------------
 if __name__ == "__main__":
     import argparse, asyncio
@@ -349,16 +374,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Manually ingest a results directory")
     parser.add_argument("directory", type=str, help="Path to results directory")
     parser.add_argument("--db", type=str, default="results/cygor.db",
-                        help="SQLite database path (default: results/cygor.db)")
+                        help="Database path or URL (auto-detects PostgreSQL if available)")
     parser.add_argument("-v", "--verbose", action="count", default=0,
                         help="Increase verbosity (-v shows more, -vv shows debug details)")
     args = parser.parse_args()
 
-    db_path = Path(args.db).expanduser().resolve()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    db_url = f"sqlite+aiosqlite:///{db_path}"
+    db_url = get_default_database_url(args.db)
+    print(f"[*] Using database: {db_url}")
 
-    print(f"[*] Using database {db_path}")
     db.init_engine(db_url, debug=True)
 
     async def _main():

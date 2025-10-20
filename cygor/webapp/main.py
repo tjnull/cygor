@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-import os, argparse, asyncio, pkgutil, shutil, json, re, gzip
+import os, argparse, asyncio, pkgutil, shutil, json, re, gzip, uvicorn
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from fastapi import FastAPI, Request, Depends, Query
@@ -410,12 +410,17 @@ def gather_scan_times(results_dir: str):
     return scans
 
 
+
+
 # ---------------- Lifespan ----------------
+@asynccontextmanager
 async def lifespan(app: FastAPI):
     global templates
-    base_dir = Path(__file__).resolve().parent  # cygor/webapp
+    base_dir = Path(__file__).resolve().parent
     templates_dir = base_dir / "templates"
     static_dir = base_dir / "static"
+
+    # Static
     if static_dir.is_dir():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     else:
@@ -423,43 +428,83 @@ async def lifespan(app: FastAPI):
 
     templates = Jinja2Templates(directory=str(templates_dir))
 
-    # Initialize database
-    await db.init_db()
+    # -------------------------
+    # Database Initialization
+    # -------------------------
+    try:
+        db_url = os.environ.get("CYGOR_DB_URL") or db.get_default_database_url()
 
-    # Mount Lockon screenshots after RESULTS_DIR is known
+        # Force new engine tied to FastAPI's running loop
+        db.init_engine(db_url, debug=(os.environ.get("CYGOR_VERBOSE", "0") > "1"))
+
+        # Run migrations / create schema within this loop
+        await db.init_db()
+        print("[✓] Database initialized and schema verified.")
+    except Exception as e:
+        print(f"[!] Database initialization error: {e}")
+
+    # Lockon screenshots mount
     lockon_dir = Path(settings.RESULTS_DIR) / "cygor-enumeration-modules" / "lockon" / "screenshots"
     if lockon_dir.exists():
-        app.mount(
-            "/modules/lockon/screenshots",
-            StaticFiles(directory=str(lockon_dir)),
-            name="lockon_screenshots"
-        )
+        app.mount("/modules/lockon/screenshots", StaticFiles(directory=str(lockon_dir)), name="lockon_screenshots")
         print(f"[*] Mounting Lockon screenshots from: {lockon_dir}")
     else:
         print(f"[!] Lockon screenshots directory not found: {lockon_dir}")
 
-    # ---- Dynamic module discovery and route registration ----
+    # -------------------------
+    # Module Discovery
+    # -------------------------
     global DISCOVERED_MODULES
     try:
-        from importlib.resources import files
         print("[DEBUG] Module loader: using default modules path from module_loader")
         DISCOVERED_MODULES = discover_modules()
         _register_module_routes(app, templates_dir, settings.RESULTS_DIR)
+
         print(f"[✓] Registered {len(DISCOVERED_MODULES)} dynamic module routes: {[m.slug for m in DISCOVERED_MODULES]}")
     except Exception as e:
         print(f"[!] Error during module discovery: {e}")
 
-    # Background preload (if applicable)
+    # -------------------------
+    # Background Ingestion
+    # -------------------------
     load_dir = os.environ.get("CYGOR_LOAD_DIR")
+    verbose = int(os.environ.get("CYGOR_VERBOSE", "0"))
     if load_dir:
-        print(f"[*] Background preload from {load_dir} ...")
-        async def _bg():
-            async with db.SessionLocal() as session:
-                await ingest_directory(Path(load_dir), session, dedupe=True)
-            print("[✓] Background preload complete.")
-        asyncio.create_task(_bg())
+        print(f"[*] Background preload from {load_dir} scheduled...")
 
-    yield
+        async def _preload():
+            await asyncio.sleep(1.0)
+            try:
+                async with db.SessionLocal() as session:
+                    count = await ingest_directory(Path(load_dir), session, dedupe=True, verbose=verbose)
+                    await session.commit()
+                print(f"[✓] Finished ingesting {count} file(s) from {load_dir}")
+            except Exception as e:
+                print(f"[!] Background preload error: {e}")
+
+        @app.on_event("startup")
+        async def _kickoff_preload():
+            asyncio.create_task(_preload())
+
+    # -------------------------
+    # Yield to FastAPI
+    # -------------------------
+    try:
+        yield
+    finally:
+        # -------------------------
+        #  Clean shutdown
+        # -------------------------
+        try:
+            if db.engine:
+                print("[*] Disposing database engine...")
+                await db.engine.dispose()
+                print("[✓] Database engine disposed cleanly.")
+        except Exception as e:
+            print(f"[!] Error during engine disposal: {e}")
+
+
+
 
 # ---------------- FastAPI App ----------------
 app = FastAPI(lifespan=lifespan)
@@ -1043,6 +1088,7 @@ async def search(request: Request, q: str = Query("", description="Search query"
 
 # -------- Entrypoint --------
 def exec_argv(argv):
+    import uvicorn
     parser = argparse.ArgumentParser(description="Run the Cygor Web UI")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
@@ -1052,56 +1098,36 @@ def exec_argv(argv):
                         help="Increase verbosity (-v shows more, -vv shows debug details)")
     args = parser.parse_args(argv)
 
+    # Resolve results dir early (for banner + env)
     load_path = Path(args.load_dir or settings.RESULTS_DIR).expanduser().resolve()
     if not load_path.exists():
         print(f"[!] Specified results directory does not exist: {load_path}")
         return
 
-    db_path = load_path / "cygor.db"
+    # Persist into env so the FastAPI lifespan can read them
     settings.RESULTS_DIR = str(load_path)
     os.environ["CYGOR_LOAD_DIR"] = settings.RESULTS_DIR
-
-    print(f"[*] Initializing Cygor Web UI...")
-    print(f"[*] Results directory: {load_path}")
-    print(f"[*] Database file:     {db_path}")
-
-    # init DB engine + schema
-    db.init_engine(str(db_path), debug=False)  # Disable verbose DB logging
-    asyncio.run(db.init_db())   # <-- ensure schema exists
-
+    os.environ["CYGOR_VERBOSE"] = str(args.verbose)
     if args.reset_db:
-        print("[*] Resetting database...")
-        asyncio.run(db.reset_db())
-        print("[✓] Database reset complete.")
-        return
+        os.environ["CYGOR_RESET_DB"] = "1"
 
-    async def _initial_ingest(verbose: int):
-        async with db.SessionLocal() as session:
-            count = await ingest_directory(load_path, session, dedupe=True, verbose=verbose)
-            await session.commit()  # <-- make sure data is written
-            return count
+    # Decide which DB we’ll use, but DO NOT create/connect here.
+    database_url = db.get_default_database_url()
+    os.environ["CYGOR_DB_URL"] = database_url  # lifespan() will init the engine with this
 
-    count = asyncio.run(_initial_ingest(args.verbose))
-    if args.verbose:
-        print(f"[✓] Finished ingesting {count} file(s) from {load_path}")
-    else:
-        print(f"[✓] Ingested {count} result file(s) from {load_path}")
+    # Friendly banner
+    print("[*] Initializing Cygor Web UI...")
+    print(f"[*] Results directory: {load_path}")
+    print(f"[*] Using database: {database_url}")
 
-    # Print banner last
-    print("------------------------------------------------------------")
-    print(f"Cygor Web UI is running at: http://{args.host}:{args.port}")
-    print("Press CTRL+C to stop")
-    print("------------------------------------------------------------")
-
-    import uvicorn
+    # Run uvicorn — engine/schema are handled inside FastAPI lifespan on THIS loop.
     uvicorn.run(
         "cygor.webapp.main:app",
         host=args.host,
         port=args.port,
         reload=False,
-        log_level="debug" if args.verbose > 1 else "info"
+        log_level="debug" if args.verbose > 1 else "info",
     )
-
 
 
 if __name__ == "__main__":

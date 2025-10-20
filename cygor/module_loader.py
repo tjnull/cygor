@@ -14,7 +14,7 @@ if not MODULES_DIR.exists():
     alt = Path(__file__).resolve().parent.parent / "modules"
     if alt.exists():
         MODULES_DIR = alt
-print(f"[DEBUG] Module loader scanning directory: {MODULES_DIR}")
+# print(f"[DEBUG] Module loader scanning directory: {MODULES_DIR}")
 
 
 # ----------------------------------------------------------------------
@@ -92,7 +92,7 @@ def discover_modules() -> List[ModuleSpec]:
 
         # --- Skip hidden/internal/template modules ---
         if info.get("hidden") or f.stem.startswith("_") or "template" in f.stem.lower():
-            print(f"[-] Skipping hidden/internal module: {f.stem}")
+            # print(f"[-] Skipping hidden/internal module: {f.stem}")
             continue
 
         # --- Build clean spec (exclude module reference to avoid deepcopy errors) ---
