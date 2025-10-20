@@ -1,12 +1,13 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-import os, argparse, asyncio, pkgutil, shutil, json, re, gzip, uvicorn, sys
+import os, argparse, asyncio, pkgutil, shutil, json, re, gzip, uvicorn, sys, psycopg, subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from fastapi import FastAPI, Request, Depends, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from psycopg.rows import dict_row
 from sqlalchemy import select, func, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -20,8 +21,6 @@ from ..module_loader import discover_modules, resolve_legacy_context
 from .ingest import ingest_directory
 from .config import settings
 
-if sys.version_info >= (3, 13):
-    print("[!] Running under Python 3.13 — asyncpg shutdown noise may appear; safely ignored.")
 
 templates = None  # will be initialized in lifespan
 DISCOVERED_MODULES = []  # filled during startup
@@ -426,6 +425,7 @@ def _ignore_event_loop_closed(loop, context):
 asyncio.get_event_loop().set_exception_handler(_ignore_event_loop_closed)
 
 
+
 # ---------------- Lifespan ----------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -479,29 +479,25 @@ async def lifespan(app: FastAPI):
         print(f"[!] Error during module discovery: {e}")
     
     # -------------------------
-    # Ingestion (runs on FastAPI's loop at startup)
+    # Ingestion (DO IT NOW, before yield)
     # -------------------------
     load_dir = os.environ.get("CYGOR_LOAD_DIR")
     verbose = int(os.environ.get("CYGOR_VERBOSE", "0"))
 
     if load_dir:
         print(f"[*] Preloading results from {load_dir} ...")
-
-        @app.on_event("startup")
-        async def preload_results():
-            try:
-                async with db.SessionLocal() as session:
-                    count = await ingest_directory(Path(load_dir), session, dedupe=True, verbose=verbose)
-                    await session.commit()
-                print(f"[✓] Ingested {count} result file(s) from {load_dir}")
-            except Exception as e:
-                print(f"[!] Ingestion error: {e}")
+        try:
+            async with db.SessionLocal() as session:
+                count = await ingest_directory(Path(load_dir), session, dedupe=True, verbose=verbose)
+                await session.commit()
+            print(f"[✓] Ingested {count} result file(s) from {load_dir}")
+        except Exception as e:
+            print(f"[!] Ingestion error: {e}")
 
 
     # -------------------------
     # Yield to FastAPI
     # -------------------------
-    # Attach event-loop-close handler for Python 3.13 noise
     try:
         yield
     finally:
@@ -511,7 +507,6 @@ async def lifespan(app: FastAPI):
         if getattr(db, "engine", None):
             print("[*] Disposing database engine...")
             try:
-                # attempt graceful dispose, but guard against closed loop
                 loop = asyncio.get_running_loop()
                 if loop.is_closed():
                     print("[!] Event loop already closed — skipping engine dispose.")
@@ -519,12 +514,155 @@ async def lifespan(app: FastAPI):
                     await db.engine.dispose()
                     print("[✓] Database engine disposed cleanly.")
             except (RuntimeError, Exception) as e:
-                # swallow known asyncpg loop-closed race
                 if "Event loop is closed" in str(e) or "attached to a different loop" in str(e):
-                    print("[!] Ignored asyncpg loop-closed cleanup noise.")
+                    print("[!] Ignored psycopg loop-closed cleanup noise.")
                 else:
                     print(f"[!] Unhandled dispose error: {e}")
 
+        # -------------------------
+        # PostgreSQL Cleanup (psycopg_async)
+        # -------------------------
+        try:
+            await cleanup_postgresql()
+        except Exception as e:
+            print(f"[!] PostgreSQL cleanup failed: {e}")
+
+
+async def cleanup_postgresql():
+    """
+    Fully cleanup PostgreSQL database and role after Cygor Web shutdown.
+
+    Behavior:
+      - Only runs if --cleanup-db or CYGOR_CLEANUP_DB=1 is set.
+      - Prompts user for confirmation unless --yes or CYGOR_YES=1.
+      - Can escalate to sudo (-u postgres) for privileged cleanup.
+    """
+    db_url = os.environ.get("CYGOR_DB_URL") or ""
+    if not db_url.startswith("postgresql"):
+        return  # Skip non-Postgres backends
+
+    # respect --cleanup-db flag or env var
+    if os.environ.get("CYGOR_CLEANUP_DB") != "1":
+        print("[*] Skipping PostgreSQL cleanup (use --cleanup-db to enable).")
+        return
+
+    if os.environ.get("CYGOR_PERSIST_DB") == "1":
+        print("[*] Persistent database mode enabled — skipping cleanup.")
+        return
+
+    pg_db   = os.getenv("PGDATABASE", "cygor")
+    pg_user = os.getenv("PGUSER", "cygor_user")
+
+    conn_user = os.getenv("PGADMIN_USER", os.getenv("PGUSER", "cygor"))
+    conn_pass = os.getenv("PGADMIN_PASS", os.getenv("PGPASSWORD", "cygorpass"))
+    pg_host   = os.getenv("PGHOST", "localhost")
+    pg_port   = int(os.getenv("PGPORT", "5432"))
+
+    # -------------------------
+    # Ask for confirmation
+    # -------------------------
+    if os.getenv("CYGOR_YES") != "1":
+        try:
+            answer = input(f"[?] Do you want to delete PostgreSQL database '{pg_db}' "
+                           f"and user '{pg_user}' on shutdown? [y/N]: ").strip().lower()
+            if answer not in ("y", "yes"):
+                print("[*] Cleanup aborted by user — keeping PostgreSQL data.")
+                return
+        except EOFError:
+            print("[*] Non-interactive environment; skipping cleanup.")
+            return
+
+    print(f"[*] Cleaning up PostgreSQL database '{pg_db}' and user '{pg_user}'...")
+
+    db_dropped = False
+    role_dropped = False
+    need_sudo_cleanup = False
+
+    # -------------------------
+    # Step 1: psycopg best-effort cleanup
+    # -------------------------
+    try:
+        conninfo = f"postgresql://{conn_user}:{conn_pass}@{pg_host}:{pg_port}/postgres"
+        async with await psycopg.AsyncConnection.connect(conninfo, autocommit=True) as conn:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute("SELECT rolsuper FROM pg_roles WHERE rolname = current_user;")
+                row = await cur.fetchone()
+                is_superuser = bool(row and row["rolsuper"])
+
+                if is_superuser:
+                    print("[*] Running as superuser — performing full cleanup.")
+                    await cur.execute("""
+                        SELECT pg_terminate_backend(pid)
+                        FROM pg_stat_activity
+                        WHERE datname = %s AND pid <> pg_backend_pid();
+                    """, (pg_db,))
+                    await cur.execute(f"DROP DATABASE IF EXISTS {pg_db};")
+                    db_dropped = True
+                    await cur.execute(f"DROP ROLE IF EXISTS {pg_user};")
+                    role_dropped = True
+                    print("[✓] PostgreSQL cleanup completed via superuser.")
+                else:
+                    print("[*] Current user is not a superuser — limited cleanup mode.")
+                    try:
+                        await cur.execute(f"DROP DATABASE IF EXISTS {pg_db};")
+                        db_dropped = True
+                        print(f"[✓] Dropped database '{pg_db}'.")
+                    except Exception as e:
+                        print(f"[!] Cannot drop database: {e}")
+                        need_sudo_cleanup = True
+
+                    try:
+                        await cur.execute(f"DROP ROLE IF EXISTS {pg_user};")
+                        role_dropped = True
+                        print(f"[✓] Dropped role '{pg_user}'.")
+                    except Exception as e:
+                        print(f"[!] Cannot drop role: {e}")
+                        need_sudo_cleanup = True
+
+    except Exception as e:
+        print(f"[!] psycopg cleanup path error: {e}")
+        need_sudo_cleanup = True
+
+    # -------------------------
+    # Step 2: sudo fallback
+    # -------------------------
+    if (not db_dropped or not role_dropped) and shutil.which("sudo"):
+        print("[*] Attempting privileged cleanup via sudo (postgres user)...")
+
+        def run_sudo_sql(sql: str):
+            return subprocess.run(
+                ["sudo", "-u", "postgres", "psql", "-tAc", sql],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+
+        try:
+            run_sudo_sql(f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                         f"WHERE datname='{pg_db}' AND pid <> pg_backend_pid();")
+            run_sudo_sql(f"DROP DATABASE IF EXISTS {pg_db};")
+            db_dropped = True
+
+            run_sudo_sql(f"REASSIGN OWNED BY {pg_user} TO postgres;")
+            run_sudo_sql(f"DROP OWNED BY {pg_user};")
+            run_sudo_sql(f"DROP ROLE IF EXISTS {pg_user};")
+            role_dropped = True
+
+            print("[✓] PostgreSQL cleanup completed via sudo.")
+        except Exception as e:
+            print(f"[!] Sudo cleanup failed: {e}")
+
+    # -------------------------
+    # Final summary
+    # -------------------------
+    if db_dropped and role_dropped:
+        print(f"[✓] PostgreSQL database '{pg_db}' and role '{pg_user}' fully removed.")
+    elif db_dropped and not role_dropped:
+        print(f"[i] Database '{pg_db}' removed, but role '{pg_user}' kept (no privileges).")
+    elif not db_dropped and role_dropped:
+        print(f"[i] Role '{pg_user}' removed, but database '{pg_db}' kept (locked/in use).")
+    else:
+        print(f"[!] Cleanup incomplete — manual removal may be required.")
 
 
 
@@ -1137,8 +1275,9 @@ def exec_argv(argv):
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--reset-db", action="store_true")
     parser.add_argument("--load-dir", type=str, help="Results directory or database file to load")
-    parser.add_argument("-v", "--verbose", action="count", default=0,
-                        help="Increase verbosity (-v shows more, -vv shows debug details)")
+    parser.add_argument("--cleanup-db",action="store_true",help="Drop the PostgreSQL database and user after shutdown (default: keep data)")
+    parser.add_argument("-v", "--verbose", action="count", default=0,help="Increase verbosity (-v shows more, -vv shows debug details)")
+    parser.add_argument("-y", "--yes",action="store_true",help="Automatic yes to cleanup prompts (for non-interactive or CI mode)")
     args = parser.parse_args(argv)
 
     # Resolve results dir early (for banner + env)
@@ -1156,7 +1295,15 @@ def exec_argv(argv):
 
     # Decide which DB we’ll use, but DO NOT create/connect here.
     database_url = db.get_default_database_url()
+    if args.cleanup_db:
+        print("[!] Database cleanup ENABLED — database and role will be deleted on exit.")
+    else:
+        print("[*] Database cleanup disabled — data will persist after shutdown.")
+    # export CLI options to env
+    os.environ["CYGOR_CLEANUP_DB"] = "1" if args.cleanup_db else "0"
+    os.environ["CYGOR_YES"] = "1" if args.yes else "0"
     os.environ["CYGOR_DB_URL"] = database_url  # lifespan() will init the engine with this
+    
 
     # Friendly banner
     print("[*] Initializing Cygor Web UI...")

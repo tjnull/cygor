@@ -141,6 +141,7 @@ def start(host: str, port: int, extra_args: list[str], load_dir: Optional[str], 
     return 0
 
 
+
 def stop() -> int:
     pid = _read_pid()
     if not pid:
@@ -183,13 +184,16 @@ def exec_argv(argv: list[str]) -> None:
     p_start.add_argument("-p", "--port", type=int, default=8000)
     p_start.add_argument("--reset-db", action="store_true", help="Drop and recreate the database, then exit")
     p_start.add_argument("--load-dir", type=str, help="Preload results directory in the background")
-    p_start.add_argument("-v", "--verbose", action="count", default=0,
-                         help="Increase verbosity (-v shows more, -vv shows debug details)")
+    p_start.add_argument("--cleanup-db", action="store_true",help="Drop the PostgreSQL database and user after shutdown (default: keep data)")
+    p_start.add_argument("-y", "--yes", action="store_true",help="Automatic yes to cleanup prompts (for non-interactive mode)")
+    p_start.add_argument("--use-sudo-cleanup", action="store_true",help="Use sudo for privileged PostgreSQL cleanup (requires NOPASSWD psql access)")
+    p_start.add_argument("-v", "--verbose", action="count", default=0,help="Increase verbosity (-v shows more, -vv shows debug details)")
 
     # --- stop / status ---
     sub.add_parser("stop", help="Stop the web server")
     sub.add_parser("status", help="Show server status")
 
+    # Auto-add "start" if the user just typed options (e.g. `cygor web -p 8080`)
     if argv and not argv[0] in {"start", "stop", "status"}:
         argv = ["start", *argv]
 
@@ -197,13 +201,31 @@ def exec_argv(argv: list[str]) -> None:
 
     if args.cmd == "start":
         passthrough = []
+
+        # Verbosity
         if args.verbose:
             passthrough.extend(["-" + "v" * args.verbose])
+
+        # Database options
+        if args.reset_db:
+            passthrough.append("--reset-db")
+        if args.cleanup_db:
+            passthrough.append("--cleanup-db")
+        if args.yes:
+            passthrough.append("--yes")
+        if args.use_sudo_cleanup:
+            os.environ["CYGOR_USE_SUDO_CLEANUP"] = "1"
+
         passthrough.extend(unknown)
+
         sys.exit(start(args.host, args.port, passthrough, args.load_dir, args.reset_db, args.verbose))
+
     elif args.cmd == "stop":
         sys.exit(stop())
+
     elif args.cmd == "status":
         sys.exit(status())
+
     else:
         parser.print_help()
+

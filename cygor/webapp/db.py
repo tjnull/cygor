@@ -69,7 +69,6 @@ def setup_postgres(user="cygor", password="cygorpass", db_name="cygor", host="lo
     if _postgres_initialized:
         return f"postgresql+psycopg_async://{user}:{password}@{host}/{db_name}"
 
-
     print(f"[*] Setting up PostgreSQL database '{db_name}' for user '{user}'...")
 
     # Ensure we can run psql as postgres
@@ -78,30 +77,31 @@ def setup_postgres(user="cygor", password="cygorpass", db_name="cygor", host="lo
     # --- Create user if missing ---
     check_user = subprocess.run(
         base_cmd + ["psql", "-tAc", f"SELECT 1 FROM pg_roles WHERE rolname='{user}'"],
-        capture_output=True, text=True
+        capture_output=True, text=True, cwd="/"          # ← added
     )
     if not check_user.stdout.strip():
         subprocess.run(
             base_cmd + ["psql", "-c", f"CREATE ROLE {user} LOGIN PASSWORD '{password}';"],
-            check=False
+            check=False, cwd="/"                         # ← added
         )
         print(f"[+] Created PostgreSQL role '{user}'")
 
     # --- Create database if missing ---
     check_db = subprocess.run(
         base_cmd + ["psql", "-tAc", f"SELECT 1 FROM pg_database WHERE datname='{db_name}'"],
-        capture_output=True, text=True
+        capture_output=True, text=True, cwd="/"          # ← added
     )
     if not check_db.stdout.strip():
         subprocess.run(
             base_cmd + ["createdb", "-O", user, db_name],
-            check=False
+            check=False, cwd="/"                         # ← added
         )
         print(f"[+] Created PostgreSQL database '{db_name}' owned by '{user}'")
 
     print(f"[✓] PostgreSQL setup complete for user '{user}' and database '{db_name}'.")
     _postgres_initialized = True
     return f"postgresql+psycopg_async://{user}:{password}@{host}/{db_name}"
+
 
 
 
