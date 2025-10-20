@@ -39,12 +39,12 @@ dependencies = [
   "openpyxl>=3.1",
 
   # NFS Client
-  #"pyNfsClient @ git+https://github.com/Pennyw0rth/NfsClient.git@master",
+  "pyNfsClient @ git+https://github.com/Pennyw0rth/NfsClient.git@master",
 ]
 
 [project.optional-dependencies]
 postgres = [
-  asyncpg = ">=0.29.0,<0.30.0",
+  "asyncpg>=0.29.0",
   "psycopg[binary,pool]>=3.2.1",
 ]
 sqlite = [

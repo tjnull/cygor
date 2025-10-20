@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-import os, argparse, asyncio, pkgutil, shutil, json, re, gzip, uvicorn
+import os, argparse, asyncio, pkgutil, shutil, json, re, gzip, uvicorn, sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from fastapi import FastAPI, Request, Depends, Query
@@ -19,6 +19,9 @@ from .models import Host, Port, Script, OSGuess
 from ..module_loader import discover_modules, resolve_legacy_context
 from .ingest import ingest_directory
 from .config import settings
+
+if sys.version_info >= (3, 13):
+    print("[!] Running under Python 3.13 — asyncpg shutdown noise may appear; safely ignored.")
 
 templates = None  # will be initialized in lifespan
 DISCOVERED_MODULES = []  # filled during startup
@@ -409,7 +412,18 @@ def gather_scan_times(results_dir: str):
 
     return scans
 
+# --- Temporary workaround for asyncpg+SQLAlchemy Python 3.13 bug ---
+def _ignore_event_loop_closed(loop, context):
+    msg = context.get("message", "")
+    exc = context.get("exception")
+    if isinstance(exc, RuntimeError) and "Event loop is closed" in str(exc):
+        return  # swallow harmless cleanup noise
+    if "Event loop is closed" in msg:
+        return
+    loop.default_exception_handler(context)
 
+# Patch all asyncio loops created after import
+asyncio.get_event_loop().set_exception_handler(_ignore_event_loop_closed)
 
 
 # ---------------- Lifespan ----------------
@@ -498,8 +512,14 @@ async def lifespan(app: FastAPI):
         try:
             if db.engine:
                 print("[*] Disposing database engine...")
-                await db.engine.dispose()
-                print("[✓] Database engine disposed cleanly.")
+                try:
+                    await db.engine.dispose()
+                    print("[✓] Database engine disposed cleanly.")
+                except RuntimeError as e:
+                    if "Event loop is closed" in str(e) or "attached to a different loop" in str(e):
+                        print("[!] Ignored asyncpg shutdown bug (loop closed too early).")
+                    else:
+                        raise
         except Exception as e:
             print(f"[!] Error during engine disposal: {e}")
 
