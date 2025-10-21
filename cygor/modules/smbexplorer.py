@@ -332,8 +332,34 @@ def smbexplorer(input_file, output_dir=None, target=None, smb_output_format="txt
     ntlm_hash = module_command.get('ntlm-hash') or module_command.get('ntlm_hash') or module_command.get('hash')
     use_kerberos = module_command.get('use_kerberos', False)
 
-    if output_dir == "":
-        output_dir = f"results/cygor-enumeration-modules/smbexplorer/"
+    # Resolve output directory with workspace awareness
+    env_ws = os.environ.get("CYGOR_RESULTS_DIR")
+
+    # 1) CLI explicit path (highest priority)
+    if output_dir and output_dir not in ("", None):
+        out_dir = Path(output_dir)
+
+    # 2) User passed -o with no argument (timestamped folder inside workspace or results/)
+    elif output_dir == "":
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if env_ws:
+            out_dir = Path(env_ws) / "cygor-enumeration-modules" / "smbexplorer" / ts
+        else:
+            out_dir = Path("results") / "cygor-enumeration-modules" / "smbexplorer" / ts
+
+    # 3) Environment variable workspace fallback
+    elif env_ws:
+        out_dir = Path(env_ws) / "cygor-enumeration-modules" / "smbexplorer"
+
+    # 4) Final fallback (old default)
+    else:
+        out_dir = Path("results") / "cygor-enumeration-modules" / "smbexplorer"
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = str(out_dir)
+    print(Fore.CYAN + f"[*] Output directory: {out_dir}" + Style.RESET_ALL)
+
+
 
     ips = []
     if target:

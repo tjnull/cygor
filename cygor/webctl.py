@@ -107,38 +107,69 @@ async def initialize_database(database_url: Optional[str] = None, reset: bool = 
 # -----------------------------
 #  Web Server Lifecycle
 # -----------------------------
-def start(host: str, port: int, extra_args: list[str], load_dir: Optional[str], reset_db: bool, verbose: int) -> int:
+def start(host: str, port: int, extra_args: list[str], load_dir: Optional[str],
+          reset_db: bool, verbose: int) -> int:
     """
-    Start the web server in the foreground with logs attached.
+    Start the web server in the foreground with PostgreSQL as the primary backend.
     Blocks until stopped with Ctrl+C.
     """
     global PID_FILE, LOG_FILE
-    base_path = Path(load_dir) if load_dir else Path("results")
+
+    # Ensure load-dir exists for ingest, but DB will be PostgreSQL
+    base_path = Path(load_dir or "results").resolve()
     base_path.mkdir(parents=True, exist_ok=True)
     PID_FILE = base_path / "cygor-web.pid"
     LOG_FILE = base_path / "cygor-web.log"
 
     print(f"[*] Starting Cygor Web on {host}:{port}")
+    print(f"[*] Results directory: {base_path}")
 
-    # --- Database setup before server ---
+    # --- Always use PostgreSQL ---
+    from cygor.webapp import db
     try:
-        asyncio.run(initialize_database(reset=reset_db, verbose=verbose > 1))
+        print("[*] Checking PostgreSQL availability...")
+        if not detect_postgresql():
+            print(f"[!] PostgreSQL not detected or psql unavailable.")
+            return 1
+
+        # Initialize engine (psycopg-based)
+        db_url = db.setup_postgres(user="cygor", password="cygorpass",
+                                   db_name="cygor", host="localhost")
+        print(f"[*] Using database: {db_url}")
+        db.init_engine(db_url, debug=verbose > 1)
+
+        import asyncio
+        if reset_db:
+            print("[!] Resetting PostgreSQL schema (drop + recreate)...")
+            asyncio.run(db.reset_db())
+        else:
+            asyncio.run(db.init_db())
+
     except Exception as e:
         print(f"[!] Database initialization failed: {e}")
         return 1
 
-    # --- Launch Web Server ---
+    # --- Launch the web server ---
     from cygor.webapp import main as web_main
-    argv = ["--host", host, "--port", str(port)]
+    # Normalize and sanitize args before passing to FastAPI entrypoint
+    argv = [
+        "--host", str(host),
+        "--port", str(port),
+    ]
     if load_dir:
         argv += ["--load-dir", str(load_dir)]
-    argv.extend(extra_args)
+
+    # Strip out short -H / -p if they were passed; they confuse webapp.main
+    argv.extend(a for a in extra_args if a not in ("-H", "-p"))
+
 
     try:
         web_main.exec_argv(argv)
     except KeyboardInterrupt:
         print("\n[!] Cygor Web stopped by user")
+
     return 0
+
 
 
 
@@ -184,29 +215,35 @@ def exec_argv(argv: list[str]) -> None:
     p_start.add_argument("-p", "--port", type=int, default=8000)
     p_start.add_argument("--reset-db", action="store_true", help="Drop and recreate the database, then exit")
     p_start.add_argument("--load-dir", type=str, help="Preload results directory in the background")
-    p_start.add_argument("--cleanup-db", action="store_true",help="Drop the PostgreSQL database and user after shutdown (default: keep data)")
-    p_start.add_argument("-y", "--yes", action="store_true",help="Automatic yes to cleanup prompts (for non-interactive mode)")
-    p_start.add_argument("--use-sudo-cleanup", action="store_true",help="Use sudo for privileged PostgreSQL cleanup (requires NOPASSWD psql access)")
-    p_start.add_argument("-v", "--verbose", action="count", default=0,help="Increase verbosity (-v shows more, -vv shows debug details)")
+    p_start.add_argument("--cleanup-db", action="store_true", help="Drop the PostgreSQL database and user after shutdown (default: keep data)")
+    p_start.add_argument("-y", "--yes", action="store_true", help="Automatic yes to cleanup prompts (for non-interactive mode)")
+    p_start.add_argument("--use-sudo-cleanup", action="store_true", help="Use sudo for privileged PostgreSQL cleanup (requires NOPASSWD psql access)")
+    p_start.add_argument("-v", "--verbose", action="count", default=0, help="Increase verbosity (-v shows more, -vv shows debug details)")
 
     # --- stop / status ---
     sub.add_parser("stop", help="Stop the web server")
     sub.add_parser("status", help="Show server status")
 
-    # Auto-add "start" if the user just typed options (e.g. `cygor web -p 8080`)
-    if argv and not argv[0] in {"start", "stop", "status"}:
+    # ---- Handle default behavior ----
+    if not argv:
+        parser.print_help()
+        sys.exit(0)
+
+    # If the user only supplied options (e.g. `-H 0.0.0.0 -p 8080`), assume they meant `start`
+    if argv[0] not in {"start", "stop", "status"} and not argv[0].startswith("-"):
+        print(f"Unknown command: {argv[0]}")
+        parser.print_help()
+        sys.exit(1)
+    elif argv[0].startswith("-"):
         argv = ["start", *argv]
 
     args, unknown = parser.parse_known_args(argv)
 
+    # --- Dispatch ---
     if args.cmd == "start":
         passthrough = []
-
-        # Verbosity
         if args.verbose:
             passthrough.extend(["-" + "v" * args.verbose])
-
-        # Database options
         if args.reset_db:
             passthrough.append("--reset-db")
         if args.cleanup_db:
@@ -217,7 +254,6 @@ def exec_argv(argv: list[str]) -> None:
             os.environ["CYGOR_USE_SUDO_CLEANUP"] = "1"
 
         passthrough.extend(unknown)
-
         sys.exit(start(args.host, args.port, passthrough, args.load_dir, args.reset_db, args.verbose))
 
     elif args.cmd == "stop":
@@ -228,4 +264,6 @@ def exec_argv(argv: list[str]) -> None:
 
     else:
         parser.print_help()
+        sys.exit(0)
+
 

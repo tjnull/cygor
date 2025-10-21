@@ -773,6 +773,44 @@ def _collect_targets(args):
 # ---------------------------
 if __name__ == "__main__":
     args = parse_args()
+
+    # ------------------------------------------------------------------
+    # Workspace / Output Directory Resolution
+    # ------------------------------------------------------------------
+    # Priority:
+    #   1) Explicit --output-dir from CLI
+    #   2) CYGOR_RESULTS_DIR environment variable
+    #   3) Legacy default: results/cygor-enumeration-modules/nfsexplorer/
+    #
+    # When -o/--output-dir is provided with no path (empty string),
+    # create a timestamped folder under the workspace or results/.
+    import datetime
+    from pathlib import Path
+
+    env_ws = os.environ.get("CYGOR_RESULTS_DIR")
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if args.output_dir and args.output_dir not in ("", None):
+        out_dir = Path(args.output_dir)
+
+    elif args.output_dir == "":
+        if env_ws:
+            out_dir = Path(env_ws) / "cygor-enumeration-modules" / "nfsexplorer" / ts
+        else:
+            out_dir = Path("results") / "cygor-enumeration-modules" / "nfsexplorer" / ts
+
+    elif env_ws:
+        out_dir = Path(env_ws) / "cygor-enumeration-modules" / "nfsexplorer"
+
+    else:
+        out_dir = Path("results") / "cygor-enumeration-modules" / "nfsexplorer"
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    args.output_dir = str(out_dir)
+    print(Fore.CYAN + f"[*] Output directory: {out_dir}" + Style.RESET_ALL)
+    
+    #------------------------------------
+
     targets = _collect_targets(args)
     for host in targets:
         print(f"{Fore.MAGENTA}[*] Target: {host}{Style.RESET_ALL}")
@@ -784,3 +822,4 @@ if __name__ == "__main__":
                 cli.enum_share_files(args)
             else:
                 cli.enum_shares_only()
+

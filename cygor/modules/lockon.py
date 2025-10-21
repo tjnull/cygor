@@ -311,7 +311,7 @@ def parse_arguments():
     io_group.add_argument('-f','--file', help="Path to host list file (mix of host:port and/or full URLs).")
     io_group.add_argument('--ips', nargs='+', help="List of IPs/host:port entries.")
     io_group.add_argument('--url', nargs='+', help="Full URLs or bare host entries.")
-    io_group.add_argument('-o','--output', default="results/cygor-enumeration-modules/lockon", help="Output dir.")
+    io_group.add_argument('-o','--output', default=None, help="Custom output directory (overrides workspace if set).")
     io_group.add_argument("--output-format", choices=["json","xml","csv","txt","all"], default="json",
                           help="Save results in this format (default: json). Use 'all' to save every format.")
     io_group.add_argument('--scheme', choices=['http','https','both'], default='both',
@@ -528,7 +528,26 @@ async def amain():
 
     scan_workers=args.scan_workers if args.scan_workers else args.workers
     shot_workers=args.shot_workers if args.shot_workers else args.workers
-    out_dir=Path(args.output); out_dir.mkdir(parents=True,exist_ok=True)
+    # Resolve output directory:
+    # Priority:
+    # 1) explicit CLI arg `--output`
+    # 2) workspace environment variable CYGOR_RESULTS_DIR
+    # 3) default results directory
+    env_ws = os.environ.get("CYGOR_RESULTS_DIR")
+
+    if args.output:
+        out_dir = Path(args.output)
+    elif env_ws:
+        # Workspace-aware path (no nested "results/")
+        out_dir = Path(env_ws) / "cygor-enumeration-modules" / "lockon"
+    else:
+        out_dir = Path("results") / "cygor-enumeration-modules" / "lockon"
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "screenshots").mkdir(exist_ok=True)
+    print(Fore.CYAN + f"[*] Output directory: {out_dir}" + Style.RESET_ALL)
+
+
     out_list=out_dir/"tested-urls.txt"
     schemes=["http","https"] if args.scheme=="both" else [args.scheme]
 

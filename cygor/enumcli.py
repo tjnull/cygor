@@ -1,15 +1,54 @@
 # cygor/enum.py
 
 import argparse
+import os
+import importlib.util
 import runpy
 import sys
 import pkgutil
 import pathlib
 from colorama import Fore, Style, init
+from argparse import RawTextHelpFormatter
 
 init(autoreset=True)
 
-from argparse import RawTextHelpFormatter
+# --- Workspace propagation ---
+import os
+import json
+from pathlib import Path
+
+def _get_active_workspace() -> str | None:
+    """
+    Determine the currently active workspace.
+    Priority:
+      1. CYGOR_RESULTS_DIR (used internally by modules)
+      2. CYGOR_WORKSPACE (manual override)
+      3. ~/.config/cygor/config.json (default workspace set by user)
+    """
+    # 1) explicit env var
+    ws = os.environ.get("CYGOR_RESULTS_DIR") or os.environ.get("CYGOR_WORKSPACE")
+    if ws:
+        return ws
+
+    # 2) fallback to config file
+    cfg_file = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "cygor" / "config.json"
+    if cfg_file.exists():
+        try:
+            data = json.loads(cfg_file.read_text())
+            ws = data.get("default_workspace")
+            if ws:
+                return ws
+        except Exception:
+            pass
+    return None
+
+# Load or propagate CYGOR_RESULTS_DIR
+ws = _get_active_workspace()
+if ws and not os.environ.get("CYGOR_RESULTS_DIR"):
+    os.environ["CYGOR_RESULTS_DIR"] = ws
+    # Optional: print(f"[i] Using workspace: {ws}")
+
+
 
 class ColorHelpFormatter(RawTextHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
     def start_section(self, heading):

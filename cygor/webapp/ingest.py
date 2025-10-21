@@ -54,28 +54,46 @@ def log(msg: str, level: int = 1, verbose: int = 0):
 
 
 # ---------------------------------------------------
-# Directory Walker
+# Directory Walker (Safe Ingestion)
 # ---------------------------------------------------
 async def ingest_directory(path, session, dedupe=True, verbose=0):
     """
-    Walk a directory and ingest all supported files.
+    Walk a directory and ingest only supported scan/module files.
+    Skips directories, empty files, and unsupported formats.
     """
     log(f"[*] Ingesting files from {path}", level=1, verbose=verbose)
 
+    supported_exts = {".xml", ".json"}
     ingested_count = 0
     failed_files = []
 
-    for file in path.rglob("*"):
+    for file in Path(path).rglob("*"):
+        # --- Skip directories and symlinks ---
         if not file.is_file():
             continue
 
+        # Skip workspace metadata files and hidden files
+        if file.name.startswith(".") or file.name == ".cygor-workspace.json":
+            log(f"[i] Skipping hidden or workspace metadata file: {file}", level=2, verbose=verbose)
+            continue
+
+        # --- Skip unsupported extensions ---
+        if file.suffix.lower() not in supported_exts:
+            log(f"[i] Skipping unsupported file: {file}", level=2, verbose=verbose)
+            continue
+
+        # --- Skip zero-byte files ---
         try:
-            if file.suffix.lower() in [".xml", ".json"]:
-                log(f"[*] Processing file: {file}", level=2, verbose=verbose)
-                await ingest_file(file, session, dedupe=dedupe, verbose=verbose)
-                ingested_count += 1
-            else:
-                log(f"[i] Skipping unsupported file format: {file}", level=2, verbose=verbose)
+            if file.stat().st_size == 0:
+                log(f"[i] Skipping empty file: {file}", level=2, verbose=verbose)
+                continue
+        except Exception:
+            continue
+
+        try:
+            log(f"[*] Processing file: {file}", level=2, verbose=verbose)
+            await ingest_file(file, session, dedupe=dedupe, verbose=verbose)
+            ingested_count += 1
         except Exception as e:
             log(f"[!] Failed to ingest {file}: {e}", level=0, verbose=verbose)
             failed_files.append(file)
@@ -86,6 +104,7 @@ async def ingest_directory(path, session, dedupe=True, verbose=0):
         log(f"[!] {len(failed_files)} files failed ingestion. See errors above.", level=0, verbose=verbose)
 
     return ingested_count
+
 
 
 # ---------------------------------------------------
