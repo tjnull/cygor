@@ -183,25 +183,35 @@ def _postrun_chown(paths: list[str]) -> None:
 
 def main():
     argv = sys.argv[1:]
+
+    # --- No command provided ---
     if not argv:
         print(USAGE)
+        # Automatically run the one-time precheck on first-time use
+        try:
+            run_once_precheck()
+        except Exception as e:
+            print(f"[!] Precheck skipped: {e}", file=sys.stderr)
         sys.exit(0)
 
-    # --- import the precheck function
-    from .precheck import run_once_precheck
+    # --- Manual precheck command ---
+    if argv[0] == "precheck":
+        print("[*] Running manual dependency check...")
+        try:
+            run_once_precheck(force=True)
+            print("[✓] Dependency verification complete.")
+        except Exception as e:
+            print(f"[!] Precheck error: {e}", file=sys.stderr)
+        sys.exit(0)
 
-    # --- if running for the first time, run it silently
-    try:
-        run_once_precheck()
-    except Exception as e:
-        print(f"[!] Precheck skipped: {e}", file=sys.stderr)
-
+    # --- Proceed with normal commands ---
     chown_paths, rest = _parse_chown_paths(argv)
     if not rest:
         print(USAGE)
         sys.exit(0)
 
     cmd, cmd_args = rest[0], rest[1:]
+
 
     # --- precheck command (manual run)
     if cmd == "precheck":
