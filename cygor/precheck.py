@@ -167,14 +167,13 @@ def pip_install(pkg: str) -> None:
 def install_playwright_bundle() -> None:
     """
     Install Playwright Chromium browser and its dependencies.
-    Skips install-deps on Debian/Kali/Ubuntu where Playwright's
-    dependency list is outdated or already satisfied.
+    Adds specific Debian/Kali/Ubuntu dependency installs instead of
+    the generic Playwright install-deps list.
     """
     try:
         cmd = [sys.executable, "-m", "playwright"]
         s = sudo_prefix()
 
-        # Detect distro
         distro = "unknown"
         try:
             with open("/etc/os-release", "r", encoding="utf-8") as f:
@@ -196,8 +195,15 @@ def install_playwright_bundle() -> None:
         except Exception:
             pass
 
+        # --- Debian-family specific dependencies ---
         if distro in ("debian", "ubuntu", "kali"):
-            print(f"[*] Skipping 'playwright install-deps' on {distro}; system libs already available.")
+            print(f"[*] Installing Playwright dependencies for {distro}...")
+            pkgs = ["libasound2t64", "fonts-unifont"]
+            try:
+                run(s + ["apt-get", "update"], check=False)
+                run(s + ["apt-get", "install", "-y"] + pkgs, check=False)
+            except Exception as e:
+                print(f"[!] Could not install {pkgs}: {e}")
         else:
             print(f"[*] Installing Playwright system dependencies for {distro}...")
             run(s + ["bash", "-lc", f"{' '.join(cmd)} install-deps"], check=False)
@@ -207,4 +213,5 @@ def install_playwright_bundle() -> None:
 
     except Exception as e:
         print(f"[!] Playwright setup skipped: {e}")
+
 
