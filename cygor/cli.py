@@ -8,6 +8,7 @@ import runpy
 import json
 import subprocess
 from pathlib import Path
+from .precheck import run_once_precheck
 
 USAGE = """\
 Usage:
@@ -185,6 +186,29 @@ def main():
     if not argv:
         print(USAGE)
         sys.exit(0)
+
+    # --- import the precheck function
+    from .precheck import run_once_precheck
+
+    # --- if running for the first time, run it silently
+    try:
+        run_once_precheck()
+    except Exception as e:
+        print(f"[!] Precheck skipped: {e}", file=sys.stderr)
+
+    chown_paths, rest = _parse_chown_paths(argv)
+    if not rest:
+        print(USAGE)
+        sys.exit(0)
+
+    cmd, cmd_args = rest[0], rest[1:]
+
+    # --- precheck command (manual run)
+    if cmd == "precheck":
+        print("[*] Running manual dependency check...")
+        run_once_precheck(force=True)
+        print("[✓] Dependency verification complete.")
+        return
 
     chown_paths, rest = _parse_chown_paths(argv)
     if not rest:
