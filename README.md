@@ -91,11 +91,17 @@ Usage:
   cygor <command> [args]
 
 Commands:
-  banner  Cygor tool banner (Warning it is large!)
-  scan    Automated scanner to discover hosts and services. (Will require root/sudo privileges for scanning).
-  parse   Analyze a NMAP scan file (nmap, gnmap, xml) and extract each host that is running a common service. Will create seperate hostlists for each service.
-  enum    Loads enumeration modules that are located in the Cygor modules directory.
-  web     Loads Cygor's Web UI and will allow you to interact with it by supplying data you have collected with Cygor.
+  banner      Cygor tool banner (Warning it is large!)
+  scan        Automated scanner to discover hosts and services. (Will require root/sudo privileges for scanning).
+  parse       Analyze a NMAP scan file (nmap, gnmap, xml) and extract categorized hostlists by common service.
+  enum        Loads enumeration modules that are located in the cygor modules directory. 
+  workspace   Manage workspaces (init/set-default/show).
+  web         Control/launch the Cygor Web UI (start/stop/status) or run directly.
+
+Environment:
+  CYGOR_WORKSPACE     Override default workspace just for this run.
+  CYGOR_RESULTS_DIR   Used by web and modules if set. (Auto-set from default workspace.)
+
 ```
 
 ## Cygor scanner
