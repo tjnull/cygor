@@ -25,26 +25,31 @@ jobs:
         run: |
           docker run --rm --platform linux/amd64 \
             -v "$PWD":/src -w /src debian:bookworm /bin/bash -e -c "
+          echo '[*] Installing dependencies...'
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            python3.11 python3.11-venv python3.11-full build-essential \
-            libpq-dev libffi-dev zlib1g-dev libssl-dev zip ca-certificates
+            python3.11 python3.11-venv python3.11-full libpython3.11 \
+            build-essential libpq-dev libffi-dev zlib1g-dev libssl-dev zip ca-certificates
 
+          echo '[*] Creating venv...'
           python3.11 -m venv /opt/venv
           source /opt/venv/bin/activate
           python -m ensurepip --upgrade
           pip install --upgrade pip wheel setuptools
           pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
 
+          echo '[*] Building Cygor...'
           cd cygor
           STATIC_PATH_ARG=''
           if [ -d 'webapp/static' ]; then
             STATIC_PATH_ARG='--add-data webapp/static:webapp/static'
           fi
+
           pyinstaller --onefile --clean --noconfirm --name cygor \
             --add-data 'webapp/templates:webapp/templates' \
             \$STATIC_PATH_ARG cli.py
 
+          echo '[*] Packaging...'
           cd dist && chmod +x cygor
           zip -9 /src/cygor-linux-x64.zip cygor
           "
@@ -78,26 +83,31 @@ jobs:
         run: |
           docker run --rm --platform linux/arm64 \
             -v "$PWD":/src -w /src debian:bookworm /bin/bash -e -c "
+          echo '[*] Installing dependencies...'
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            python3.11 python3.11-venv python3.11-full build-essential \
-            libpq-dev libffi-dev zlib1g-dev libssl-dev zip ca-certificates
+            python3.11 python3.11-venv python3.11-full libpython3.11 \
+            build-essential libpq-dev libffi-dev zlib1g-dev libssl-dev zip ca-certificates
 
+          echo '[*] Creating venv...'
           python3.11 -m venv /opt/venv
           source /opt/venv/bin/activate
           python -m ensurepip --upgrade
           pip install --upgrade pip wheel setuptools
           pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
 
+          echo '[*] Building Cygor...'
           cd cygor
           STATIC_PATH_ARG=''
           if [ -d 'webapp/static' ]; then
             STATIC_PATH_ARG='--add-data webapp/static:webapp/static'
           fi
+
           pyinstaller --onefile --clean --noconfirm --name cygor \
             --add-data 'webapp/templates:webapp/templates' \
             \$STATIC_PATH_ARG cli.py
 
+          echo '[*] Packaging...'
           cd dist && chmod +x cygor
           zip -9 /src/cygor-linux-arm64.zip cygor
           "
@@ -120,6 +130,7 @@ jobs:
   build-docker:
     name: Build Docker Image (Debian 13 base)
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
