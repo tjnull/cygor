@@ -51,17 +51,31 @@ jobs:
             -v "$PWD":/src -w /src ${{ matrix.docker_image }} /bin/bash -e -c "
           set -e
 
-          echo '[*] Installing Python 3.9 and build dependencies...'
-          yum install -y python39 python39-pip postgresql-devel gcc make;
-          ln -sf /usr/bin/python3.9 /usr/bin/python;
-          python -m pip install --upgrade pip wheel setuptools;
+          echo '[*] Installing dependencies for Python 3.9 build...'
+          yum install -y gcc openssl-devel bzip2-devel libffi-devel make wget postgresql-devel;
+
+          echo '[*] Downloading and building Python 3.9 from source...'
+          cd /tmp
+          wget -q https://www.python.org/ftp/python/3.9.18/Python-3.9.18.tgz
+          tar -xzf Python-3.9.18.tgz
+          cd Python-3.9.18
+          ./configure --enable-optimizations --prefix=/usr/local
+          make -j2
+          make altinstall
+          ln -sf /usr/local/bin/python3.9 /usr/bin/python
+          ln -sf /usr/local/bin/pip3.9 /usr/bin/pip
+
+          echo '[*] Verifying Python installation...'
+          python --version
+          pip --version
+          pip install --upgrade pip wheel setuptools
 
           echo '[*] Installing Python dependencies...'
-          python -m pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama;
-          python -m pip install psycopg2-binary || python -m pip install psycopg2;
+          pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama
+          pip install psycopg2-binary || pip install psycopg2
 
           echo '[*] Verifying application directories...'
-          ls -R cygor/webapp || (echo '[!] Missing cygor/webapp directory!' && exit 1);
+          ls -R cygor/webapp || (echo '[!] Missing cygor/webapp directory!' && exit 1)
 
           STATIC_PATH_ARG=\"\"
           if [ -d \"cygor/webapp/static\" ]; then
@@ -75,7 +89,7 @@ jobs:
           pyinstaller --onefile --clean --noconfirm \
             --add-data \"cygor/webapp/templates:cygor/webapp/templates\" \
             \$STATIC_PATH_ARG \
-            --name cygor cygor/cli.py;
+            --name cygor cygor/cli.py
 
           echo '[*] Checking dist/ contents...'
           ls -lh dist || true
