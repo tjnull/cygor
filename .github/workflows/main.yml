@@ -1,0 +1,66 @@
+name: Build and Release Cygor Binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: cygor-linux-x64
+            ext: ""
+            docker_image: quay.io/pypa/manylinux2014_x86_64
+          - os: macos-latest
+            artifact_name: cygor-macos-universal
+            ext: ""
+          - os: windows-latest
+            artifact_name: cygor-windows-x64
+            ext: ".exe"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: matrix.os != 'ubuntu-latest'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Linux Build using manylinux Docker for max compatibility
+      - name: Build on manylinux2014 for universal Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          docker run --rm -v "$PWD":/src -w /src ${{ matrix.docker_image }} /bin/bash -c "
+          yum install -y python3-pip;
+          python3 -m pip install --upgrade pip pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 psycopg2-binary colorama;
+          pyinstaller --onefile --clean --name cygor cygor/cli.py;
+          tar -czf cygor-linux-x64.tar.gz -C dist cygor;
+          chown $(id -u):$(id -g) cygor-linux-x64.tar.gz;
+          "
+      
+      # macOS / Windows native build
+      - name: Install dependencies
+        if: matrix.os != 'ubuntu-latest'
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 psycopg2-binary colorama
+
+      - name: Build executable
+        if: matrix.os != 'ubuntu-latest'
+        run: |
+          pyinstaller --onefile --clean --name cygor${{ matrix.ext }} cygor/cli.py
+          tar -czf ${{ matrix.artifact_name }}.tar.gz -C dist cygor${{ matrix.ext }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
