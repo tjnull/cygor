@@ -43,7 +43,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Enable QEMU for ARM builds
       - name: Set up QEMU
         if: matrix.name == 'linux-arm64'
         uses: docker/setup-qemu-action@v3
@@ -82,9 +81,10 @@ jobs:
         if: matrix.runner == 'macos-latest'
         run: |
           echo "Building Cygor for macOS"
+          BASE_DIR=$(pwd)
           pyinstaller --onefile --clean --noconfirm \
-            --add-data "cygor/web/templates:cygor/web/templates" \
-            --add-data "cygor/web/static:cygor/web/static" \
+            --add-data "$BASE_DIR/cygor/web/templates:cygor/web/templates" \
+            --add-data "$BASE_DIR/cygor/web/static:cygor/web/static" \
             --name cygor cygor/cli.py
           cd dist
           ./cygor --help || true
@@ -105,9 +105,10 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Building Cygor for Windows"
+          $BaseDir = (Get-Location).Path
           pyinstaller --onefile --clean --noconfirm `
-            --add-data "cygor/web/templates;cygor/web/templates" `
-            --add-data "cygor/web/static;cygor/web/static" `
+            --add-data "$BaseDir\cygor\web\templates;cygor\web\templates" `
+            --add-data "$BaseDir\cygor\web\static;cygor\web\static" `
             --name "cygor.exe" cygor/cli.py
 
           cd dist
