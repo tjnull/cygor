@@ -3,8 +3,8 @@ name: Build and Release Cygor Binaries
 on:
   push:
     tags:
-      - "v*"  # Build when version tags are pushed (e.g., v1.0.0)
-  workflow_dispatch:  # Allow manual trigger from the Actions tab
+      - "v*"
+  workflow_dispatch:
 
 jobs:
   build:
@@ -43,16 +43,16 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Enable QEMU for ARM64 builds (to emulate ARM on x86 GitHub hosts)
-      - name: Set up QEMU for ARM64
+      # Enable QEMU for ARM builds
+      - name: Set up QEMU
         if: matrix.name == 'linux-arm64'
         uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
 
-      ######################################
-      # Linux builds (x64 / ARM64)
-      ######################################
+      ##########################################
+      # Linux (x64 / ARM64)
+      ##########################################
       - name: Build inside manylinux container
         if: matrix.runner == 'ubuntu-latest'
         run: |
@@ -69,43 +69,74 @@ jobs:
           chown $(id -u):$(id -g) ../${{ matrix.artifact_name }}.tar.gz;
           "
 
-      ######################################
-      # macOS and Windows builds
-      ######################################
-      - name: Install dependencies
-        if: matrix.runner != 'ubuntu-latest'
+      ##########################################
+      # macOS
+      ##########################################
+      - name: Install dependencies (macOS)
+        if: matrix.runner == 'macos-latest'
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 psycopg2-binary colorama
+
+      - name: Build executable (macOS)
+        if: matrix.runner == 'macos-latest'
+        run: |
+          echo "Building Cygor for macOS"
+          pyinstaller --onefile --clean --noconfirm \
+            --add-data "cygor/web/templates:cygor/web/templates" \
+            --add-data "cygor/web/static:cygor/web/static" \
+            --name cygor cygor/cli.py
+          cd dist
+          ./cygor --help || true
+          tar -czf ../${{ matrix.artifact_name }}.tar.gz cygor
+          cd ..
+
+      ##########################################
+      # Windows
+      ##########################################
+      - name: Install dependencies (Windows)
+        if: matrix.runner == 'windows-latest'
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 psycopg2-binary colorama
 
-      - name: Build executable with spec file
-        if: matrix.runner != 'ubuntu-latest'
+      - name: Build executable (Windows)
+        if: matrix.runner == 'windows-latest'
+        shell: pwsh
         run: |
-          echo "Building Cygor for ${{ matrix.name }}"
-          pyinstaller --clean --noconfirm cygor.spec
+          Write-Host "Building Cygor for Windows"
+          pyinstaller --onefile --clean --noconfirm `
+            --add-data "cygor/web/templates;cygor/web/templates" `
+            --add-data "cygor/web/static;cygor/web/static" `
+            --name "cygor.exe" cygor/cli.py
+
           cd dist
-          if [ -f "cygor${{ matrix.ext }}" ]; then
-            echo "Binary built successfully"
-          else
-            echo "Error: cygor${{ matrix.ext }} not found" && exit 1
-          fi
-          tar -czf ../${{ matrix.artifact_name }}.tar.gz cygor${{ matrix.ext }}
+          if (Test-Path "cygor.exe") {
+            Write-Host "Binary built successfully"
+          } else {
+            Write-Error "Error: cygor.exe not found"
+            exit 1
+          }
+
+          Compress-Archive -Path "cygor.exe" -DestinationPath "../${{ matrix.artifact_name }}.zip"
           cd ..
 
-      ######################################
-      # Upload Artifacts
-      ######################################
+      ##########################################
+      # Upload artifacts
+      ##########################################
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: |
             dist/**/*.tar.gz
+            dist/**/*.zip
             ./*.tar.gz
+            ./*.zip
 
-  ######################################
+  ##########################################
   # Release
-  ######################################
+  ##########################################
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
@@ -119,7 +150,7 @@ jobs:
       - name: Generate SHA256 checksums
         run: |
           cd dist
-          find . -type f -name "*.tar.gz" -exec sha256sum {} \; > SHA256SUMS.txt
+          find . -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec sha256sum {} \; > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Create GitHub Release
@@ -127,6 +158,7 @@ jobs:
         with:
           files: |
             dist/**/*.tar.gz
+            dist/**/*.zip
             dist/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
