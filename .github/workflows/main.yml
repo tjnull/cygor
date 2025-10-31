@@ -8,18 +8,16 @@ on:
 
 jobs:
   build:
-    name: Build for ${{ matrix.arch_name }}
+    name: Build for ${{ matrix.arch }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - arch_name: x64
-            platform: linux/amd64
+          - arch: x64
             docker_image: quay.io/pypa/manylinux2014_x86_64
             artifact_name: cygor-linux-x64
-          - arch_name: arm64
-            platform: linux/arm64
+          - arch: arm64
             docker_image: quay.io/pypa/manylinux2014_aarch64
             artifact_name: cygor-linux-arm64
 
@@ -28,15 +26,22 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up QEMU for ARM64 builds
-        if: matrix.arch_name == 'arm64'
+        if: matrix.arch == 'arm64'
         uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
 
+      # Build section
       - name: Build Cygor binary inside manylinux container
         run: |
-          echo "Starting Linux build for ${{ matrix.arch_name }} (${{ matrix.platform }})"
-          docker run --rm --platform ${{ matrix.platform }} \
+          echo "Starting Linux build for ${{ matrix.arch }}"
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            PLATFORM="--platform linux/arm64"
+          else
+            PLATFORM=""
+          fi
+
+          docker run --rm $PLATFORM \
             -v "$PWD":/src -w /src ${{ matrix.docker_image }} /bin/bash -c "
           yum install -y python3-pip;
           python3 -m pip install --upgrade pip;
