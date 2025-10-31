@@ -19,8 +19,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Build x64 Binary on Debian 12
         run: |
@@ -28,10 +27,15 @@ jobs:
             -v "$PWD":/src -w /src debian:bookworm /bin/bash -e -c "
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            python3.11 python3.11-dev python3-pip build-essential \
-            libpq-dev libffi-dev zlib1g-dev libssl-dev zip
-          python3.11 -m pip install --upgrade pip wheel setuptools
-          python3.11 -m pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
+            python3.11 python3.11-venv python3.11-full build-essential \
+            libpq-dev libffi-dev zlib1g-dev libssl-dev zip ca-certificates
+
+          python3.11 -m venv /opt/venv
+          source /opt/venv/bin/activate
+          python -m ensurepip --upgrade
+          pip install --upgrade pip wheel setuptools
+          pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
+
           cd cygor
           STATIC_PATH_ARG=''
           if [ -d 'webapp/static' ]; then
@@ -40,6 +44,7 @@ jobs:
           pyinstaller --onefile --clean --noconfirm --name cygor \
             --add-data 'webapp/templates:webapp/templates' \
             \$STATIC_PATH_ARG cli.py
+
           cd dist && chmod +x cygor
           zip -9 /src/cygor-linux-x64.zip cygor
           "
@@ -50,8 +55,7 @@ jobs:
           chmod +x test-x64/cygor
           ./test-x64/cygor --help || (echo "Smoke test failed for x64 binary" && exit 1)
 
-      - name: Upload x64 ZIP
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: cygor-linux-x64
           path: cygor-linux-x64.zip
@@ -64,11 +68,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Enable QEMU for ARM64
-        uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
 
@@ -78,10 +80,15 @@ jobs:
             -v "$PWD":/src -w /src debian:bookworm /bin/bash -e -c "
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            python3.11 python3.11-dev python3-pip build-essential \
-            libpq-dev libffi-dev zlib1g-dev libssl-dev zip
-          python3.11 -m pip install --upgrade pip wheel setuptools
-          python3.11 -m pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
+            python3.11 python3.11-venv python3.11-full build-essential \
+            libpq-dev libffi-dev zlib1g-dev libssl-dev zip ca-certificates
+
+          python3.11 -m venv /opt/venv
+          source /opt/venv/bin/activate
+          python -m ensurepip --upgrade
+          pip install --upgrade pip wheel setuptools
+          pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
+
           cd cygor
           STATIC_PATH_ARG=''
           if [ -d 'webapp/static' ]; then
@@ -90,23 +97,19 @@ jobs:
           pyinstaller --onefile --clean --noconfirm --name cygor \
             --add-data 'webapp/templates:webapp/templates' \
             \$STATIC_PATH_ARG cli.py
+
           cd dist && chmod +x cygor
           zip -9 /src/cygor-linux-arm64.zip cygor
           "
 
       - name: Smoke Test ARM64 Binary
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-      - name: Test ARM64 Binary
         run: |
           unzip -q cygor-linux-arm64.zip -d test-arm64
           chmod +x test-arm64/cygor
           docker run --rm --platform linux/arm64 \
             -v "$PWD/test-arm64":/test -w /test debian:bookworm /bin/bash -c "./cygor --help"
 
-      - name: Upload ARM64 ZIP
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: cygor-linux-arm64
           path: cygor-linux-arm64.zip
@@ -117,23 +120,15 @@ jobs:
   build-docker:
     name: Build Docker Image (Debian 13 base)
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build & Push Image
-        uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
@@ -150,21 +145,15 @@ jobs:
     name: Create GitHub Release (ZIPs + Checksums)
     runs-on: ubuntu-latest
     needs: [build-x64, build-arm64]
-
     steps:
-      - name: Download All Artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: dist
-
-      - name: Generate Checksums (ZIP only)
-        run: |
+      - run: |
           cd dist
           find . -type f -name "*.zip" -exec sha256sum {} \; > SHA256SUMS.txt
           cat SHA256SUMS.txt
-
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name || 'manual-build' }}
           name: "Cygor Build (${{ github.ref_name || 'manual' }})"
