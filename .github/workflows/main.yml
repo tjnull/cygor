@@ -1,4 +1,4 @@
-name: Cygor Linux + Docker Builds (ZIP + Smoke Tests)
+name: Cygor Linux + Docker Builds (Debian 12)
 
 on:
   push:
@@ -25,31 +25,30 @@ jobs:
         run: |
           docker run --rm --platform linux/amd64 \
             -v "$PWD":/src -w /src debian:bookworm /bin/bash -e -c "
+          export DEBIAN_FRONTEND=noninteractive
           echo '[*] Installing dependencies...'
           apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            python3.11 python3.11-venv python3.11-full libpython3.11 \
+          apt-get install -y python3.11 python3.11-venv python3.11-dev libpython3.11 \
             build-essential libpq-dev libffi-dev zlib1g-dev libssl-dev zip ca-certificates
 
-          echo '[*] Creating venv...'
+          echo '[*] Creating isolated venv...'
           python3.11 -m venv /opt/venv
           source /opt/venv/bin/activate
           python -m ensurepip --upgrade
           pip install --upgrade pip wheel setuptools
           pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
 
-          echo '[*] Building Cygor...'
-          cd cygor
+          echo '[*] Building Cygor binary...'
           STATIC_PATH_ARG=''
-          if [ -d 'webapp/static' ]; then
-            STATIC_PATH_ARG='--add-data webapp/static:webapp/static'
+          if [ -d 'cygor/webapp/static' ]; then
+            STATIC_PATH_ARG='--add-data cygor/webapp/static:webapp/static'
           fi
 
           pyinstaller --onefile --clean --noconfirm --name cygor \
-            --add-data 'webapp/templates:webapp/templates' \
-            \$STATIC_PATH_ARG cli.py
+            --add-data 'cygor/webapp/templates:webapp/templates' \
+            \$STATIC_PATH_ARG cygor/cli.py
 
-          echo '[*] Packaging...'
+          echo '[*] Packaging binary...'
           cd dist && chmod +x cygor
           zip -9 /src/cygor-linux-x64.zip cygor
           "
@@ -83,31 +82,30 @@ jobs:
         run: |
           docker run --rm --platform linux/arm64 \
             -v "$PWD":/src -w /src debian:bookworm /bin/bash -e -c "
+          export DEBIAN_FRONTEND=noninteractive
           echo '[*] Installing dependencies...'
           apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive apt-get install -y \
-            python3.11 python3.11-venv python3.11-full libpython3.11 \
+          apt-get install -y python3.11 python3.11-venv python3.11-dev libpython3.11 \
             build-essential libpq-dev libffi-dev zlib1g-dev libssl-dev zip ca-certificates
 
-          echo '[*] Creating venv...'
+          echo '[*] Creating isolated venv...'
           python3.11 -m venv /opt/venv
           source /opt/venv/bin/activate
           python -m ensurepip --upgrade
           pip install --upgrade pip wheel setuptools
           pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
 
-          echo '[*] Building Cygor...'
-          cd cygor
+          echo '[*] Building Cygor binary...'
           STATIC_PATH_ARG=''
-          if [ -d 'webapp/static' ]; then
-            STATIC_PATH_ARG='--add-data webapp/static:webapp/static'
+          if [ -d 'cygor/webapp/static' ]; then
+            STATIC_PATH_ARG='--add-data cygor/webapp/static:webapp/static'
           fi
 
           pyinstaller --onefile --clean --noconfirm --name cygor \
-            --add-data 'webapp/templates:webapp/templates' \
-            \$STATIC_PATH_ARG cli.py
+            --add-data 'cygor/webapp/templates:webapp/templates' \
+            \$STATIC_PATH_ARG cygor/cli.py
 
-          echo '[*] Packaging...'
+          echo '[*] Packaging binary...'
           cd dist && chmod +x cygor
           zip -9 /src/cygor-linux-arm64.zip cygor
           "
@@ -156,13 +154,14 @@ jobs:
     name: Create GitHub Release (ZIPs + Checksums)
     runs-on: ubuntu-latest
     needs: [build-x64, build-arm64]
+
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: dist
       - run: |
           cd dist
-          find . -type f -name "*.zip" -exec sha256sum {} \; > SHA256SUMS.txt
+          find . -type f -name '*.zip' -exec sha256sum {} \; > SHA256SUMS.txt
           cat SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
