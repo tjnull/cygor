@@ -44,8 +44,8 @@ jobs:
       - name: Build ${{ matrix.arch }} Binary (Debian 12)
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
-            -v "$PWD":/src -w /src debian:bookworm /bin/bash -e -c '
-          set -x
+            -v "$PWD":/src -w /src debian:bookworm /bin/bash -c "
+          set -ex
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
             python3.11 python3.11-dev python3-pip build-essential \
@@ -53,23 +53,20 @@ jobs:
           python3.11 -m pip install --break-system-packages --upgrade pip wheel setuptools
           python3.11 -m pip install --break-system-packages pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
           
-          # Create a wrapper entry point to handle relative imports
-          cat > cygor_entry.py << "ENTRY_EOF"
-#!/usr/bin/env python3
-import sys
-from cygor.cli import main
-if __name__ == "__main__":
-    sys.exit(main())
-ENTRY_EOF
+          echo '#!/usr/bin/env python3' > cygor_entry.py
+          echo 'import sys' >> cygor_entry.py
+          echo 'from cygor.cli import main' >> cygor_entry.py
+          echo 'if __name__ == \"__main__\":' >> cygor_entry.py
+          echo '    sys.exit(main())' >> cygor_entry.py
           
-          STATIC_PATH_ARG=""
-          if [ -d "cygor/webapp/static" ]; then
-            STATIC_PATH_ARG="--add-data cygor/webapp/static:cygor/webapp/static"
+          STATIC_PATH_ARG=''
+          if [ -d 'cygor/webapp/static' ]; then
+            STATIC_PATH_ARG='--add-data cygor/webapp/static:cygor/webapp/static'
           fi
-          # Use wrapper script to preserve relative imports
+          
           pyinstaller --onefile --clean --noconfirm --name cygor \
-            --add-data "cygor/webapp/templates:cygor/webapp/templates" \
-            $STATIC_PATH_ARG \
+            --add-data 'cygor/webapp/templates:cygor/webapp/templates' \
+            \$STATIC_PATH_ARG \
             --hidden-import cygor.precheck \
             --hidden-import cygor.workspace \
             --hidden-import cygor.banner \
@@ -83,7 +80,7 @@ ENTRY_EOF
           cd dist
           zip -9 /src/${{ matrix.artifact }}.zip cygor
           ls -lh /src/${{ matrix.artifact }}.zip
-          '
+          "
 
       - name: Verify Build Output
         run: |
