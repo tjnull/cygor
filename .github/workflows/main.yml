@@ -38,6 +38,7 @@ jobs:
 
       - name: Build PyInstaller binary
         run: |
+          echo "[*] Starting Linux build for ${{ matrix.arch }}"
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             PLATFORM="--platform linux/arm64"
           else
@@ -47,7 +48,10 @@ jobs:
           docker run --rm $PLATFORM \
             -v "$PWD":/src -w /src ${{ matrix.docker_image }} /bin/bash -e -c "
           set -e
+          echo '[*] Installing build dependencies...'
           yum install -y gcc openssl-devel bzip2-devel libffi-devel make wget postgresql-devel zlib-devel readline-devel
+
+          echo '[*] Installing Python 3.9...'
           cd /tmp
           wget -q https://www.python.org/ftp/python/3.9.18/Python-3.9.18.tgz
           tar -xzf Python-3.9.18.tgz && cd Python-3.9.18
@@ -55,19 +59,34 @@ jobs:
           make -j2 && make altinstall
           ln -sf /usr/local/bin/python3.9 /usr/bin/python
           ln -sf /usr/local/bin/pip3.9 /usr/bin/pip
+          python --version
+
+          echo '[*] Installing Python dependencies...'
           pip install --upgrade pip wheel setuptools
           pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
+
+          echo '[*] Verifying repo contents...'
+          ls -R /src/cygor || (echo '[!] cygor directory missing!' && exit 1)
+          cd /src
+
           STATIC_PATH_ARG=''
           if [ -d 'cygor/webapp/static' ]; then
             STATIC_PATH_ARG='--add-data cygor/webapp/static:cygor/webapp/static'
           fi
+
+          echo '[*] Building single-file binary from cygor/cli.py...'
+          cd cygor
           pyinstaller --onefile --clean --noconfirm \
-            --add-data 'cygor/webapp/templates:cygor/webapp/templates' \
-            $STATIC_PATH_ARG \
-            --name cygor cygor/cli.py
+            --add-data 'webapp/templates:webapp/templates' \
+            \$STATIC_PATH_ARG \
+            --name cygor cli.py
+
+          echo '[*] Build complete, packaging...'
           cd dist && chmod +x cygor
-          tar -czf ../${{ matrix.artifact_name }}.tar.gz cygor
+          tar -czf /src/${{ matrix.artifact_name }}.tar.gz cygor
+          echo '[✓] Done building ${{ matrix.artifact_name }}'
           "
+
 
       - uses: actions/upload-artifact@v4
         with:
@@ -78,7 +97,7 @@ jobs:
 
   release:
     name: Publish Release & Debian 13 Docker Image
-    runs-on: ubuntu-latest
+    runs-on: debian-latest
     needs: build
 
     steps:
