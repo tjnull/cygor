@@ -1,4 +1,4 @@
-name: Build and Release Cygor Binaries (Linux Only)
+name: Build and Release Cygor Binaries (Single-File Linux Builds)
 
 on:
   push:
@@ -31,8 +31,10 @@ jobs:
         with:
           platforms: arm64
 
-      # Build section
-      - name: Build Cygor binary inside manylinux container
+      # ------------------------------------------------------
+      # Build section (Single executable per architecture)
+      # ------------------------------------------------------
+      - name: Build Cygor single-file binary
         run: |
           echo "Starting Linux build for ${{ matrix.arch }}"
           if [ "${{ matrix.arch }}" = "arm64" ]; then
@@ -46,11 +48,18 @@ jobs:
           yum install -y python3-pip;
           python3 -m pip install --upgrade pip;
           python3 -m pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 psycopg2-binary colorama;
-          pyinstaller --clean --noconfirm cygor.spec;
+          echo '[*] Building single-file Cygor binary...';
+          pyinstaller --onefile --clean --noconfirm \
+            --add-data 'cygor/web/templates:cygor/web/templates' \
+            --add-data 'cygor/web/static:cygor/web/static' \
+            --name cygor cygor/cli.py;
           cd dist;
+          echo '[*] Verifying binary output...';
+          ls -lh cygor;
           ./cygor --help || true;
           tar -czf ../${{ matrix.artifact_name }}.tar.gz cygor;
           chown $(id -u):$(id -g) ../${{ matrix.artifact_name }}.tar.gz;
+          echo '[✓] Done building for ${{ matrix.arch }}';
           "
 
       - name: Upload build artifact
@@ -61,7 +70,9 @@ jobs:
             **/dist/**/*.tar.gz
             **/*.tar.gz
 
-
+  # ------------------------------------------------------
+  # Publish GitHub Release
+  # ------------------------------------------------------
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
@@ -82,7 +93,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name || 'manual-build' }}
-          name: "Cygor Development Build"
+          name: "Cygor Build (${{ github.ref_name || 'manual' }})"
           files: |
             dist/**/*.tar.gz
             dist/SHA256SUMS.txt
