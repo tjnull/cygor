@@ -1,9 +1,8 @@
-name: Build and Release Cygor (Single-File + Multi-Arch Docker Image)
+name: Build and Release Cygor (Fast Multi-Arch)
 
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -12,129 +11,81 @@ permissions:
 
 jobs:
   build:
-    name: Build Binaries (${{ matrix.arch }})
+    name: Build binaries (${{ matrix.arch }})
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
         include:
-          - arch: x64
-            docker_image: quay.io/pypa/manylinux2014_x86_64
-            artifact_name: cygor-linux-x64
+          - arch: amd64
+            base_image: debian:bookworm
+            artifact: cygor-linux-x64
           - arch: arm64
-            docker_image: quay.io/pypa/manylinux2014_aarch64
-            artifact_name: cygor-linux-arm64
-
+            base_image: debian:bookworm
+            artifact: cygor-linux-arm64
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Enable QEMU for ARM64
-        if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v3
         with:
-          platforms: arm64
+          platforms: all
 
-      - name: Build PyInstaller binary
+      - name: Build binary
         run: |
-          echo "[*] Starting Linux build for ${{ matrix.arch }}"
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
-            PLATFORM="--platform linux/arm64"
-          else
-            PLATFORM=""
-          fi
-
-          docker run --rm $PLATFORM \
-            -v "$PWD":/src -w /src ${{ matrix.docker_image }} /bin/bash -e -c "
-          set -e
-          echo '[*] Installing build dependencies...'
-          yum install -y gcc openssl-devel bzip2-devel libffi-devel make wget postgresql-devel zlib-devel readline-devel
-
-          echo '[*] Building Python 3.9 with shared library support...'
-          cd /tmp
-          wget -q https://www.python.org/ftp/python/3.9.18/Python-3.9.18.tgz
-          tar -xzf Python-3.9.18.tgz
-          cd Python-3.9.18
-          ./configure --enable-optimizations --enable-shared --prefix=/usr/local
-          make -j2 && make altinstall
-          echo '/usr/local/lib' > /etc/ld.so.conf.d/python3.9.conf
-          ldconfig
-          ln -sf /usr/local/bin/python3.9 /usr/bin/python
-          ln -sf /usr/local/bin/pip3.9 /usr/bin/pip
-          export LD_LIBRARY_PATH=/usr/local/lib
-          python --version
-          ls -l /usr/local/lib | grep libpython || (echo '[!] libpython shared library missing!' && exit 1)
-
-          echo '[*] Installing Python dependencies...'
-          pip install --upgrade pip wheel setuptools
-          pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
-
-          echo '[*] Building single-file binary...'
-          cd /src/cygor
+          echo "[*] Building ${{ matrix.arch }} binary..."
+          docker run --rm --platform linux/${{ matrix.arch }} \
+            -v "$PWD":/src -w /src \
+            ${{ matrix.base_image }} /bin/bash -e -c "
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y python3.9 python3.9-dev python3-pip python3-setuptools python3-wheel python3-venv build-essential libpq-dev libffi-dev zlib1g-dev libssl-dev
+          python3.9 -m pip install --upgrade pip
+          python3.9 -m pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
+          cd cygor
           STATIC_PATH_ARG=''
           if [ -d 'webapp/static' ]; then
             STATIC_PATH_ARG='--add-data webapp/static:webapp/static'
           fi
-
-          pyinstaller --onefile --clean --noconfirm \
+          pyinstaller --onefile --clean --noconfirm --static-libpython \
             --add-data 'webapp/templates:webapp/templates' \
             \$STATIC_PATH_ARG \
             --name cygor cli.py
-
-          echo '[*] Packaging binary...'
           cd dist && chmod +x cygor
-          tar -czf /src/${{ matrix.artifact_name }}.tar.gz cygor
-          echo '[✓] Done building ${{ matrix.artifact_name }}'
+          tar -czf /src/${{ matrix.artifact }}.tar.gz cygor
           "
-
-
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: |
-            dist/**/*.tar.gz
-            **/*.tar.gz
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.tar.gz
 
   release:
-    name: Publish Release & Debian 13 Docker Image
-    runs-on: debian-latest
+    runs-on: ubuntu-latest
     needs: build
-
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - uses: actions/download-artifact@v4
         with:
           path: dist
 
-      - name: Extract binaries for Docker context
+      - name: Prepare docker context
         run: |
-          rm -rf dockerbuild
           mkdir -p dockerbuild/amd64 dockerbuild/arm64
           tar -xzf dist/cygor-linux-x64.tar.gz -C dockerbuild/amd64
           tar -xzf dist/cygor-linux-arm64.tar.gz -C dockerbuild/arm64
 
-      - name: Generate checksums
+      - name: Checksums
         run: |
           cd dist
-          find . -type f -name "*.tar.gz" -exec sha256sum {} \; > SHA256SUMS.txt
+          find . -name "*.tar.gz" -exec sha256sum {} \; > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push multi-arch image (Debian 13 / Python 3.11)
+      - name: Build & push Debian 13 image (your Dockerfile)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -145,10 +96,9 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/cygor:latest
             ghcr.io/${{ github.repository_owner }}/cygor:${{ github.ref_name }}
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name || 'manual-build' }}
+          tag_name: ${{ github.ref_name || 'manual' }}
           name: "Cygor Build (${{ github.ref_name || 'manual' }})"
           files: |
             dist/**/*.tar.gz
