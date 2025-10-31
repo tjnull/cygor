@@ -20,10 +20,22 @@ exe = EXE(
     name='cygor',
     console=True
 )
+# cygor.spec (fixed ending)
 coll = COLLECT(
     exe,
     a.binaries,
     a.zipfiles,
     a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
     name='cygor'
 )
+
+app = BUNDLE(
+    coll,
+    name='cygor.app',
+    icon=None,
+    bundle_identifier=None
+)
+
