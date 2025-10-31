@@ -24,6 +24,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Ensures full repo content
+
+      - name: List project structure before build
+        run: |
+          echo "[*] Listing repository contents:"
+          ls -R cygor || true
 
       - name: Set up QEMU for ARM64 builds
         if: matrix.arch == 'arm64'
@@ -31,9 +38,6 @@ jobs:
         with:
           platforms: arm64
 
-      # --------------------------------------------------------------------
-      # Build and verify single-file Cygor binary for each architecture
-      # --------------------------------------------------------------------
       - name: Build Cygor single-file binary
         run: |
           echo "Starting Linux build for ${{ matrix.arch }}"
@@ -46,40 +50,40 @@ jobs:
           docker run --rm $PLATFORM \
             -v "$PWD":/src -w /src ${{ matrix.docker_image }} /bin/bash -e -c "
           set -e
+          echo '[*] Verifying paths before build...'
+          ls -R /src/cygor/web || (echo '[!] Missing cygor/web directory!'; exit 1)
+
           echo '[*] Installing Python3 and build dependencies...'
           yum install -y python3 python3-pip;
           ln -sf /usr/bin/python3 /usr/bin/python;
           python -m pip install --upgrade pip;
           python -m pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 psycopg2-binary colorama;
 
-          echo '[*] Building single-file Cygor binary...';
+          echo '[*] Building single-file Cygor binary...'
           BASE_DIR=\$(pwd)
-          echo '[*] Using base path:' \$BASE_DIR
           pyinstaller --onefile --clean --noconfirm \
-            --add-data \"\$BASE_DIR/cygor/web/templates:cygor/web/templates\" \
-            --add-data \"\$BASE_DIR/cygor/web/static:cygor/web/static\" \
+            --add-data \"cygor/web/templates:cygor/web/templates\" \
+            --add-data \"cygor/web/static:cygor/web/static\" \
             --name cygor cygor/cli.py;
 
-          echo '[*] Checking dist/ contents...';
-          ls -lh dist || true;
-
+          echo '[*] Checking dist/ contents...'
+          ls -lh dist || true
           if [ ! -f dist/cygor ]; then
-            echo '[!] Build failed: cygor binary not found in dist/';
-            exit 1;
+            echo '[!] Build failed: cygor binary not found in dist/'
+            exit 1
           fi
 
-          echo '[*] Verifying binary execution...';
-          cd dist;
-          chmod +x cygor;
-          ./cygor --help || true;
+          echo '[*] Verifying binary execution...'
+          cd dist
+          chmod +x cygor
+          ./cygor --help || true
 
-          echo '[*] Packaging release tarball...';
-          tar -czf ../${{ matrix.artifact_name }}.tar.gz cygor;
-          chown $(id -u):$(id -g) ../${{ matrix.artifact_name }}.tar.gz;
-          echo '[✓] Done building for ${{ matrix.arch }}';
+          echo '[*] Packaging release tarball...'
+          tar -czf ../${{ matrix.artifact_name }}.tar.gz cygor
+          chown $(id -u):$(id -g) ../${{ matrix.artifact_name }}.tar.gz
+          echo '[✓] Done building for ${{ matrix.arch }}'
           "
 
-      # Upload artifacts to GitHub
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -88,9 +92,6 @@ jobs:
             **/dist/**/*.tar.gz
             **/*.tar.gz
 
-  # --------------------------------------------------------------------
-  # Publish GitHub Release
-  # --------------------------------------------------------------------
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
