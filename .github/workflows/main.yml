@@ -1,4 +1,4 @@
-name: Build and Release Cygor Binaries
+name: Build and Release Cygor Binaries (Linux Only)
 
 on:
   push:
@@ -8,55 +8,33 @@ on:
 
 jobs:
   build:
-    name: Build for ${{ matrix.name }}
-    runs-on: ${{ matrix.runner }}
+    name: Build for ${{ matrix.arch }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: linux-x64
-            runner: ubuntu-latest
-            artifact_name: cygor-linux-x64
+          - arch: x64
             docker_image: quay.io/pypa/manylinux2014_x86_64
-            ext: ""
-          - name: linux-arm64
-            runner: ubuntu-latest
-            artifact_name: cygor-linux-arm64
+            artifact_name: cygor-linux-x64
+          - arch: arm64
             docker_image: quay.io/pypa/manylinux2014_aarch64
-            ext: ""
-          - name: macos-universal
-            runner: macos-latest
-            artifact_name: cygor-macos-universal
-            ext: ""
-          - name: windows-x64
-            runner: windows-latest
-            artifact_name: cygor-windows-x64
-            ext: ".exe"
+            artifact_name: cygor-linux-arm64
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        if: matrix.runner != 'ubuntu-latest'
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Set up QEMU
-        if: matrix.name == 'linux-arm64'
+      - name: Set up QEMU for ARM64 builds
+        if: matrix.arch == 'arm64'
         uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
 
-      ##########################################
-      # Linux (x64 / ARM64)
-      ##########################################
-      - name: Build inside manylinux container
-        if: matrix.runner == 'ubuntu-latest'
+      - name: Build Cygor binary inside manylinux container
         run: |
-          echo "Starting Linux build for ${{ matrix.name }}"
-          docker run --rm --platform linux/${{ matrix.name == 'linux-arm64' && 'arm64' || 'amd64' }} \
+          echo "Starting Linux build for ${{ matrix.arch }}"
+          docker run --rm --platform linux/${{ matrix.arch }} \
             -v "$PWD":/src -w /src ${{ matrix.docker_image }} /bin/bash -c "
           yum install -y python3-pip;
           python3 -m pip install --upgrade pip;
@@ -68,76 +46,14 @@ jobs:
           chown $(id -u):$(id -g) ../${{ matrix.artifact_name }}.tar.gz;
           "
 
-      ##########################################
-      # macOS
-      ##########################################
-      - name: Install dependencies (macOS)
-        if: matrix.runner == 'macos-latest'
-        run: |
-          python3 -m pip install --upgrade pip
-          pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 psycopg2-binary colorama
-
-      - name: Build executable (macOS)
-        if: matrix.runner == 'macos-latest'
-        run: |
-          echo "Building Cygor for macOS"
-          BASE_DIR=$(pwd)
-          pyinstaller --onefile --clean --noconfirm \
-            --add-data "$BASE_DIR/cygor/web/templates:cygor/web/templates" \
-            --add-data "$BASE_DIR/cygor/web/static:cygor/web/static" \
-            --name cygor cygor/cli.py
-          cd dist
-          ./cygor --help || true
-          tar -czf ../${{ matrix.artifact_name }}.tar.gz cygor
-          cd ..
-
-      ##########################################
-      # Windows
-      ##########################################
-      - name: Install dependencies (Windows)
-        if: matrix.runner == 'windows-latest'
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 psycopg2-binary colorama
-
-      - name: Build executable (Windows)
-        if: matrix.runner == 'windows-latest'
-        shell: pwsh
-        run: |
-          Write-Host "Building Cygor for Windows"
-          $BaseDir = (Get-Location).Path
-          pyinstaller --onefile --clean --noconfirm `
-            --add-data "$BaseDir\cygor\web\templates;cygor\web\templates" `
-            --add-data "$BaseDir\cygor\web\static;cygor\web\static" `
-            --name "cygor.exe" cygor/cli.py
-
-          cd dist
-          if (Test-Path "cygor.exe") {
-            Write-Host "Binary built successfully"
-          } else {
-            Write-Error "Error: cygor.exe not found"
-            exit 1
-          }
-
-          Compress-Archive -Path "cygor.exe" -DestinationPath "../${{ matrix.artifact_name }}.zip"
-          cd ..
-
-      ##########################################
-      # Upload artifacts
-      ##########################################
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: |
             dist/**/*.tar.gz
-            dist/**/*.zip
             ./*.tar.gz
-            ./*.zip
 
-  ##########################################
-  # Release
-  ##########################################
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
@@ -151,7 +67,7 @@ jobs:
       - name: Generate SHA256 checksums
         run: |
           cd dist
-          find . -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec sha256sum {} \; > SHA256SUMS.txt
+          find . -type f -name "*.tar.gz" -exec sha256sum {} \; > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Create GitHub Release
@@ -159,7 +75,6 @@ jobs:
         with:
           files: |
             dist/**/*.tar.gz
-            dist/**/*.zip
             dist/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
