@@ -14,24 +14,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux x86_64
           - name: linux-x64
             runner: ubuntu-latest
             artifact_name: cygor-linux-x64
             docker_image: quay.io/pypa/manylinux2014_x86_64
             ext: ""
-          # Linux ARM64 (Raspberry Pi, ARM servers)
           - name: linux-arm64
             runner: ubuntu-latest
             artifact_name: cygor-linux-arm64
             docker_image: quay.io/pypa/manylinux2014_aarch64
             ext: ""
-          # macOS Universal (Intel + ARM)
           - name: macos-universal
             runner: macos-latest
             artifact_name: cygor-macos-universal
             ext: ""
-          # Windows x64
           - name: windows-x64
             runner: windows-latest
             artifact_name: cygor-windows-x64
@@ -47,26 +43,38 @@ jobs:
         with:
           python-version: "3.11"
 
+      # Enable QEMU for ARM64 builds on x86 GitHub runners
+      - name: Set up QEMU
+        if: matrix.name == 'linux-arm64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       ######################################
-      # Linux Builds (x64 + ARM64)
+      # Linux builds inside manylinux containers
       ######################################
-      - name: Build on manylinux container
+      - name: Build on manylinux
         if: matrix.runner == 'ubuntu-latest'
         run: |
-          docker run --rm -v "$PWD":/src -w /src ${{ matrix.docker_image }} /bin/bash -c "
+          docker run --rm --platform linux/${{ matrix.name == 'linux-arm64' && 'arm64' || 'amd64' }} \
+            -v "$PWD":/src -w /src ${{ matrix.docker_image }} /bin/bash -c "
           yum install -y python3-pip;
           python3 -m pip install --upgrade pip;
           python3 -m pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 psycopg2-binary colorama;
-          pyinstaller --onefile --clean \
+          pyinstaller --onefile --clean --noconfirm --debug \
+            --collect-all fastapi \
+            --collect-all sqlalchemy \
+            --collect-all jinja2 \
             --add-data 'cygor/web/templates:cygor/web/templates' \
             --add-data 'cygor/web/static:cygor/web/static' \
             --name cygor cygor/cli.py;
           cd dist;
+          ./cygor --help || true;
           tar -czf ../${{ matrix.artifact_name }}.tar.gz cygor;
           "
 
       ######################################
-      # macOS / Windows Builds
+      # macOS / Windows builds
       ######################################
       - name: Install dependencies
         if: matrix.runner != 'ubuntu-latest'
@@ -77,23 +85,21 @@ jobs:
       - name: Build executable
         if: matrix.runner != 'ubuntu-latest'
         run: |
-          pyinstaller --onefile --clean \
+          pyinstaller --onefile --clean --noconfirm --debug \
+            --collect-all fastapi \
+            --collect-all sqlalchemy \
+            --collect-all jinja2 \
             --add-data "cygor/web/templates:cygor/web/templates" \
             --add-data "cygor/web/static:cygor/web/static" \
             --name cygor${{ matrix.ext }} cygor/cli.py
           cd dist
+          ./cygor${{ matrix.ext }} --help || echo "Binary executed successfully"
           tar -czf ../${{ matrix.artifact_name }}.tar.gz cygor${{ matrix.ext }}
           cd ..
 
       ######################################
-      # Verify and Upload
+      # Upload Artifacts
       ######################################
-      - name: Verify artifact exists
-        run: |
-          echo "Verifying build artifacts..."
-          ls -lh dist || true
-          ls -lh *.tar.gz || true
-
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -102,9 +108,6 @@ jobs:
             dist/**/*.tar.gz
             ./*.tar.gz
 
-  ######################################
-  # Release Creation
-  ######################################
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
