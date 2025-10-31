@@ -44,18 +44,25 @@ jobs:
           fi
 
           docker run --rm $PLATFORM \
-            -v "$PWD":/src -w /src ${{ matrix.docker_image }} /bin/bash -c "
-          yum install -y python3-pip;
-          python3 -m pip install --upgrade pip;
-          python3 -m pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 psycopg2-binary colorama;
+            -v "$PWD":/src -w /src ${{ matrix.docker_image }} /bin/bash -e -c "
+          set -e
+          yum install -y python39 python39-pip;
+          python3.9 -m venv venv;
+          source venv/bin/activate;
+          python -m pip install --upgrade pip;
+          pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 psycopg2-binary colorama;
           echo '[*] Building single-file Cygor binary...';
           pyinstaller --onefile --clean --noconfirm \
             --add-data 'cygor/web/templates:cygor/web/templates' \
             --add-data 'cygor/web/static:cygor/web/static' \
             --name cygor cygor/cli.py;
+          echo '[*] Checking dist/ contents...';
+          ls -lh dist || true;
+          if [ ! -f dist/cygor ]; then
+            echo '[!] Build failed: cygor binary not found in dist/';
+            exit 1;
+          fi
           cd dist;
-          echo '[*] Verifying binary output...';
-          ls -lh cygor;
           ./cygor --help || true;
           tar -czf ../${{ matrix.artifact_name }}.tar.gz cygor;
           chown $(id -u):$(id -g) ../${{ matrix.artifact_name }}.tar.gz;
