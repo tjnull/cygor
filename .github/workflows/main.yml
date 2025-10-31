@@ -31,9 +31,6 @@ jobs:
         with:
           platforms: arm64
 
-      # ------------------------------------------------------
-      # Build section (Single executable per architecture)
-      # ------------------------------------------------------
       - name: Build Cygor single-file binary
         run: |
           echo "Starting Linux build for ${{ matrix.arch }}"
@@ -46,11 +43,11 @@ jobs:
           docker run --rm $PLATFORM \
             -v "$PWD":/src -w /src ${{ matrix.docker_image }} /bin/bash -e -c "
           set -e
-          yum install -y python39 python39-pip;
-          python3.9 -m venv venv;
-          source venv/bin/activate;
+          echo '[*] Installing Python3 and build dependencies...'
+          yum install -y python3 python3-pip;
+          ln -sf /usr/bin/python3 /usr/bin/python;
           python -m pip install --upgrade pip;
-          pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 psycopg2-binary colorama;
+          python -m pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 psycopg2-binary colorama;
           echo '[*] Building single-file Cygor binary...';
           pyinstaller --onefile --clean --noconfirm \
             --add-data 'cygor/web/templates:cygor/web/templates' \
@@ -77,9 +74,6 @@ jobs:
             **/dist/**/*.tar.gz
             **/*.tar.gz
 
-  # ------------------------------------------------------
-  # Publish GitHub Release
-  # ------------------------------------------------------
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
