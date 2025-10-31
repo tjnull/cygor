@@ -44,7 +44,7 @@ jobs:
       - name: Build ${{ matrix.arch }} Binary (Debian 12)
         run: |
           docker run --rm --platform ${{ matrix.platform }} \
-            -v "$PWD":/src -w /src debian:bookworm /bin/bash -e -c "
+            -v "$PWD":/src -w /src debian:bookworm /bin/bash -e -c '
           set -x
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -54,22 +54,22 @@ jobs:
           python3.11 -m pip install --break-system-packages pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
           
           # Create a wrapper entry point to handle relative imports
-          cat > cygor_entry.py << 'ENTRY_EOF'
+          cat > cygor_entry.py << "ENTRY_EOF"
 #!/usr/bin/env python3
 import sys
 from cygor.cli import main
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())
 ENTRY_EOF
           
-          STATIC_PATH_ARG=''
-          if [ -d 'cygor/webapp/static' ]; then
-            STATIC_PATH_ARG='--add-data cygor/webapp/static:cygor/webapp/static'
+          STATIC_PATH_ARG=""
+          if [ -d "cygor/webapp/static" ]; then
+            STATIC_PATH_ARG="--add-data cygor/webapp/static:cygor/webapp/static"
           fi
           # Use wrapper script to preserve relative imports
           pyinstaller --onefile --clean --noconfirm --name cygor \
-            --add-data 'cygor/webapp/templates:cygor/webapp/templates' \
-            \$STATIC_PATH_ARG \
+            --add-data "cygor/webapp/templates:cygor/webapp/templates" \
+            $STATIC_PATH_ARG \
             --hidden-import cygor.precheck \
             --hidden-import cygor.workspace \
             --hidden-import cygor.banner \
@@ -79,10 +79,11 @@ ENTRY_EOF
             --hidden-import cygor.enumcli \
             --hidden-import cygor.webctl \
             cygor_entry.py
-          cd dist && chmod +x cygor
+          chmod +x dist/cygor
+          cd dist
           zip -9 /src/${{ matrix.artifact }}.zip cygor
           ls -lh /src/${{ matrix.artifact }}.zip
-          "
+          '
 
       - name: Verify Build Output
         run: |
@@ -106,16 +107,16 @@ ENTRY_EOF
           echo ""
           echo "=== Testing cygor (no args) ==="
           docker run --rm --platform ${{ matrix.platform }} \
-            -v "$PWD/test-dir":/app -w /app debian:bookworm /bin/bash -c "
-          ./cygor 2>&1 || EXIT_CODE=\$?; echo \"Exit code: \$EXIT_CODE\"
-          " || echo "⚠️  Binary execution failed (may need relative import fixes)"
+            -v "$PWD/test-dir":/app -w /app debian:bookworm /bin/bash -c '
+          ./cygor 2>&1 || EXIT_CODE=$?; echo "Exit code: $EXIT_CODE"
+          ' || echo "⚠️  Binary execution failed (may need relative import fixes)"
           
           echo ""
           echo "=== Testing cygor -h ==="
           docker run --rm --platform ${{ matrix.platform }} \
-            -v "$PWD/test-dir":/app -w /app debian:bookworm /bin/bash -c "
-          ./cygor -h 2>&1 || EXIT_CODE=\$?; echo \"Exit code: \$EXIT_CODE\"
-          " || echo "⚠️  Binary execution failed (may need relative import fixes)"
+            -v "$PWD/test-dir":/app -w /app debian:bookworm /bin/bash -c '
+          ./cygor -h 2>&1 || EXIT_CODE=$?; echo "Exit code: $EXIT_CODE"
+          ' || echo "⚠️  Binary execution failed (may need relative import fixes)"
           
           # Clean up test directory
           rm -rf test-dir
