@@ -1,4 +1,4 @@
-name: Build and Release Cygor Binaries (Single-File Linux Builds)
+name: Build and Release Cygor (Single-File + Multi-Arch Docker Image)
 
 on:
   push:
@@ -6,9 +6,13 @@ on:
       - "v*"
   workflow_dispatch:
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build:
-    name: Build for ${{ matrix.arch }}
+    name: Build Binaries (${{ matrix.arch }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -22,15 +26,9 @@ jobs:
             artifact_name: cygor-linux-arm64
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Show repository structure
-        run: |
-          echo "[*] Repository structure:"
-          ls -R cygor || true
 
       - name: Enable QEMU for ARM64
         if: matrix.arch == 'arm64'
@@ -38,9 +36,8 @@ jobs:
         with:
           platforms: arm64
 
-      - name: Build Cygor binary
+      - name: Build PyInstaller binary
         run: |
-          echo "Starting Linux build for ${{ matrix.arch }}"
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             PLATFORM="--platform linux/arm64"
           else
@@ -50,98 +47,82 @@ jobs:
           docker run --rm $PLATFORM \
             -v "$PWD":/src -w /src ${{ matrix.docker_image }} /bin/bash -e -c "
           set -e
-
-          echo '[*] Installing dependencies for Python 3.9 build...'
-          yum install -y gcc openssl-devel bzip2-devel libffi-devel make wget postgresql-devel;
-
-          echo '[*] Downloading and building Python 3.9 from source...'
+          yum install -y gcc openssl-devel bzip2-devel libffi-devel make wget postgresql-devel zlib-devel readline-devel
           cd /tmp
           wget -q https://www.python.org/ftp/python/3.9.18/Python-3.9.18.tgz
-          tar -xzf Python-3.9.18.tgz
-          cd Python-3.9.18
+          tar -xzf Python-3.9.18.tgz && cd Python-3.9.18
           ./configure --enable-optimizations --prefix=/usr/local
-          make -j2
-          make altinstall
+          make -j2 && make altinstall
           ln -sf /usr/local/bin/python3.9 /usr/bin/python
           ln -sf /usr/local/bin/pip3.9 /usr/bin/pip
-
-          echo '[*] Verifying Python installation...'
-          python --version
-          pip --version
           pip install --upgrade pip wheel setuptools
-
-          echo '[*] Installing Python dependencies...'
-          pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama
-          pip install psycopg2-binary || pip install psycopg2
-
-          echo '[*] Verifying application directories...'
-          ls -R cygor/webapp || (echo '[!] Missing cygor/webapp directory!' && exit 1)
-
-          STATIC_PATH_ARG=\"\"
-          if [ -d \"cygor/webapp/static\" ]; then
-            STATIC_PATH_ARG=\"--add-data cygor/webapp/static:cygor/webapp/static\"
-            echo '[*] Including static directory'
-          else
-            echo '[*] No static directory found — skipping'
+          pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
+          STATIC_PATH_ARG=''
+          if [ -d 'cygor/webapp/static' ]; then
+            STATIC_PATH_ARG='--add-data cygor/webapp/static:cygor/webapp/static'
           fi
-
-          echo '[*] Building single-file binary with PyInstaller...'
           pyinstaller --onefile --clean --noconfirm \
-            --add-data \"cygor/webapp/templates:cygor/webapp/templates\" \
-            \$STATIC_PATH_ARG \
+            --add-data 'cygor/webapp/templates:cygor/webapp/templates' \
+            $STATIC_PATH_ARG \
             --name cygor cygor/cli.py
-
-          echo '[*] Checking dist/ contents...'
-          ls -lh dist || true
-          if [ ! -f dist/cygor ]; then
-            echo '[!] Build failed: cygor binary not found in dist/'
-            exit 1
-          fi
-
-          echo '[*] Verifying binary execution...'
-          cd dist
-          chmod +x cygor
-          ./cygor --help || true
-
-          echo '[*] Packaging release tarball...'
+          cd dist && chmod +x cygor
           tar -czf ../${{ matrix.artifact_name }}.tar.gz cygor
-          chown $(id -u):$(id -g) ../${{ matrix.artifact_name }}.tar.gz
-          echo '[✓] Done building for ${{ matrix.arch }}'
           "
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: |
-            **/dist/**/*.tar.gz
+            dist/**/*.tar.gz
             **/*.tar.gz
 
   release:
-    name: Publish GitHub Release
+    name: Publish Release & Debian 13 Docker Image
     runs-on: ubuntu-latest
     needs: build
+
     steps:
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
         with:
           path: dist
 
-      - name: Verify binaries in containers before release
+      - name: Extract binaries for Docker context
         run: |
-          echo "[*] Testing x64 binary in container..."
-          tar -xzf dist/cygor-linux-x64.tar.gz -C dist/
-          chmod +x dist/cygor
-          docker run --rm -v "$PWD/dist:/opt/cygor" -w /opt/cygor quay.io/pypa/manylinux2014_x86_64 /opt/cygor/cygor --help || true
+          rm -rf dockerbuild
+          mkdir -p dockerbuild/amd64 dockerbuild/arm64
+          tar -xzf dist/cygor-linux-x64.tar.gz -C dockerbuild/amd64
+          tar -xzf dist/cygor-linux-arm64.tar.gz -C dockerbuild/arm64
 
-          echo "[*] Testing ARM64 binary in container (via QEMU)..."
-          docker run --rm --platform linux/arm64 -v "$PWD/dist:/opt/cygor" -w /opt/cygor quay.io/pypa/manylinux2014_aarch64 /opt/cygor/cygor --help || true
-
-      - name: Generate SHA256 checksums
+      - name: Generate checksums
         run: |
           cd dist
           find . -type f -name "*.tar.gz" -exec sha256sum {} \; > SHA256SUMS.txt
           cat SHA256SUMS.txt
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push multi-arch image (Debian 13 / Python 3.11)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/cygor:latest
+            ghcr.io/${{ github.repository_owner }}/cygor:${{ github.ref_name }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
