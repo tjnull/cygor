@@ -45,8 +45,8 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
             python3.11 python3.11-dev python3-pip build-essential \
             libpq-dev libffi-dev zlib1g-dev libssl-dev zip
-          python3.11 -m pip install --upgrade pip wheel setuptools
-          python3.11 -m pip install pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
+          python3.11 -m pip install --break-system-packages --upgrade pip wheel setuptools
+          python3.11 -m pip install --break-system-packages pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
           cd cygor
           STATIC_PATH_ARG=''
           if [ -d 'webapp/static' ]; then
