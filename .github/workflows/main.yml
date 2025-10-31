@@ -47,11 +47,21 @@ jobs:
             libpq-dev libffi-dev zlib1g-dev libssl-dev zip
           python3.11 -m pip install --break-system-packages --upgrade pip wheel setuptools
           python3.11 -m pip install --break-system-packages pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
+          
+          # Create a wrapper entry point to handle relative imports
+          cat > cygor_entry.py << 'ENTRY_EOF'
+#!/usr/bin/env python3
+import sys
+from cygor.cli import main
+if __name__ == '__main__':
+    sys.exit(main())
+ENTRY_EOF
+          
           STATIC_PATH_ARG=''
           if [ -d 'cygor/webapp/static' ]; then
             STATIC_PATH_ARG='--add-data cygor/webapp/static:cygor/webapp/static'
           fi
-          # Use -m to run as module, preserving relative imports
+          # Use wrapper script to preserve relative imports
           pyinstaller --onefile --clean --noconfirm --name cygor \
             --add-data 'cygor/webapp/templates:cygor/webapp/templates' \
             \$STATIC_PATH_ARG \
@@ -63,7 +73,7 @@ jobs:
             --hidden-import cygor.parse_ext \
             --hidden-import cygor.enumcli \
             --hidden-import cygor.webctl \
-            -m cygor.cli
+            cygor_entry.py
           cd dist && chmod +x cygor
           zip -9 /src/${{ matrix.artifact }}.zip cygor
           ls -lh /src/${{ matrix.artifact }}.zip
