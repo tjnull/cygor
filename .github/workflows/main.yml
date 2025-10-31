@@ -58,8 +58,9 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: |
-            dist/**/*.tar.gz
-            ./*.tar.gz
+            **/dist/**/*.tar.gz
+            **/*.tar.gz
+
 
   release:
     name: Publish GitHub Release
@@ -80,6 +81,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name || 'manual-build' }}
+          name: "Cygor Development Build"
           files: |
             dist/**/*.tar.gz
             dist/SHA256SUMS.txt
