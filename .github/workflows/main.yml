@@ -51,7 +51,17 @@ jobs:
             python3.11 python3.11-dev python3-pip build-essential \
             libpq-dev libffi-dev zlib1g-dev libssl-dev zip
           python3.11 -m pip install --break-system-packages --upgrade pip wheel setuptools
-          python3.11 -m pip install --break-system-packages pyinstaller fastapi uvicorn sqlalchemy asyncpg jinja2 colorama psycopg2-binary
+          python3.11 -m pip install --break-system-packages pyinstaller
+          
+          # Install all project dependencies from pyproject.toml
+          python3.11 -m pip install --break-system-packages \
+            colorama python-libnmap requests playwright smbmap tabulate \
+            fastapi uvicorn[standard] jinja2 python-multipart \
+            sqlmodel SQLAlchemy[asyncio] psycopg[async] aiosqlite \
+            lxml watchfiles pandas openpyxl
+          
+          # Install git dependency
+          python3.11 -m pip install --break-system-packages git+https://github.com/Pennyw0rth/NfsClient.git@master
           
           echo '#!/usr/bin/env python3' > cygor_entry.py
           echo 'import sys' >> cygor_entry.py
@@ -75,6 +85,23 @@ jobs:
             --hidden-import cygor.parse_ext \
             --hidden-import cygor.enumcli \
             --hidden-import cygor.webctl \
+            --hidden-import libnmap \
+            --hidden-import libnmap.parser \
+            --hidden-import libnmap.process \
+            --hidden-import smbmap \
+            --hidden-import playwright \
+            --hidden-import sqlmodel \
+            --hidden-import psycopg \
+            --hidden-import aiosqlite \
+            --hidden-import lxml \
+            --hidden-import pandas \
+            --hidden-import openpyxl \
+            --hidden-import pynfsclient \
+            --collect-all fastapi \
+            --collect-all uvicorn \
+            --collect-all sqlalchemy \
+            --collect-all jinja2 \
+            --collect-all starlette \
             cygor_entry.py
           chmod +x dist/cygor
           cd dist
