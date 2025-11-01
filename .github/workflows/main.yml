@@ -125,16 +125,14 @@ jobs:
           cp dist/cygor package/usr/local/bin/
           
           # Create control file for .deb
-          cat > package/DEBIAN/control << EOF
-Package: cygor
-Version: 1.0.0
-Section: utils
-Priority: optional
-Architecture: ${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }}
-Maintainer: tjnull
-Description: Cygor security enumeration tool
- Automated scanner and enumeration framework
-EOF
+          echo 'Package: cygor' > package/DEBIAN/control
+          echo 'Version: 1.0.0' >> package/DEBIAN/control
+          echo 'Section: utils' >> package/DEBIAN/control
+          echo 'Priority: optional' >> package/DEBIAN/control
+          echo 'Architecture: ${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }}' >> package/DEBIAN/control
+          echo 'Maintainer: tjnull' >> package/DEBIAN/control
+          echo 'Description: Cygor security enumeration tool' >> package/DEBIAN/control
+          echo ' Automated scanner and enumeration framework' >> package/DEBIAN/control
           
           if [ '${{ matrix.format }}' = 'deb' ]; then
             # Build .deb package
