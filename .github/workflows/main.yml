@@ -151,7 +151,7 @@ PKGBUILD_EOF
           else
             # Use Debian container for DEB/RPM packages
             docker run --rm --platform ${{ matrix.platform }} \
-              -v "$PWD":/src -w /src debian:bookworm /bin/bash -c "
+              -v "$PWD":/src -w /src debian:bookworm /bin/bash << 'DEBIANEOF'
             set -ex
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -161,32 +161,31 @@ PKGBUILD_EOF
             python3.11 -m pip install --break-system-packages --upgrade pip wheel setuptools
             python3.11 -m pip install --break-system-packages pyinstaller
             
-            # Install core dependencies only (reduce binary size)
             python3.11 -m pip install --break-system-packages \
               colorama python-libnmap requests smbmap tabulate \
               fastapi uvicorn jinja2 python-multipart \
               sqlmodel SQLAlchemy psycopg aiosqlite \
               lxml watchfiles pandas openpyxl
             
-            # Install git dependency
             python3.11 -m pip install --break-system-packages git+https://github.com/Pennyw0rth/NfsClient.git@master
             
-            echo '#!/usr/bin/env python3' > cygor_entry.py
-            echo 'import sys' >> cygor_entry.py
-            echo 'from cygor.cli import main' >> cygor_entry.py
-            echo 'if __name__ == \"__main__\":' >> cygor_entry.py
-            echo '    sys.exit(main())' >> cygor_entry.py
+            cat > cygor_entry.py << 'PYEOF2'
+#!/usr/bin/env python3
+import sys
+from cygor.cli import main
+if __name__ == "__main__":
+    sys.exit(main())
+PYEOF2
             
             STATIC_PATH_ARG=''
             if [ -d 'cygor/webapp/static' ]; then
               STATIC_PATH_ARG='--add-data cygor/webapp/static:cygor/webapp/static'
             fi
             
-            # Build with optimizations to reduce size
             pyinstaller --onefile --clean --noconfirm --name cygor \
               --strip \
               --add-data 'cygor/webapp/templates:cygor/webapp/templates' \
-              \$STATIC_PATH_ARG \
+              $STATIC_PATH_ARG \
               --hidden-import cygor.precheck \
               --hidden-import cygor.workspace \
               --hidden-import cygor.banner \
@@ -209,33 +208,44 @@ PKGBUILD_EOF
             chmod +x dist/cygor
             strip dist/cygor || true
             
-            # Create package structure
             mkdir -p package/usr/local/bin
             mkdir -p package/DEBIAN
             cp dist/cygor package/usr/local/bin/
             
-            # Create control file for .deb
-            echo 'Package: cygor' > package/DEBIAN/control
-            echo 'Version: 1.0.0' >> package/DEBIAN/control
-            echo 'Section: utils' >> package/DEBIAN/control
-            echo 'Priority: optional' >> package/DEBIAN/control
-            echo 'Architecture: ${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }}' >> package/DEBIAN/control
-            echo 'Maintainer: tjnull' >> package/DEBIAN/control
-            echo 'Description: Cygor security enumeration tool' >> package/DEBIAN/control
-            echo ' Automated scanner and enumeration framework' >> package/DEBIAN/control
+            cat > package/DEBIAN/control << 'CONTROLEOF'
+Package: cygor
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: tjnull
+Description: Cygor security enumeration tool
+ Automated scanner and enumeration framework
+CONTROLEOF
             
-            if [ '${{ matrix.format }}' = 'deb' ]; then
-              # Build .deb package
-              fakeroot dpkg-deb --build package /src/cygor_1.0.0_${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }}.deb
-              ls -lh /src/*.deb
+            FORMAT="${{ matrix.format }}"
+            ARCH="${{ matrix.arch }}"
+            
+            if [ "$FORMAT" = "deb" ]; then
+              if [ "$ARCH" = "x64" ]; then
+                fakeroot dpkg-deb --build package /src/cygor_1.0.0_amd64.deb
+                ls -lh /src/*.deb
+              else
+                sed -i 's/Architecture: amd64/Architecture: arm64/' package/DEBIAN/control
+                fakeroot dpkg-deb --build package /src/cygor_1.0.0_arm64.deb
+                ls -lh /src/*.deb
+              fi
             else
-              # Build .deb first, then convert to .rpm
               fakeroot dpkg-deb --build package /tmp/cygor.deb
               alien --to-rpm --scripts /tmp/cygor.deb
-              mv *.rpm /src/cygor-1.0.0-1.${{ matrix.arch == 'x64' && 'x86_64' || 'aarch64' }}.rpm
+              if [ "$ARCH" = "x64" ]; then
+                mv *.rpm /src/cygor-1.0.0-1.x86_64.rpm
+              else
+                mv *.rpm /src/cygor-1.0.0-1.aarch64.rpm
+              fi
               ls -lh /src/*.rpm
             fi
-            "
+DEBIANEOF
           fi
 
       - name: Verify Build Output
