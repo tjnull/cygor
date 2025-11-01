@@ -166,25 +166,26 @@ EOF
 
       - name: Test Package Installation
         run: |
-          if [ "${{ matrix.format }}" = "deb" ]; then
-            FILE="cygor_1.0.0_${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }}.deb"
-            echo "=== Testing .deb package ==="
-            docker run --rm --platform ${{ matrix.platform }} \
-              -v "$PWD":/test -w /test debian:bookworm /bin/bash -c "
-              apt-get update -qq
-              dpkg -i $FILE || apt-get install -f -y
-              cygor -h || true
-              dpkg -r cygor
-              "
+          FORMAT="${{ matrix.format }}"
+          ARCH="${{ matrix.arch }}"
+          PLATFORM="${{ matrix.platform }}"
+          
+          if [ "$FORMAT" = "deb" ]; then
+            if [ "$ARCH" = "x64" ]; then
+              FILE="cygor_1.0.0_amd64.deb"
+            else
+              FILE="cygor_1.0.0_arm64.deb"
+            fi
+            echo "=== Testing .deb package: $FILE ==="
+            docker run --rm --platform "$PLATFORM" -v "$PWD":/test -w /test debian:bookworm /bin/bash -c "apt-get update -qq && (dpkg -i $FILE || apt-get install -f -y) && (cygor -h || true) && dpkg -r cygor"
           else
-            FILE="cygor-1.0.0-1.${{ matrix.arch == 'x64' && 'x86_64' || 'aarch64' }}.rpm"
-            echo "=== Testing .rpm package ==="
-            docker run --rm --platform ${{ matrix.platform }} \
-              -v "$PWD":/test -w /test rockylinux:9 /bin/bash -c "
-              dnf install -y $FILE
-              cygor -h || true
-              dnf remove -y cygor
-              " || echo "⚠️  RPM test skipped (not critical)"
+            if [ "$ARCH" = "x64" ]; then
+              FILE="cygor-1.0.0-1.x86_64.rpm"
+            else
+              FILE="cygor-1.0.0-1.aarch64.rpm"
+            fi
+            echo "=== Testing .rpm package: $FILE ==="
+            docker run --rm --platform "$PLATFORM" -v "$PWD":/test -w /test rockylinux:9 /bin/bash -c "dnf install -y $FILE && (cygor -h || true) && dnf remove -y cygor" || echo "RPM test skipped"
           fi
 
       - name: Upload Package
