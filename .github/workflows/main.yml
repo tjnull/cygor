@@ -151,10 +151,21 @@ EOF
 
       - name: Verify Build Output
         run: |
-          if [ '${{ matrix.format }}' = 'deb' ]; then
-            FILE="cygor_1.0.0_${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }}.deb"
+          FORMAT="${{ matrix.format }}"
+          ARCH="${{ matrix.arch }}"
+          
+          if [ "$FORMAT" = "deb" ]; then
+            if [ "$ARCH" = "x64" ]; then
+              FILE="cygor_1.0.0_amd64.deb"
+            else
+              FILE="cygor_1.0.0_arm64.deb"
+            fi
           else
-            FILE="cygor-1.0.0-1.${{ matrix.arch == 'x64' && 'x86_64' || 'aarch64' }}.rpm"
+            if [ "$ARCH" = "x64" ]; then
+              FILE="cygor-1.0.0-1.x86_64.rpm"
+            else
+              FILE="cygor-1.0.0-1.aarch64.rpm"
+            fi
           fi
           
           if [ ! -f "$FILE" ]; then
