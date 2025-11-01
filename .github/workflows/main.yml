@@ -368,11 +368,35 @@ jobs:
       - name: Wait for artifacts to be ready
         run: sleep 10
 
-      - name: Download All Artifacts
+      - name: Download Linux x64 DEB
         uses: actions/download-artifact@v4
         with:
-          path: dist
-          merge-multiple: false
+          name: cygor-linux-x64-deb
+          path: dist/cygor-linux-x64-deb
+
+      - name: Download Linux x64 RPM
+        uses: actions/download-artifact@v4
+        with:
+          name: cygor-linux-x64-rpm
+          path: dist/cygor-linux-x64-rpm
+
+      - name: Download Linux ARM64 DEB
+        uses: actions/download-artifact@v4
+        with:
+          name: cygor-linux-arm64-deb
+          path: dist/cygor-linux-arm64-deb
+
+      - name: Download Linux ARM64 RPM
+        uses: actions/download-artifact@v4
+        with:
+          name: cygor-linux-arm64-rpm
+          path: dist/cygor-linux-arm64-rpm
+
+      - name: Download Windows
+        uses: actions/download-artifact@v4
+        with:
+          name: cygor-windows-x64
+          path: dist/cygor-windows-x64
 
       - name: List Downloaded Artifacts
         run: |
