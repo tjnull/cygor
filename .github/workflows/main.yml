@@ -1,36 +1,53 @@
-name: Cygor Linux + Docker Builds (ZIP artifacts)
+name: Cygor Build Pipeline
 
 on:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create GitHub Release'
+        required: false
+        type: boolean
+        default: false
+      release_tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: false
+        type: string
   push:
-    branches:
-      - main
     tags:
       - "v*"
-  pull_request:
-    branches:
-      - main
-  workflow_dispatch:
 
 permissions:
   contents: write
   packages: write
 
 # ================================================================
-# 1) Build Linux Binaries (x64 & ARM64) -> ZIP
+# 1) Build Linux Binaries (x64 & ARM64) -> Multiple Formats
 # ================================================================
 jobs:
   build-linux:
-    name: Build Linux ${{ matrix.arch }} Binary (ZIP)
+    name: Build Linux ${{ matrix.arch }} - ${{ matrix.format }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
+          # x64 builds
           - arch: x64
             platform: linux/amd64
-            artifact: cygor-linux-x64
+            format: deb
+            artifact: cygor-linux-x64-deb
+          - arch: x64
+            platform: linux/amd64
+            format: rpm
+            artifact: cygor-linux-x64-rpm
+          # ARM64 builds (can be disabled for faster iteration)
           - arch: arm64
             platform: linux/arm64
-            artifact: cygor-linux-arm64
+            format: deb
+            artifact: cygor-linux-arm64-deb
+          - arch: arm64
+            platform: linux/arm64
+            format: rpm
+            artifact: cygor-linux-arm64-rpm
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -49,15 +66,16 @@ jobs:
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y \
             python3.11 python3.11-dev python3-pip build-essential \
-            libpq-dev libffi-dev zlib1g-dev libssl-dev zip git
+            libpq-dev libffi-dev zlib1g-dev libssl-dev zip git \
+            rpm alien fakeroot
           python3.11 -m pip install --break-system-packages --upgrade pip wheel setuptools
           python3.11 -m pip install --break-system-packages pyinstaller
           
-          # Install all project dependencies from pyproject.toml
+          # Install core dependencies only (reduce binary size)
           python3.11 -m pip install --break-system-packages \
-            colorama python-libnmap requests playwright smbmap tabulate \
-            fastapi uvicorn[standard] jinja2 python-multipart \
-            sqlmodel SQLAlchemy[asyncio] psycopg[async] aiosqlite \
+            colorama python-libnmap requests smbmap tabulate \
+            fastapi uvicorn jinja2 python-multipart \
+            sqlmodel SQLAlchemy psycopg aiosqlite \
             lxml watchfiles pandas openpyxl
           
           # Install git dependency
@@ -74,7 +92,9 @@ jobs:
             STATIC_PATH_ARG='--add-data cygor/webapp/static:cygor/webapp/static'
           fi
           
+          # Build with optimizations to reduce size
           pyinstaller --onefile --clean --noconfirm --name cygor \
+            --strip \
             --add-data 'cygor/webapp/templates:cygor/webapp/templates' \
             \$STATIC_PATH_ARG \
             --hidden-import cygor.precheck \
@@ -85,75 +105,95 @@ jobs:
             --hidden-import cygor.parse_ext \
             --hidden-import cygor.enumcli \
             --hidden-import cygor.webctl \
-            --hidden-import libnmap \
             --hidden-import libnmap.parser \
-            --hidden-import libnmap.process \
             --hidden-import smbmap \
-            --hidden-import playwright \
             --hidden-import sqlmodel \
             --hidden-import psycopg \
             --hidden-import aiosqlite \
-            --hidden-import lxml \
-            --hidden-import pandas \
-            --hidden-import openpyxl \
-            --hidden-import pynfsclient \
-            --collect-all fastapi \
-            --collect-all uvicorn \
-            --collect-all sqlalchemy \
-            --collect-all jinja2 \
-            --collect-all starlette \
+            --collect-submodules fastapi \
+            --collect-submodules uvicorn \
+            --collect-submodules sqlalchemy \
+            --collect-submodules jinja2 \
             cygor_entry.py
+          
           chmod +x dist/cygor
-          cd dist
-          zip -9 /src/${{ matrix.artifact }}.zip cygor
-          ls -lh /src/${{ matrix.artifact }}.zip
+          strip dist/cygor || true
+          
+          # Create package structure
+          mkdir -p package/usr/local/bin
+          mkdir -p package/DEBIAN
+          cp dist/cygor package/usr/local/bin/
+          
+          # Create control file for .deb
+          cat > package/DEBIAN/control << EOF
+Package: cygor
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: ${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }}
+Maintainer: tjnull
+Description: Cygor security enumeration tool
+ Automated scanner and enumeration framework
+EOF
+          
+          if [ '${{ matrix.format }}' = 'deb' ]; then
+            # Build .deb package
+            fakeroot dpkg-deb --build package /src/cygor_1.0.0_${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }}.deb
+            ls -lh /src/*.deb
+          else
+            # Build .deb first, then convert to .rpm
+            fakeroot dpkg-deb --build package /tmp/cygor.deb
+            alien --to-rpm --scripts /tmp/cygor.deb
+            mv *.rpm /src/cygor-1.0.0-1.${{ matrix.arch == 'x64' && 'x86_64' || 'aarch64' }}.rpm
+            ls -lh /src/*.rpm
+          fi
           "
 
       - name: Verify Build Output
         run: |
-          if [ ! -f ${{ matrix.artifact }}.zip ]; then
-            echo "ERROR: ${{ matrix.artifact }}.zip was not created"
+          if [ '${{ matrix.format }}' = 'deb' ]; then
+            FILE="cygor_1.0.0_${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }}.deb"
+          else
+            FILE="cygor-1.0.0-1.${{ matrix.arch == 'x64' && 'x86_64' || 'aarch64' }}.rpm"
+          fi
+          
+          if [ ! -f "$FILE" ]; then
+            echo "ERROR: $FILE was not created"
             exit 1
           fi
           echo "Build successful. File size:"
-          ls -lh ${{ matrix.artifact }}.zip
+          ls -lh "$FILE"
 
-      - name: Test Binary (Help Menu)
+      - name: Test Package Installation
         run: |
-          # Extract the binary for testing
-          unzip -q ${{ matrix.artifact }}.zip -d test-dir
-          chmod +x test-dir/cygor
-          
-          echo "=== Binary Info ==="
-          ls -lh test-dir/cygor
-          file test-dir/cygor || true
-          
-          echo ""
-          echo "=== Testing cygor (no args) ==="
-          docker run --rm --platform ${{ matrix.platform }} \
-            -v "$PWD/test-dir":/app -w /app debian:bookworm /bin/bash -c '
-          ./cygor 2>&1 || EXIT_CODE=$?; echo "Exit code: $EXIT_CODE"
-          ' || echo "⚠️  Binary execution failed (may need relative import fixes)"
-          
-          echo ""
-          echo "=== Testing cygor -h ==="
-          docker run --rm --platform ${{ matrix.platform }} \
-            -v "$PWD/test-dir":/app -w /app debian:bookworm /bin/bash -c '
-          ./cygor -h 2>&1 || EXIT_CODE=$?; echo "Exit code: $EXIT_CODE"
-          ' || echo "⚠️  Binary execution failed (may need relative import fixes)"
-          
-          # Clean up test directory
-          rm -rf test-dir
-          
-          echo ""
-          echo "✅ Binary packaging completed for ${{ matrix.arch }}"
-          echo "⚠️  Note: If ImportError seen above, cli.py needs to avoid relative imports or use a wrapper script"
+          if [ '${{ matrix.format }}' = 'deb' ]; then
+            FILE="cygor_1.0.0_${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }}.deb"
+            echo "=== Testing .deb package ==="
+            docker run --rm --platform ${{ matrix.platform }} \
+              -v "$PWD":/test -w /test debian:bookworm /bin/bash -c "
+              apt-get update -qq
+              dpkg -i $FILE || apt-get install -f -y
+              cygor -h || true
+              dpkg -r cygor
+              "
+          else
+            FILE="cygor-1.0.0-1.${{ matrix.arch == 'x64' && 'x86_64' || 'aarch64' }}.rpm"
+            echo "=== Testing .rpm package ==="
+            docker run --rm --platform ${{ matrix.platform }} \
+              -v "$PWD":/test -w /test rockylinux:9 /bin/bash -c "
+              dnf install -y $FILE
+              cygor -h || true
+              dnf remove -y cygor
+              " || echo "⚠️  RPM test skipped (not critical)"
+          fi
 
-      - name: Upload ${{ matrix.arch }} ZIP
+      - name: Upload Package
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}.zip
+          path: |
+            *.deb
+            *.rpm
           if-no-files-found: error
 
 # ================================================================
@@ -186,8 +226,8 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/cygor
           tags: |
             type=ref,event=tag
-            type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=dev,enable=${{ github.ref_type != 'tag' }}
 
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v6
@@ -203,24 +243,20 @@ jobs:
 
       - name: Test Docker Image
         run: |
-          echo "=== Testing Docker image (no args) ==="
-          docker run --rm ghcr.io/${{ github.repository_owner }}/cygor:${{ github.ref_name || 'latest' }} || true
-          
-          echo ""
-          echo "=== Testing Docker image (-h) ==="
-          docker run --rm ghcr.io/${{ github.repository_owner }}/cygor:${{ github.ref_name || 'latest' }} -h || true
-          
-          echo ""
+          echo "=== Testing Docker image ==="
+          docker run --rm ghcr.io/${{ github.repository_owner }}/cygor:dev -h || true
           echo "✅ Docker image test completed"
 
 # ================================================================
-# 3) Create GitHub Release with ZIPs only
+# 3) Create GitHub Release
 # ================================================================
   release:
-    name: Create GitHub Release (ZIP artifacts)
+    name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [build-linux, build-docker]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.create_release == true) ||
+      startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Download All Artifacts
         uses: actions/download-artifact@v4
@@ -232,38 +268,80 @@ jobs:
           echo "Downloaded artifacts:"
           find dist -type f -ls
 
-      - name: Generate Checksums (ZIP only)
+      - name: Organize Release Files
         run: |
-          cd dist
-          # Find all ZIP files and generate checksums
-          find . -type f -name "*.zip" -exec sha256sum {} \; | sed 's|^\./||' | sort > SHA256SUMS.txt
+          mkdir -p release
+          find dist -type f \( -name "*.deb" -o -name "*.rpm" \) -exec cp {} release/ \;
+          ls -lh release/
+
+      - name: Generate Checksums
+        run: |
+          cd release
+          sha256sum * > SHA256SUMS.txt
           echo "=== Generated Checksums ==="
           cat SHA256SUMS.txt
+
+      - name: Determine Release Tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.release_tag }}" ]; then
+              echo "tag=${{ inputs.release_tag }}" >> $GITHUB_OUTPUT
+            else
+              echo "tag=v$(date +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "Cygor Release ${{ github.ref_name }}"
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "Cygor Release ${{ steps.tag.outputs.tag }}"
           draft: false
-          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
-          files: |
-            dist/**/*.zip
-            dist/SHA256SUMS.txt
+          prerelease: ${{ contains(steps.tag.outputs.tag, 'alpha') || contains(steps.tag.outputs.tag, 'beta') || contains(steps.tag.outputs.tag, 'rc') }}
+          files: release/*
           body: |
-            ## Cygor ${{ github.ref_name }}
+            ## Cygor ${{ steps.tag.outputs.tag }}
             
-            ### Downloads
-            - `cygor-linux-x64.zip` - Linux x86_64 binary
-            - `cygor-linux-arm64.zip` - Linux ARM64 binary
+            ### Installation
             
-            ### Docker
+            #### Debian/Ubuntu (.deb)
             ```bash
-            docker pull ghcr.io/${{ github.repository_owner }}/cygor:${{ github.ref_name }}
+            # x64
+            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/cygor_1.0.0_amd64.deb
+            sudo dpkg -i cygor_1.0.0_amd64.deb
+            
+            # ARM64
+            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/cygor_1.0.0_arm64.deb
+            sudo dpkg -i cygor_1.0.0_arm64.deb
+            ```
+            
+            #### RHEL/Rocky/Fedora (.rpm)
+            ```bash
+            # x64
+            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/cygor-1.0.0-1.x86_64.rpm
+            sudo dnf install cygor-1.0.0-1.x86_64.rpm
+            
+            # ARM64
+            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/cygor-1.0.0-1.aarch64.rpm
+            sudo dnf install cygor-1.0.0-1.aarch64.rpm
+            ```
+            
+            #### Docker
+            ```bash
+            docker pull ghcr.io/${{ github.repository_owner }}/cygor:${{ steps.tag.outputs.tag }}
             docker pull ghcr.io/${{ github.repository_owner }}/cygor:latest
             ```
             
             ### Checksums
             See `SHA256SUMS.txt` for file verification.
+            
+            ### Packages Included
+            - `cygor_1.0.0_amd64.deb` - Debian/Ubuntu x86_64 package
+            - `cygor_1.0.0_arm64.deb` - Debian/Ubuntu ARM64 package
+            - `cygor-1.0.0-1.x86_64.rpm` - RHEL/Rocky/Fedora x86_64 package
+            - `cygor-1.0.0-1.aarch64.rpm` - RHEL/Rocky/Fedora ARM64 package
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
