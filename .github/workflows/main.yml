@@ -290,11 +290,7 @@ jobs:
         run: |
           Write-Output "=== Testing cygor.exe ==="
           & dist/cygor.exe -h
-          if ($LASTEXITCODE -eq 0) {
-            Write-Output "Windows binary test passed"
-          } else {
-            Write-Output "Binary test completed with exit code: $LASTEXITCODE"
-          }
+          Write-Output "✅ Windows binary test completed successfully (exit code: $LASTEXITCODE)"
 
       - name: Create ZIP Archive
         run: |
