@@ -208,6 +208,8 @@ jobs:
             *.deb
             *.rpm
           if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
 
   build-windows:
     name: Build Windows x64 - EXE
@@ -304,6 +306,8 @@ jobs:
           name: cygor-windows-x64
           path: cygor-windows-x64.zip
           if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
 
   build-docker:
     name: Build Docker Image (multi-arch)
@@ -361,21 +365,34 @@ jobs:
       (github.event_name == 'workflow_dispatch' && inputs.create_release == true) ||
       startsWith(github.ref, 'refs/tags/v')
     steps:
+      - name: Wait for artifacts to be ready
+        run: sleep 10
+
       - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
+          merge-multiple: false
 
       - name: List Downloaded Artifacts
         run: |
           echo "Downloaded artifacts:"
           find dist -type f -ls
+          echo "=== Directory structure ==="
+          tree dist || find dist -print
 
       - name: Organize Release Files
         run: |
           mkdir -p release
+          # Find files in nested artifact directories
           find dist -type f \( -name "*.deb" -o -name "*.rpm" -o -name "*.zip" \) -exec cp {} release/ \;
-          ls -lh release/
+          echo "=== Release files ==="
+          ls -lh release/ || echo "No files found!"
+          
+          if [ -z "$(ls -A release/)" ]; then
+            echo "ERROR: No release files found!"
+            exit 1
+          fi
 
       - name: Generate Checksums
         run: |
