@@ -149,103 +149,72 @@ PKGBUILD_EOF
             ls -lh *.pkg.tar.zst
             "
           else
-            # Use Debian container for DEB/RPM packages
-            docker run --rm --platform ${{ matrix.platform }} \
-              -v "$PWD":/src -w /src debian:bookworm /bin/bash << 'DEBIANEOF'
-            set -ex
-            apt-get update -qq
-            DEBIAN_FRONTEND=noninteractive apt-get install -y \
-              python3.11 python3.11-dev python3-pip build-essential \
-              libpq-dev libffi-dev zlib1g-dev libssl-dev zip git \
-              rpm alien fakeroot
-            python3.11 -m pip install --break-system-packages --upgrade pip wheel setuptools
-            python3.11 -m pip install --break-system-packages pyinstaller
+            # Create build script for Debian/RPM
+            cat > build_deb.sh << 'DEBSCRIPT'
+          set -ex
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y python3.11 python3.11-dev python3-pip build-essential libpq-dev libffi-dev zlib1g-dev libssl-dev zip git rpm alien fakeroot
+          python3.11 -m pip install --break-system-packages --upgrade pip wheel setuptools
+          python3.11 -m pip install --break-system-packages pyinstaller
+          python3.11 -m pip install --break-system-packages colorama python-libnmap requests smbmap tabulate fastapi uvicorn jinja2 python-multipart sqlmodel SQLAlchemy psycopg aiosqlite lxml watchfiles pandas openpyxl
+          python3.11 -m pip install --break-system-packages git+https://github.com/Pennyw0rth/NfsClient.git@master
+          
+          cat > cygor_entry.py << 'PYEOF'
+          #!/usr/bin/env python3
+          import sys
+          from cygor.cli import main
+          if __name__ == "__main__":
+              sys.exit(main())
+          PYEOF
+          
+          STATIC_PATH_ARG=''
+          if [ -d 'cygor/webapp/static' ]; then
+            STATIC_PATH_ARG='--add-data cygor/webapp/static:cygor/webapp/static'
+          fi
+          
+          pyinstaller --onefile --clean --noconfirm --name cygor --strip --add-data 'cygor/webapp/templates:cygor/webapp/templates' $STATIC_PATH_ARG --hidden-import cygor.precheck --hidden-import cygor.workspace --hidden-import cygor.banner --hidden-import cygor.scan --hidden-import cygor.parse --hidden-import cygor.parse_ext --hidden-import cygor.enumcli --hidden-import cygor.webctl --hidden-import libnmap.parser --hidden-import smbmap --hidden-import sqlmodel --hidden-import psycopg --hidden-import aiosqlite --collect-submodules fastapi --collect-submodules uvicorn --collect-submodules sqlalchemy --collect-submodules jinja2 cygor_entry.py
+          
+          chmod +x dist/cygor
+          strip dist/cygor || true
+          mkdir -p package/usr/local/bin package/DEBIAN
+          cp dist/cygor package/usr/local/bin/
+          
+          echo 'Package: cygor' > package/DEBIAN/control
+          echo 'Version: 1.0.0' >> package/DEBIAN/control
+          echo 'Section: utils' >> package/DEBIAN/control
+          echo 'Priority: optional' >> package/DEBIAN/control
+          echo 'Maintainer: tjnull' >> package/DEBIAN/control
+          echo 'Description: Cygor security enumeration tool' >> package/DEBIAN/control
+          echo ' Automated scanner and enumeration framework' >> package/DEBIAN/control
+          DEBSCRIPT
             
-            python3.11 -m pip install --break-system-packages \
-              colorama python-libnmap requests smbmap tabulate \
-              fastapi uvicorn jinja2 python-multipart \
-              sqlmodel SQLAlchemy psycopg aiosqlite \
-              lxml watchfiles pandas openpyxl
-            
-            python3.11 -m pip install --break-system-packages git+https://github.com/Pennyw0rth/NfsClient.git@master
-            
-            cat > cygor_entry.py << 'PYEOF2'
-#!/usr/bin/env python3
-import sys
-from cygor.cli import main
-if __name__ == "__main__":
-    sys.exit(main())
-PYEOF2
-            
-            STATIC_PATH_ARG=''
-            if [ -d 'cygor/webapp/static' ]; then
-              STATIC_PATH_ARG='--add-data cygor/webapp/static:cygor/webapp/static'
-            fi
-            
-            pyinstaller --onefile --clean --noconfirm --name cygor \
-              --strip \
-              --add-data 'cygor/webapp/templates:cygor/webapp/templates' \
-              $STATIC_PATH_ARG \
-              --hidden-import cygor.precheck \
-              --hidden-import cygor.workspace \
-              --hidden-import cygor.banner \
-              --hidden-import cygor.scan \
-              --hidden-import cygor.parse \
-              --hidden-import cygor.parse_ext \
-              --hidden-import cygor.enumcli \
-              --hidden-import cygor.webctl \
-              --hidden-import libnmap.parser \
-              --hidden-import smbmap \
-              --hidden-import sqlmodel \
-              --hidden-import psycopg \
-              --hidden-import aiosqlite \
-              --collect-submodules fastapi \
-              --collect-submodules uvicorn \
-              --collect-submodules sqlalchemy \
-              --collect-submodules jinja2 \
-              cygor_entry.py
-            
-            chmod +x dist/cygor
-            strip dist/cygor || true
-            
-            mkdir -p package/usr/local/bin
-            mkdir -p package/DEBIAN
-            cp dist/cygor package/usr/local/bin/
-            
-            cat > package/DEBIAN/control << 'CONTROLEOF'
-Package: cygor
-Version: 1.0.0
-Section: utils
-Priority: optional
-Architecture: amd64
-Maintainer: tjnull
-Description: Cygor security enumeration tool
- Automated scanner and enumeration framework
-CONTROLEOF
-            
-            FORMAT="${{ matrix.format }}"
-            ARCH="${{ matrix.arch }}"
-            
-            if [ "$FORMAT" = "deb" ]; then
-              if [ "$ARCH" = "x64" ]; then
-                fakeroot dpkg-deb --build package /src/cygor_1.0.0_amd64.deb
-                ls -lh /src/*.deb
-              else
-                sed -i 's/Architecture: amd64/Architecture: arm64/' package/DEBIAN/control
-                fakeroot dpkg-deb --build package /src/cygor_1.0.0_arm64.deb
-                ls -lh /src/*.deb
-              fi
+            # Add architecture to the script
+            if [ "${{ matrix.arch }}" = "x64" ]; then
+              sed -i "/Priority: optional/a Architecture: amd64" build_deb.sh
             else
-              fakeroot dpkg-deb --build package /tmp/cygor.deb
-              alien --to-rpm --scripts /tmp/cygor.deb
-              if [ "$ARCH" = "x64" ]; then
-                mv *.rpm /src/cygor-1.0.0-1.x86_64.rpm
-              else
-                mv *.rpm /src/cygor-1.0.0-1.aarch64.rpm
-              fi
-              ls -lh /src/*.rpm
+              sed -i "/Priority: optional/a Architecture: arm64" build_deb.sh
             fi
-DEBIANEOF
+            
+            # Add format-specific build commands
+            if [ "${{ matrix.format }}" = "deb" ]; then
+              if [ "${{ matrix.arch }}" = "x64" ]; then
+                echo 'fakeroot dpkg-deb --build package /src/cygor_1.0.0_amd64.deb' >> build_deb.sh
+              else
+                echo 'fakeroot dpkg-deb --build package /src/cygor_1.0.0_arm64.deb' >> build_deb.sh
+              fi
+              echo 'ls -lh /src/*.deb' >> build_deb.sh
+            else
+              echo 'fakeroot dpkg-deb --build package /tmp/cygor.deb' >> build_deb.sh
+              echo 'alien --to-rpm --scripts /tmp/cygor.deb' >> build_deb.sh
+              if [ "${{ matrix.arch }}" = "x64" ]; then
+                echo 'mv *.rpm /src/cygor-1.0.0-1.x86_64.rpm' >> build_deb.sh
+              else
+                echo 'mv *.rpm /src/cygor-1.0.0-1.aarch64.rpm' >> build_deb.sh
+              fi
+              echo 'ls -lh /src/*.rpm' >> build_deb.sh
+            fi
+            
+            docker run --rm --platform ${{ matrix.platform }} -v "$PWD":/src -w /src debian:bookworm /bin/bash /src/build_deb.sh
           fi
 
       - name: Verify Build Output
