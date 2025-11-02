@@ -11,6 +11,9 @@ import sys
 import time
 import tempfile
 import stat
+import glob
+import re
+from urllib.parse import urlparse
 from libnmap.parser import NmapParser, NmapParserException, NmapService
 from concurrent.futures import ThreadPoolExecutor
 from colorama import Fore, Style, init
@@ -529,26 +532,163 @@ def run_nmap_parallel(ips, processes, base_outdir='results', scan_type='top-port
     with ThreadPoolExecutor(max_workers=processes) as executor:
         executor.map(lambda ip: run_nmap(ip, base_outdir=base_outdir, scan_type=scan_type, ports=ports), ips)
 
-def read_hosts_from_file(file_path):
-    print(f"{Fore.YELLOW}[+] Reading hosts from {file_path}")
-    hosts = []
-    with open(file_path, 'r') as file:
-        for line in file:
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            try:
-                # Validate CIDR or IP
-                if '/' in line:
-                    ipaddress.ip_network(line, strict=False)
-                    print(f"{Fore.GREEN}Adding CIDR: {line}")
-                else:
-                    ipaddress.ip_address(line)
-                    print(f"{Fore.GREEN}Adding IP: {line}")
-                hosts.append(line)
-            except ValueError:
-                print(f"{Fore.RED}Invalid entry in scope file: {line}")
-    return hosts
+def _is_domain_like(token: str) -> bool:
+    # Basic heuristic: contains a dot and at least one alpha char in the name part
+    if not token or token.startswith('#'):
+        return False
+    token = token.strip()
+    # reject pure IPs (handled elsewhere)
+    try:
+        ipaddress.ip_address(token)
+        return False
+    except ValueError:
+        pass
+    return '.' in token and any(ch.isalpha() for ch in token)
+
+def _extract_host_from_line(line: str):
+    """
+    Given a line of text, attempt to extract a single IP/CIDR or domain/hostname.
+    Returns None if nothing valid is found.
+    """
+    if not line:
+        return None
+    # Remove comments
+    line = line.split('#', 1)[0].strip()
+    if not line:
+        return None
+
+    # If the line looks like a URL, parse host
+    if '://' in line or line.startswith('www.'):
+        try:
+            parsed = urlparse(line if '://' in line else 'http://' + line)
+            host = parsed.hostname
+            if host:
+                # strip trailing colon/port
+                return host.strip()
+        except Exception:
+            pass
+
+    # If the token contains whitespace, take first token
+    token = line.split()[0].strip().strip('"').strip("'")
+
+    # CIDR?
+    if '/' in token:
+        try:
+            net = ipaddress.ip_network(token, strict=False)
+            return str(net)
+        except ValueError:
+            pass
+
+    # IPv4/IPv6?
+    try:
+        ip = ipaddress.ip_address(token)
+        return str(ip)
+    except ValueError:
+        pass
+
+    # Domain-like?
+    if _is_domain_like(token):
+        return token.lower()
+
+    # Try to find any IP or CIDR in the line (e.g., embedded in text)
+    ip_match = re.search(r'(\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?)', line)
+    if ip_match:
+        try:
+            candidate = ip_match.group(1)
+            if '/' in candidate:
+                ipaddress.ip_network(candidate, strict=False)
+            else:
+                ipaddress.ip_address(candidate)
+            return candidate
+        except ValueError:
+            pass
+
+    return None
+
+
+def read_hosts_from_file(file_pattern):
+    """
+    Read hosts/targets from:
+      - a single file path
+      - a directory (read all files inside)
+      - a glob pattern (e.g., results/discovery/*.txt)
+    Extract IPs, CIDRs, and domain names found in each file.
+    Returns a list of targets (strings).
+    """
+    matched_files = []
+
+    # if user passed a list (defensive) handle it
+    if isinstance(file_pattern, (list, tuple)):
+        patterns = file_pattern
+    else:
+        patterns = [file_pattern]
+
+    for pattern in patterns:
+        pattern = str(pattern)
+        # If it's an existing file path, use it
+        if os.path.isfile(pattern):
+            matched_files.append(pattern)
+            continue
+
+        # If it's a directory, include all files inside
+        if os.path.isdir(pattern):
+            for entry in sorted(os.listdir(pattern)):
+                path = os.path.join(pattern, entry)
+                if os.path.isfile(path):
+                    matched_files.append(path)
+            continue
+
+        # Treat as glob pattern
+        globbed = glob.glob(pattern)
+        if globbed:
+            for g in sorted(globbed):
+                if os.path.isfile(g):
+                    matched_files.append(g)
+            continue
+
+        # Last resort: maybe the user passed a literal filename that doesn't exist
+        # We'll still add it and let the later open() fail with a clear message
+        matched_files.append(pattern)
+
+    if not matched_files:
+        print(f"{Fore.RED}Host file(s) not found for pattern: {file_pattern}")
+        return []
+
+    print(f"{Fore.YELLOW}[+] Reading hosts from {len(matched_files)} file(s) matching: {file_pattern}{Style.RESET_ALL}")
+    targets = []
+    for fp in matched_files:
+        if not os.path.isfile(fp):
+            print(f"{Fore.RED}Warning: not a file, skipping: {fp}")
+            continue
+        try:
+            with open(fp, 'r', encoding="utf-8", errors="ignore") as fh:
+                for line in fh:
+                    line = line.strip()
+                    candidate = _extract_host_from_line(line)
+                    if candidate:
+                        targets.append(candidate)
+        except Exception as e:
+            print(f"{Fore.RED}Error reading {fp}: {e}")
+
+    # dedupe while preserving stable sort
+    unique = []
+    seen = set()
+    for t in targets:
+        if t not in seen:
+            seen.add(t)
+            unique.append(t)
+
+    # show short preview
+    if unique:
+        print(f"{Fore.GREEN}Loaded {len(unique)} unique targets (IPs/CIDRs/domains) from files.")
+        if len(unique) <= 20:
+            for t in unique:
+                print(f"  {t}")
+    else:
+        print(f"{Fore.RED}No valid targets found in provided files.")
+
+    return unique
+
 
 
 def combine_nmap_files(scan_type, base_outdir):
@@ -592,6 +732,13 @@ examples = f"""
 
     {Fore.YELLOW}# 8. Exclude specific subnets or hosts from scan{Style.RESET_ALL}
     cygor scan -i eth0 -f scope.txt --exclusions exclusions.txt --discover masscan
+
+    {Fore.YELLOW}# 9. Use discovery files via glob for Nmap (works with shell expansion or as a pattern){Style.RESET_ALL}
+    cygor scan --use-discovery results/discovery/*.txt --scan-type top-ports --processes 50
+
+    {Fore.YELLOW}# 10. Provide a directory of scope files; each file can contain IPs, CIDRs, domains or URLs{Style.RESET_ALL}
+    cygor scan -f path/to/scope_dir --discover masscan
+
     """
 
 def main():
@@ -641,9 +788,10 @@ def main():
         help="Run discovery only, save results into results/discovery/, and skip Nmap."
     )
     disc_group.add_argument(
-        "--use-discovery",
-        help="Reuse a discovery results file (e.g., results/discovery/merged-discovered.txt) "
-             "and feed those hosts directly into Nmap. Skips discovery phase."
+    "--use-discovery",
+    nargs="+",
+    help="Reuse one or more discovery results files or glob patterns (e.g., results/discovery/*.txt) "
+         "and feed those hosts directly into Nmap. Skips discovery phase."
     )
 
     # Nmap scanning
@@ -682,21 +830,29 @@ def main():
     
     args = parser.parse_args()
 
-    # If user provides --use-discovery, skip everything else and go straight to Nmap
+    # If user provides --use-discovery, skip discovery and go straight to Nmap
     if args.use_discovery:
-        if not os.path.exists(args.use_discovery):
-            print(f"{Fore.RED}Discovery file not found: {args.use_discovery}")
+        # args.use_discovery may be a list of paths/patterns
+        discovery_patterns = args.use_discovery if isinstance(args.use_discovery, (list, tuple)) else [args.use_discovery]
+        nmap_targets = []
+        for pat in discovery_patterns:
+            # expand glob/dir/file and parse content
+            new_targets = read_hosts_from_file(pat)
+            if new_targets:
+                nmap_targets.extend(new_targets)
+
+        # dedupe
+        nmap_targets = sorted(set(nmap_targets))
+        if not nmap_targets:
+            print(f"{Fore.RED}No hosts loaded from discovery patterns: {discovery_patterns}")
             return
-        with open(args.use_discovery, "r") as f:
-            nmap_targets = [line.strip() for line in f if line.strip()]
-        print(f"{Fore.CYAN}Loaded {len(nmap_targets)} hosts from discovery file: {args.use_discovery}")
 
-    # Mutual exclusion: --discover and --use-discovery cannot be combined
-    if args.use_discovery and args.discover != ["masscan"]:
-        print(f"{Fore.RED}[!] Warning: --use-discovery supplied together with --discover.")
-        print(f"{Fore.YELLOW}    Ignoring --discover and using --use-discovery only.\n")
-        args.discover = []  # disable discovery
-
+        print(f"{Fore.CYAN}Loaded {len(nmap_targets)} hosts from discovery patterns: {discovery_patterns}")
+        # ensure Nmap writes to outdir when using --use-discovery
+        run_nmap_parallel(nmap_targets, args.processes, base_outdir=args.outdir, scan_type=args.scan_type, ports=args.ports)
+        combine_nmap_files(args.scan_type, args.outdir)
+        print(f"{Fore.CYAN}Nmap scanned {len(nmap_targets)} hosts")
+        return
 
         if not nmap_targets:
             print(f"{Fore.RED}No hosts found in discovery file. Exiting...")
@@ -710,8 +866,9 @@ def main():
 
     # Normal path: file or IPs
     if args.file:
-        if not os.path.exists(args.file):
-            print(f"{Fore.RED}Host file not found")
+        hosts = read_hosts_from_file(args.file)
+        if not hosts:
+            print(f"{Fore.RED}No valid hosts loaded from {args.file}")
             return
         with open(args.file, 'r') as f:
             hosts = [line.strip() for line in f if line.strip()]
