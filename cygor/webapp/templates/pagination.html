@@ -1,0 +1,88 @@
+{% macro render_pagination(page, total_pages, per_page, base_url='', preserve_params=True) %}
+{% if total_pages > 1 %}
+<nav aria-label="Page navigation" class="mt-4">
+  <div class="d-flex justify-content-between align-items-center flex-wrap">
+    <!-- Page Info -->
+    <div class="text-muted small mb-2 mb-md-0">
+      Page {{ page }} of {{ total_pages }}
+    </div>
+
+    <!-- Pagination Controls -->
+    <ul class="pagination pagination-sm mb-2 mb-md-0">
+      <!-- Previous -->
+      <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+        <a class="page-link" href="{% if page > 1 %}{{ build_url(base_url, page - 1, per_page, preserve_params, request) }}{% else %}#{% endif %}">
+          <i class="bi bi-chevron-left"></i>
+        </a>
+      </li>
+
+      <!-- Page Numbers -->
+      {% set start_page = [1, page - 2]|max %}
+      {% set end_page = [total_pages, page + 2]|min %}
+
+      {% if start_page > 1 %}
+        <li class="page-item">
+          <a class="page-link" href="{{ build_url(base_url, 1, per_page, preserve_params, request) }}">1</a>
+        </li>
+        {% if start_page > 2 %}
+          <li class="page-item disabled"><span class="page-link">...</span></li>
+        {% endif %}
+      {% endif %}
+
+      {% for p in range(start_page, end_page + 1) %}
+        <li class="page-item {% if p == page %}active{% endif %}">
+          <a class="page-link" href="{{ build_url(base_url, p, per_page, preserve_params, request) }}">{{ p }}</a>
+        </li>
+      {% endfor %}
+
+      {% if end_page < total_pages %}
+        {% if end_page < total_pages - 1 %}
+          <li class="page-item disabled"><span class="page-link">...</span></li>
+        {% endif %}
+        <li class="page-item">
+          <a class="page-link" href="{{ build_url(base_url, total_pages, per_page, preserve_params, request) }}">{{ total_pages }}</a>
+        </li>
+      {% endif %}
+
+      <!-- Next -->
+      <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+        <a class="page-link" href="{% if page < total_pages %}{{ build_url(base_url, page + 1, per_page, preserve_params, request) }}{% else %}#{% endif %}">
+          <i class="bi bi-chevron-right"></i>
+        </a>
+      </li>
+    </ul>
+
+    <!-- Per Page Selector -->
+    <div class="btn-group btn-group-sm mb-2 mb-md-0">
+      <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+        {{ per_page }} / page
+      </button>
+      <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+        {% for size in [25, 50, 100, 200] %}
+          <li>
+            <a class="dropdown-item {% if size == per_page %}active{% endif %}"
+               href="{{ build_url(base_url, 1, size, preserve_params, request) }}">
+              {{ size }} per page
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</nav>
+{% endif %}
+{% endmacro %}
+
+<!-- Helper macro to build URLs with query parameters -->
+{% macro build_url(base, page_num, page_size, preserve, req) %}
+{% set params = {} %}
+{% if preserve and req %}
+  {% for key, value in req.query_params.items() %}
+    {% if key not in ['page', 'per_page'] %}
+      {% set _ = params.update({key: value}) %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+{% set _ = params.update({'page': page_num, 'per_page': page_size}) %}
+{{ base or req.url.path }}?{{ params|urlencode }}
+{% endmacro %}

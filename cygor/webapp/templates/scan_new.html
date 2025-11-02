@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block content %}
+
+
+<div class="container-fluid py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-10 col-xl-8">
+
+      <!-- Header -->
+      <div class="d-flex align-items-center mb-4">
+        <a href="/tasks" class="btn btn-outline-secondary me-3">
+          <i class="bi bi-arrow-left"></i>
+        </a>
+        <h2 class="mb-0">
+          <i class="bi bi-radar me-2"></i>New Scan
+        </h2>
+      </div>
+
+      <!-- Scan Form -->
+      <div class="card bg-dark">
+        <div class="card-body">
+          <form id="scanForm">
+
+            <!-- Targets Section -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                <i class="bi bi-bullseye me-2"></i>Scan Targets
+              </label>
+              <div class="mb-3">
+                <div class="btn-group w-100" role="group">
+                  <input type="radio" class="btn-check" name="targetMode" id="targetModeManual" value="manual" checked>
+                  <label class="btn btn-outline-secondary" for="targetModeManual">
+                    <i class="bi bi-keyboard me-2"></i>Manual Input
+                  </label>
+
+                  <input type="radio" class="btn-check" name="targetMode" id="targetModeFile" value="file">
+                  <label class="btn btn-outline-secondary" for="targetModeFile">
+                    <i class="bi bi-file-earmark-text me-2"></i>From File
+                  </label>
+                </div>
+              </div>
+
+              <div id="manualTargetsDiv">
+                <textarea
+                  class="form-control bg-dark text-light border-secondary"
+                  id="targetsManual"
+                  rows="5"
+                  placeholder="Enter targets (one per line):&#10;192.168.1.0/24&#10;10.0.0.1&#10;scanme.nmap.org"
+                ></textarea>
+                <div class="form-text">Supports IPs, CIDR ranges, and hostnames</div>
+              </div>
+
+              <div id="fileTargetsDiv" style="display:none;">
+                <input type="text" class="form-control bg-dark text-light border-secondary"
+                       id="targetsFile" placeholder="/path/to/targets.txt">
+                <div class="form-text">Path to file containing targets (one per line)</div>
+              </div>
+            </div>
+
+            <!-- Discovery Tools -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                <i class="bi bi-search me-2"></i>Discovery Tools
+              </label>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="discoverMasscan" value="masscan" checked>
+                    <label class="form-check-label" for="discoverMasscan">
+                      <strong>Masscan</strong>
+                      <div class="text-light small">High-speed port scanner</div>
+                    </label>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="discoverNaabu" value="naabu">
+                    <label class="form-check-label" for="discoverNaabu">
+                      <strong>Naabu</strong>
+                      <div class="text-light small">Fast TCP port scanner</div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Scan Options -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                <i class="bi bi-sliders me-2"></i>Scan Configuration
+              </label>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label for="scanType" class="form-label">Scan Type</label>
+                  <select class="form-select bg-dark text-light border-secondary" id="scanType">
+                    <option value="top-ports" selected>Top 1000 Ports</option>
+                    <option value="fullscan">Full Port Scan (1-65535)</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label for="interface" class="form-label">Network Interface (optional)</label>
+                  <input type="text" class="form-control bg-dark text-light border-secondary"
+                         id="interface" placeholder="e.g., eth0, wlan0">
+                </div>
+              </div>
+            </div>
+
+            <!-- Advanced Options (Collapsible) -->
+            <div class="mb-4">
+              <a class="text-decoration-none" data-bs-toggle="collapse" href="#advancedOptions">
+                <i class="bi bi-chevron-down me-2"></i>Advanced Options
+              </a>
+              <div class="collapse" id="advancedOptions">
+                <div class="card bg-dark border-secondary mt-3">
+                  <div class="card-body">
+                    <div class="mb-3">
+                      <label for="outputDir" class="form-label">Output Directory</label>
+                      <input type="text" class="form-control bg-dark text-light border-secondary"
+                             id="outputDir" placeholder="Leave empty to use workspace/default">
+                      <div class="form-text">Custom output directory (defaults to configured workspace)</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Submit Buttons -->
+            <div class="d-flex justify-content-between align-items-center">
+              <a href="/tasks" class="btn btn-outline-secondary">Cancel</a>
+              <button type="submit" class="btn btn-primary px-4">
+                <i class="bi bi-play-circle me-2"></i>Start Scan
+              </button>
+            </div>
+
+          </form>
+        </div>
+      </div>
+
+      <!-- Help Card -->
+      <div class="card bg-dark mt-4">
+        <div class="card-body">
+          <h6 class="card-title">
+            <i class="bi bi-info-circle me-2"></i>Quick Guide
+          </h6>
+          <ul class="mb-0 small text-light">
+            <li><strong>Top Ports:</strong> Scans the 1000 most common ports (faster, recommended for initial discovery)</li>
+            <li><strong>Full Scan:</strong> Scans all 65535 ports (comprehensive but slower)</li>
+            <li><strong>Masscan:</strong> Very fast discovery, recommended for large networks</li>
+            <li><strong>Naabu:</strong> Alternative fast scanner, can be combined with Masscan</li>
+            <li><strong>Interface:</strong> Required on multi-homed systems or when scanning from specific network adapter</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// Toggle between manual and file input
+document.querySelectorAll('[name="targetMode"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    document.getElementById('manualTargetsDiv').style.display =
+      e.target.value === 'manual' ? 'block' : 'none';
+    document.getElementById('fileTargetsDiv').style.display =
+      e.target.value === 'file' ? 'block' : 'none';
+  });
+});
+
+// Handle form submission
+document.getElementById('scanForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const targetMode = document.querySelector('[name="targetMode"]:checked').value;
+  let targets = [];
+
+  if (targetMode === 'manual') {
+    const manualInput = document.getElementById('targetsManual').value.trim();
+    if (!manualInput) {
+      alert('Please enter at least one target');
+      return;
+    }
+    targets = manualInput.split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#'));
+  } else {
+    const filePath = document.getElementById('targetsFile').value.trim();
+    if (!filePath) {
+      alert('Please specify a target file path');
+      return;
+    }
+    targets = [filePath];
+  }
+
+  // Get discovery tools
+  const discover = [];
+  if (document.getElementById('discoverMasscan').checked) discover.push('masscan');
+  if (document.getElementById('discoverNaabu').checked) discover.push('naabu');
+
+  if (discover.length === 0) {
+    alert('Please select at least one discovery tool');
+    return;
+  }
+
+  const scanData = {
+    targets: targets,
+    discover: discover,
+    scan_type: document.getElementById('scanType').value,
+    interface: document.getElementById('interface').value.trim() || null,
+    output_dir: document.getElementById('outputDir').value.trim() || null
+  };
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Starting...';
+
+  try {
+    const response = await fetch('/api/scans', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(scanData)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to create scan');
+    }
+
+    const result = await response.json();
+
+    // Redirect to task detail page
+    window.location.href = `/tasks/${result.task_id}`;
+
+  } catch (error) {
+    alert('Error starting scan: ' + error.message);
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+});
+</script>
+
+{% endblock %}

@@ -13,6 +13,7 @@ import tempfile
 import stat
 import glob
 import re
+import shutil
 from urllib.parse import urlparse
 from libnmap.parser import NmapParser, NmapParserException, NmapService
 from concurrent.futures import ThreadPoolExecutor
@@ -318,11 +319,16 @@ def run_masscan(host, interface=None, base_outdir='results', ports=None, rate=10
     Supports exclusions via --excludefile.
     Produces machine-readable (-oL) output and returns the output file path if scan succeeded.
     """
+    # Validate masscan is installed
+    if not shutil.which("masscan"):
+        print(f"{Fore.RED}[!] Error: masscan not found in PATH. Please install masscan.{Style.RESET_ALL}")
+        return None
+
     output_dir = os.path.join(base_outdir, 'masscan')
     ensure_directory_exists(output_dir)
     ensure_directory_owned(output_dir)
 
-    safe_host = host.replace('/', '_')
+    safe_host = host.replace('/', '_').replace(':', '_')
     output_file = os.path.join(output_dir, f"masscan_{safe_host}.txt")
 
     interface_option = f"--interface {interface}" if interface else ""
@@ -355,14 +361,21 @@ def run_masscan(host, interface=None, base_outdir='results', ports=None, rate=10
         print(f"{Fore.RED}Invalid IP/CIDR {host}: {e}")
         return None
 
-    command = (
-        f"masscan {host} {interface_option} {ports_option} {exclude_option} "
-        f"--rate {rate} --wait 0 --open-only -oL {output_file}"
-    )
+    # Build command as list for safer execution
+    cmd_args = ["masscan", host]
+    if interface:
+        cmd_args.extend(["--interface", interface])
+    if ports:
+        cmd_args.extend(["-p", ports])
+    else:
+        cmd_args.extend(["-p", "21,22,23,25,80,88,111,135,139,389,443,445,636,1099,1433,2049,3389,4786,5900,5985,8080,9100"])
+    if exclude_file:
+        cmd_args.extend(["--excludefile", exclude_file])
+    cmd_args.extend(["--rate", str(rate), "--wait", "0", "--open-only", "-oL", output_file])
 
-    print(f"{Fore.YELLOW}[masscan] {command}{Style.RESET_ALL}\n")
+    print(f"{Fore.YELLOW}[masscan] {' '.join(cmd_args)}{Style.RESET_ALL}\n")
     try:
-        subprocess.run(command, shell=True, check=True)
+        subprocess.run(cmd_args, check=True)
         if os.path.exists(output_file):
             with open(output_file, "r", encoding="utf-8") as fh:
                 if any(line.startswith("open") for line in fh):
@@ -390,9 +403,15 @@ def run_naabu(host, interface=None, base_outdir='results', ports=None, rate=1000
     Supports exclusions via -exclude-file.
     Returns path to validated output file or None.
     """
+    # Validate naabu is installed
+    if not shutil.which("naabu"):
+        print(f"{Fore.RED}[!] Error: naabu not found in PATH. Please install naabu.{Style.RESET_ALL}")
+        return None
+
     output_dir = os.path.join(base_outdir, 'naabu')
+    ensure_directory_exists(output_dir)
     ensure_directory_owned(output_dir)
-    safe_host = host.replace('/', '_')
+    safe_host = host.replace('/', '_').replace(':', '_')
     output_file = os.path.join(output_dir, f"naabu_{safe_host}.txt")
 
     interface_option = f"-interface {interface}" if interface else ""
@@ -423,9 +442,22 @@ def run_naabu(host, interface=None, base_outdir='results', ports=None, rate=1000
 
     print(f"{Fore.YELLOW}[naabu] Scanning target(s) from {host} -> targets file: {tmp_path}{Style.RESET_ALL}")
 
+    # Build command as list for safer execution
+    cmd_args = ["naabu"]
+    if interface:
+        cmd_args.extend(["-interface", interface])
+    if ports:
+        cmd_args.extend(["-p", ports])
+    else:
+        cmd_args.extend(["-p", "21,22,23,25,80,88,111,135,139,389,443,445,636,1099,1433,2049,3389,4786,5900,5985,3389,8080,9100"])
+    if exclude_file:
+        cmd_args.extend(["-exclude-file", exclude_file])
+    cmd_args.extend(["-rate", str(rate), "-o", output_file, "-list", tmp_path])
+
+    print(f"{Fore.YELLOW}[naabu] {' '.join(cmd_args)}{Style.RESET_ALL}")
+
     try:
-        command = f"naabu {interface_option} {ports_option} {exclude_option} -rate {rate} -o {output_file} -list {tmp_path}"
-        subprocess.run(command, shell=True, check=True)
+        subprocess.run(cmd_args, check=True)
 
         # Validate and clean results
         valid_lines = []
@@ -483,6 +515,11 @@ def run_nmap(ip, base_outdir='results', scan_type='top-ports', ports=None):
     Ensures all output directories are writable and owned by the invoking user (not root),
     even if executed with sudo.
     """
+    # Validate nmap is installed
+    if not shutil.which("nmap"):
+        print(f"{Fore.RED}[!] Error: nmap not found in PATH. Please install nmap.{Style.RESET_ALL}")
+        return
+
     output_dir = os.path.join(base_outdir, 'nmap')
     ensure_directory_exists(output_dir)
     ensure_directory_owned(output_dir)
@@ -502,18 +539,26 @@ def run_nmap(ip, base_outdir='results', scan_type='top-ports', ports=None):
     except Exception:
         ip_option = ""
 
-    # Choose Nmap command
-    if ports:
-        command = f"nmap {ip_option} -Pn -sC -sV -O -T4 -p {ports} {ip} -oA {output_file_prefix}"
-    elif scan_type == 'top-ports':
-        command = f"nmap {ip_option} -Pn -sC -sV -O -T4 --top-ports 1000 {ip} -oA {output_file_prefix}"
-    else:
-        command = f"nmap {ip_option} -Pn -sC -sV -O -T4 -p- {ip} -oA {output_file_prefix}"
+    # Build nmap command as list for safer execution
+    cmd_args = ["nmap"]
+    if ip_option:
+        cmd_args.append(ip_option)
+    cmd_args.extend(["-Pn", "-sC", "-sV", "-O", "-T4"])
 
-    print(f"{Fore.YELLOW}[nmap] {command}{Style.RESET_ALL}")
+    # Add port specification
+    if ports:
+        cmd_args.extend(["-p", ports])
+    elif scan_type == 'top-ports':
+        cmd_args.extend(["--top-ports", "1000"])
+    else:
+        cmd_args.append("-p-")
+
+    cmd_args.extend([ip, "-oA", output_file_prefix])
+
+    print(f"{Fore.YELLOW}[nmap] {' '.join(cmd_args)}{Style.RESET_ALL}")
 
     try:
-        subprocess.run(command, shell=True, check=True)
+        subprocess.run(cmd_args, check=True)
         print(f"{Fore.GREEN}Nmap completed for {ip}.")
     except subprocess.CalledProcessError as e:
         print(f"{Fore.RED}Error running nmap for {ip}: {e}")
@@ -827,8 +872,16 @@ def main():
 
     
 
-    
+
     args = parser.parse_args()
+
+    # Check if running with required privileges for scanning tools
+    # Only required if doing actual discovery (not when using --use-discovery)
+    if not args.use_discovery and args.discover:
+        if os.geteuid() != 0:
+            print(f"{Fore.RED}[!] Error: Scanner requires root privileges (masscan/naabu/nmap need raw socket access)")
+            print(f"{Fore.YELLOW}[i] Please run with: sudo cygor scan ...{Style.RESET_ALL}")
+            sys.exit(1)
 
     # If user provides --use-discovery, skip discovery and go straight to Nmap
     if args.use_discovery:
@@ -848,16 +901,6 @@ def main():
             return
 
         print(f"{Fore.CYAN}Loaded {len(nmap_targets)} hosts from discovery patterns: {discovery_patterns}")
-        # ensure Nmap writes to outdir when using --use-discovery
-        run_nmap_parallel(nmap_targets, args.processes, base_outdir=args.outdir, scan_type=args.scan_type, ports=args.ports)
-        combine_nmap_files(args.scan_type, args.outdir)
-        print(f"{Fore.CYAN}Nmap scanned {len(nmap_targets)} hosts")
-        return
-
-        if not nmap_targets:
-            print(f"{Fore.RED}No hosts found in discovery file. Exiting...")
-            return
-
         # ensure Nmap writes to outdir when using --use-discovery
         run_nmap_parallel(nmap_targets, args.processes, base_outdir=args.outdir, scan_type=args.scan_type, ports=args.ports)
         combine_nmap_files(args.scan_type, args.outdir)
@@ -949,10 +992,26 @@ def main():
             )
             for h in hosts
         ]
-        if f and os.path.exists(f):
+        for f in naabu_results:
+            if f and os.path.exists(f):
                 with open(f, 'r', encoding="utf-8") as fh:
-                    discovered_hosts_naabu.update([l.split(':')[0].strip() for l in fh if l.strip()])
-        print(f"{Fore.CYAN}Naabu discovered {len(discovered_hosts_naabu)} hosts")
+                    for line in fh:
+                        line = line.strip()
+                        if line and ':' in line:
+                            ip_candidate = line.split(':')[0].strip()
+                            try:
+                                ipaddress.ip_address(ip_candidate)
+                                discovered_hosts_naabu.add(ip_candidate)
+                            except ValueError:
+                                continue
+        # optional: show a preview of what was found
+        if discovered_hosts_naabu:
+            print(f"{Fore.GREEN}[Naabu] Valid hosts discovered: {len(discovered_hosts_naabu)}")
+            if len(discovered_hosts_naabu) < 20:
+                for ip in sorted(discovered_hosts_naabu):
+                    print(f"  {ip}")
+        else:
+            print(f"{Fore.RED}[Naabu] No valid hosts discovered.")
 
     discovered_hosts_merge = discovered_hosts_masscan.union(discovered_hosts_naabu)
 

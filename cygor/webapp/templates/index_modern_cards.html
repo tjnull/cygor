@@ -1,0 +1,563 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+/* Modern Hero Section */
+.hero-section {
+  background: linear-gradient(135deg, rgba(13,110,253,0.1) 0%, rgba(13,110,253,0.02) 100%);
+  border-radius: 20px;
+  padding: 3.5rem 2.5rem;
+  margin-bottom: 2.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+body.light-theme .hero-section {
+  background: linear-gradient(135deg, rgba(13,110,253,0.08) 0%, rgba(13,110,253,0.02) 100%);
+}
+
+.hero-illustration {
+  position: absolute;
+  right: 2rem;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.15;
+  font-size: 200px;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+}
+
+.hero-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  background: linear-gradient(135deg, #ffffff 0%, #a0b5c9 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+body.light-theme .hero-title {
+  background: linear-gradient(135deg, #212529 0%, #495057 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-subtitle {
+  font-size: 1.1rem;
+  color: rgba(255,255,255,0.7);
+  margin-bottom: 1.75rem;
+  max-width: 600px;
+}
+
+body.light-theme .hero-subtitle {
+  color: rgba(0,0,0,0.6);
+}
+
+.hero-cta {
+  display: inline-flex;
+  gap: 1rem;
+}
+
+/* Modern Stat Cards */
+.stat-card {
+  background: linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 2rem;
+  height: 100%;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--stat-color-start), var(--stat-color-end));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.stat-card:hover::before {
+  opacity: 1;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.2);
+  border-color: rgba(255,255,255,0.15);
+}
+
+body.light-theme .stat-card {
+  background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
+  border-color: rgba(0,0,0,0.08);
+}
+
+body.light-theme .stat-card:hover {
+  box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+  border-color: rgba(0,0,0,0.15);
+}
+
+.stat-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  margin-bottom: 1.25rem;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(255,255,255,0.6);
+  margin-bottom: 0.5rem;
+}
+
+body.light-theme .stat-label {
+  color: rgba(0,0,0,0.5);
+}
+
+.stat-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.stat-change {
+  font-size: 0.875rem;
+  color: rgba(255,255,255,0.5);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+body.light-theme .stat-change {
+  color: rgba(0,0,0,0.5);
+}
+
+/* Feature Cards */
+.feature-card {
+  background: linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 2rem;
+  height: 100%;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(13,110,253,0.1) 0%, transparent 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.feature-card:hover::after {
+  opacity: 1;
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.2);
+  border-color: rgba(13,110,253,0.3);
+  text-decoration: none;
+}
+
+body.light-theme .feature-card {
+  background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
+  border-color: rgba(0,0,0,0.08);
+}
+
+body.light-theme .feature-card:hover {
+  box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+  border-color: rgba(13,110,253,0.3);
+}
+
+.feature-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-bottom: 1.25rem;
+  position: relative;
+  z-index: 1;
+}
+
+.feature-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: #ffffff;
+  position: relative;
+  z-index: 1;
+}
+
+body.light-theme .feature-title {
+  color: #212529;
+}
+
+.feature-description {
+  font-size: 0.95rem;
+  color: rgba(255,255,255,0.6);
+  line-height: 1.6;
+  position: relative;
+  z-index: 1;
+}
+
+body.light-theme .feature-description {
+  color: rgba(0,0,0,0.6);
+}
+
+.feature-arrow {
+  position: absolute;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(13,110,253,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 1;
+}
+
+.feature-card:hover .feature-arrow {
+  background: rgba(13,110,253,0.25);
+  transform: translateX(4px);
+}
+
+/* Quick Actions */
+.quick-actions {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.quick-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%);
+  border: 1.5px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.quick-action-btn:hover {
+  background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.06) 100%);
+  border-color: rgba(13,110,253,0.4);
+  color: #ffffff;
+  transform: translateY(-2px);
+}
+
+body.light-theme .quick-action-btn {
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+  border-color: rgba(0,0,0,0.12);
+  color: #212529;
+}
+
+body.light-theme .quick-action-btn:hover {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-color: rgba(13,110,253,0.4);
+  color: #212529;
+}
+
+.section-header {
+  margin-bottom: 1.5rem;
+}
+
+.section-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.section-subtitle {
+  color: rgba(255,255,255,0.5);
+  font-size: 0.95rem;
+}
+
+body.light-theme .section-subtitle {
+  color: rgba(0,0,0,0.5);
+}
+</style>
+
+<div class="container-fluid py-4">
+
+  <!-- Hero Section -->
+  <div class="hero-section">
+    <div class="hero-illustration">
+      <i class="bi bi-radar"></i>
+    </div>
+    <div class="hero-content">
+      <h1 class="hero-title">Reconnaissance Dashboard</h1>
+      <p class="hero-subtitle">
+        Comprehensive network scanning and enumeration platform. Discover, analyze, and document your attack surface.
+      </p>
+      <div class="hero-cta">
+        <a href="/tasks/scan/new" class="btn btn-primary btn-lg">
+          <i class="bi bi-play-circle me-2"></i>New Scan
+        </a>
+        <a href="/search" class="btn btn-outline-light btn-lg">
+          <i class="bi bi-search me-2"></i>Search Results
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Overview -->
+  <div class="row g-4 mb-5">
+    <div class="col-12 col-md-6 col-xl-3">
+      <div class="stat-card" style="--stat-color-start: #0d6efd; --stat-color-end: #0b5ed7;">
+        <div class="stat-icon" style="background: linear-gradient(135deg, rgba(13,110,253,0.2) 0%, rgba(13,110,253,0.1) 100%); color: #0d6efd;">
+          <i class="bi bi-hdd-network"></i>
+        </div>
+        <div class="stat-label">Hosts Discovered</div>
+        <div class="stat-value">{{ hosts_total }}</div>
+        <div class="stat-change">
+          <i class="bi bi-arrow-up-right"></i>
+          <span>Total identified hosts</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-6 col-xl-3">
+      <div class="stat-card" style="--stat-color-start: #198754; --stat-color-end: #157347;">
+        <div class="stat-icon" style="background: linear-gradient(135deg, rgba(25,135,84,0.2) 0%, rgba(25,135,84,0.1) 100%); color: #198754;">
+          <i class="bi bi-check-circle"></i>
+        </div>
+        <div class="stat-label">Hosts Scanned</div>
+        <div class="stat-value">{{ hosts_scanned }}</div>
+        <div class="stat-change">
+          <i class="bi bi-activity"></i>
+          <span>Actively scanned</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-6 col-xl-3">
+      <a href="/services" class="stat-card text-decoration-none" style="--stat-color-start: #ffc107; --stat-color-end: #e0a800;">
+        <div class="stat-icon" style="background: linear-gradient(135deg, rgba(255,193,7,0.2) 0%, rgba(255,193,7,0.1) 100%); color: #ffc107;">
+          <i class="bi bi-diagram-3"></i>
+        </div>
+        <div class="stat-label">Services Found</div>
+        <div class="stat-value">{{ service_summary.values() | sum }}</div>
+        <div class="stat-change">
+          <i class="bi bi-broadcast"></i>
+          <span>Open ports & services</span>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-12 col-md-6 col-xl-3">
+      <a href="/tasks" class="stat-card text-decoration-none" style="--stat-color-start: #6f42c1; --stat-color-end: #5a32a3;">
+        <div class="stat-icon" style="background: linear-gradient(135deg, rgba(111,66,193,0.2) 0%, rgba(111,66,193,0.1) 100%); color: #6f42c1;">
+          <i class="bi bi-play-circle"></i>
+        </div>
+        <div class="stat-label">Active Tasks</div>
+        <div class="stat-value">{{ scan_times | length }}</div>
+        <div class="stat-change">
+          <i class="bi bi-list-task"></i>
+          <span>Running operations</span>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="section-header">
+    <h2 class="section-title">Quick Actions</h2>
+    <p class="section-subtitle">Common tasks and workflows</p>
+  </div>
+
+  <div class="quick-actions mb-5">
+    <a href="/tasks/scan/new" class="quick-action-btn">
+      <i class="bi bi-radar fs-5"></i>
+      <span>Run Network Scan</span>
+    </a>
+    <a href="/tasks/module/new" class="quick-action-btn">
+      <i class="bi bi-gear fs-5"></i>
+      <span>Execute Module</span>
+    </a>
+    <a href="/search" class="quick-action-btn">
+      <i class="bi bi-search fs-5"></i>
+      <span>Search Everything</span>
+    </a>
+    <a href="/hosts" class="quick-action-btn">
+      <i class="bi bi-pc-display fs-5"></i>
+      <span>Browse Hosts</span>
+    </a>
+  </div>
+
+  <!-- Feature Cards -->
+  <div class="section-header">
+    <h2 class="section-title">Explore</h2>
+    <p class="section-subtitle">Dive into your reconnaissance data</p>
+  </div>
+
+  <div class="row g-4 mb-5">
+    <div class="col-12 col-md-6 col-lg-4">
+      <a href="/hosts" class="feature-card">
+        <div class="feature-icon" style="background: linear-gradient(135deg, rgba(13,110,253,0.2) 0%, rgba(13,110,253,0.1) 100%); color: #0d6efd;">
+          <i class="bi bi-hdd-network"></i>
+        </div>
+        <h3 class="feature-title">Network Hosts</h3>
+        <p class="feature-description">
+          Browse all discovered hosts, view open ports, services, and operating system detection results.
+        </p>
+        <div class="feature-arrow">
+          <i class="bi bi-arrow-right text-primary"></i>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-12 col-md-6 col-lg-4">
+      <a href="/services" class="feature-card">
+        <div class="feature-icon" style="background: linear-gradient(135deg, rgba(25,135,84,0.2) 0%, rgba(25,135,84,0.1) 100%); color: #198754;">
+          <i class="bi bi-diagram-3"></i>
+        </div>
+        <h3 class="feature-title">Services</h3>
+        <p class="feature-description">
+          Analyze running services across your network. Filter by type, version, or vulnerability indicators.
+        </p>
+        <div class="feature-arrow">
+          <i class="bi bi-arrow-right text-success"></i>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-12 col-md-6 col-lg-4">
+      <a href="/modules/lockon" class="feature-card">
+        <div class="feature-icon" style="background: linear-gradient(135deg, rgba(255,193,7,0.2) 0%, rgba(255,193,7,0.1) 100%); color: #ffc107;">
+          <i class="bi bi-camera"></i>
+        </div>
+        <h3 class="feature-title">Screenshots</h3>
+        <p class="feature-description">
+          Visual reconnaissance with automated web screenshots. Identify interesting applications at a glance.
+        </p>
+        <div class="feature-arrow">
+          <i class="bi bi-arrow-right text-warning"></i>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-12 col-md-6 col-lg-4">
+      <a href="/modules/smbexplorer" class="feature-card">
+        <div class="feature-icon" style="background: linear-gradient(135deg, rgba(220,53,69,0.2) 0%, rgba(220,53,69,0.1) 100%); color: #dc3545;">
+          <i class="bi bi-folder-open"></i>
+        </div>
+        <h3 class="feature-title">SMB Shares</h3>
+        <p class="feature-description">
+          Enumerate SMB shares and permissions. Find misconfigured file shares and sensitive data exposure.
+        </p>
+        <div class="feature-arrow">
+          <i class="bi bi-arrow-right text-danger"></i>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-12 col-md-6 col-lg-4">
+      <a href="/modules/nfsexplorer" class="feature-card">
+        <div class="feature-icon" style="background: linear-gradient(135deg, rgba(111,66,193,0.2) 0%, rgba(111,66,193,0.1) 100%); color: #6f42c1;">
+          <i class="bi bi-database"></i>
+        </div>
+        <h3 class="feature-title">NFS Exports</h3>
+        <p class="feature-description">
+          Discover NFS exports and mount points. Identify storage systems with weak access controls.
+        </p>
+        <div class="feature-arrow">
+          <i class="bi bi-arrow-right" style="color: #6f42c1;"></i>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-12 col-md-6 col-lg-4">
+      <a href="/tasks" class="feature-card">
+        <div class="feature-icon" style="background: linear-gradient(135deg, rgba(13,202,240,0.2) 0%, rgba(13,202,240,0.1) 100%); color: #0dcaf0;">
+          <i class="bi bi-kanban"></i>
+        </div>
+        <h3 class="feature-title">Task Manager</h3>
+        <p class="feature-description">
+          Monitor running scans and enumeration tasks. View progress, logs, and execution history.
+        </p>
+        <div class="feature-arrow">
+          <i class="bi bi-arrow-right text-info"></i>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <!-- OS Discovery Quick Stats (Compact Version) -->
+  {% if os_summary and os_summary.counts %}
+  <div class="section-header">
+    <h2 class="section-title">Operating System Distribution</h2>
+    <p class="section-subtitle">Detected OS types across your network</p>
+  </div>
+
+  <div class="card bg-dark shadow-sm mb-4">
+    <div class="card-body p-4">
+      {% set c = os_summary.counts %}
+      <div class="row g-4">
+        <div class="col-6 col-md-4 col-lg-2 text-center">
+          <div class="display-6 fw-bold text-info">{{ c['Windows'] or 0 }}</div>
+          <div class="small text-light mt-1">Windows</div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2 text-center">
+          <div class="display-6 fw-bold text-warning">{{ c['Linux'] or 0 }}</div>
+          <div class="small text-light mt-1">Linux</div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2 text-center">
+          <div class="display-6 fw-bold text-light">{{ c['macOS'] or 0 }}</div>
+          <div class="small text-light mt-1">macOS</div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2 text-center">
+          <div class="display-6 fw-bold text-success">{{ c['BSD/Unix'] or 0 }}</div>
+          <div class="small text-light mt-1">BSD/Unix</div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2 text-center">
+          <div class="display-6 fw-bold text-primary">{{ c['Network Device'] or 0 }}</div>
+          <div class="small text-light mt-1">Network</div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2 text-center">
+          <div class="display-6 fw-bold text-secondary">{{ c['Other'] or 0 }}</div>
+          <div class="small text-light mt-1">Other</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+{% endblock %}

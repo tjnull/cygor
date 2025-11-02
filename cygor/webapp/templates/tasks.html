@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+{% block content %}
+
+
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">
+      <i class="bi bi-list-task me-2"></i>Task Manager
+    </h2>
+    <div class="btn-group ">
+      <a href="/tasks/scan/new" class="btn btn-primary">
+        <i class="bi bi-radar me-2"></i>New Scan
+      </a>
+      <a href="/tasks/module/new" class="btn btn-success">
+        <i class="bi bi-gear me-2"></i>Run Module
+      </a>
+    </div>
+  </div>
+
+  <!-- Quick Stats -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card bg-dark">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="flex-shrink-0">
+              <i class="bi bi-hourglass-split fs-2 text-warning"></i>
+            </div>
+            <div class="flex-grow-1 ms-3">
+              <div class="text-light small fw-semibold">Running</div>
+              <div class="fs-4 fw-bold text-white" id="stat-running">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-dark">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="flex-shrink-0">
+              <i class="bi bi-clock-history fs-2 text-info"></i>
+            </div>
+            <div class="flex-grow-1 ms-3">
+              <div class="text-light small fw-semibold">Pending</div>
+              <div class="fs-4 fw-bold text-white" id="stat-pending">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-dark">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="flex-shrink-0">
+              <i class="bi bi-check-circle fs-2 text-success"></i>
+            </div>
+            <div class="flex-grow-1 ms-3">
+              <div class="text-light small fw-semibold">Completed</div>
+              <div class="fs-4 fw-bold text-white" id="stat-completed">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-dark">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="flex-shrink-0">
+              <i class="bi bi-x-circle fs-2 text-danger"></i>
+            </div>
+            <div class="flex-grow-1 ms-3">
+              <div class="text-light small fw-semibold">Failed</div>
+              <div class="fs-4 fw-bold text-white" id="stat-failed">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tasks Table -->
+  <div class="card bg-dark">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">All Tasks</h5>
+      <button class="btn btn-sm btn-outline-secondary" onclick="refreshTasks()">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+      </button>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Type</th>
+              <th>Command</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th>Duration</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tasks-tbody">
+            <tr>
+              <td colspan="7" class="text-center text-muted">
+                <i class="bi bi-hourglass-split me-2"></i>Loading tasks...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let refreshInterval = null;
+
+async function fetchTasks() {
+  try {
+    const response = await fetch('/api/tasks');
+    if (!response.ok) throw new Error('Failed to fetch tasks');
+    const tasks = await response.json();
+
+    // Update stats
+    const stats = {
+      running: tasks.filter(t => t.status === 'running').length,
+      pending: tasks.filter(t => t.status === 'pending').length,
+      completed: tasks.filter(t => t.status === 'completed').length,
+      failed: tasks.filter(t => t.status === 'failed').length
+    };
+
+    document.getElementById('stat-running').textContent = stats.running;
+    document.getElementById('stat-pending').textContent = stats.pending;
+    document.getElementById('stat-completed').textContent = stats.completed;
+    document.getElementById('stat-failed').textContent = stats.failed;
+
+    // Update table
+    const tbody = document.getElementById('tasks-tbody');
+
+    if (tasks.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted"><i class="bi bi-inbox me-2"></i>No tasks found</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = tasks.map(task => {
+      const statusClass = `status-${task.status}`;
+      const statusIcon = {
+        pending: 'clock-history',
+        running: 'hourglass-split',
+        completed: 'check-circle',
+        failed: 'x-circle',
+        cancelled: 'dash-circle'
+      }[task.status] || 'question-circle';
+
+      const duration = calculateDuration(task);
+      const createdTime = formatTime(task.created_at);
+
+      return `
+        <tr>
+          <td><code class="text-info">${task.task_id.substring(0, 8)}</code></td>
+          <td><span class="badge bg-secondary">${task.task_type}</span></td>
+          <td>
+            <div class="text-truncate" style="max-width: 300px;" title="${task.command}">
+              <code class="text-light">${task.command}</code>
+            </div>
+          </td>
+          <td>
+            <span class="status-badge ${statusClass}">
+              <i class="bi bi-${statusIcon} me-1"></i>${task.status}
+            </span>
+          </td>
+          <td class="text-light small">${createdTime}</td>
+          <td class="text-light small">${duration}</td>
+          <td>
+            <div class="btn-group btn-group-sm">
+              <a href="/tasks/${task.task_id}" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-eye"></i>
+              </a>
+              ${task.status === 'running' ? `
+                <button onclick="cancelTask('${task.task_id}')" class="btn btn-outline-warning btn-sm" title="Cancel">
+                  <i class="bi bi-stop-circle"></i>
+                </button>
+              ` : ''}
+              ${task.status !== 'running' ? `
+                <button onclick="deleteTask('${task.task_id}')" class="btn btn-outline-danger btn-sm" title="Delete">
+                  <i class="bi bi-trash"></i>
+                </button>
+              ` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+  } catch (error) {
+    console.error('Error fetching tasks:', error);
+    document.getElementById('tasks-tbody').innerHTML =
+      '<tr><td colspan="7" class="text-center text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Error loading tasks</td></tr>';
+  }
+}
+
+function formatTime(isoString) {
+  if (!isoString) return '-';
+  const date = new Date(isoString);
+  const now = new Date();
+  const diff = now - date;
+
+  if (diff < 60000) return 'Just now';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+  return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+}
+
+function calculateDuration(task) {
+  if (!task.started_at) return '-';
+
+  const start = new Date(task.started_at);
+  const end = task.completed_at ? new Date(task.completed_at) : new Date();
+  const diff = end - start;
+
+  if (diff < 60000) return Math.floor(diff / 1000) + 's';
+  if (diff < 3600000) return Math.floor(diff / 60000) + 'm ' + Math.floor((diff % 60000) / 1000) + 's';
+  return Math.floor(diff / 3600000) + 'h ' + Math.floor((diff % 3600000) / 60000) + 'm';
+}
+
+async function cancelTask(taskId) {
+  if (!confirm('Cancel this task?')) return;
+
+  try {
+    const response = await fetch(`/api/tasks/${taskId}/cancel`, { method: 'POST' });
+    if (!response.ok) throw new Error('Failed to cancel task');
+    await fetchTasks();
+  } catch (error) {
+    alert('Error cancelling task: ' + error.message);
+  }
+}
+
+async function deleteTask(taskId) {
+  if (!confirm('Delete this task? This cannot be undone.')) return;
+
+  try {
+    const response = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Failed to delete task');
+    await fetchTasks();
+  } catch (error) {
+    alert('Error deleting task: ' + error.message);
+  }
+}
+
+function refreshTasks() {
+  fetchTasks();
+}
+
+// Auto-refresh running tasks
+function startAutoRefresh() {
+  refreshInterval = setInterval(fetchTasks, 3000); // Refresh every 3 seconds
+}
+
+function stopAutoRefresh() {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+    refreshInterval = null;
+  }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  fetchTasks();
+  startAutoRefresh();
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', stopAutoRefresh);
+</script>
+
+{% endblock %}

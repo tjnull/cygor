@@ -1,40 +1,216 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="text-2xl font-bold mb-4">Search</h1>
-{% if query %}
-  <div class="mb-4 text-slate-400">Results for: <span class="text-slate-200">{{ query }}</span></div>
-{% endif %}
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-  <div>
-    <h2 class="font-semibold mb-2">Hosts</h2>
-    <ul class="list-disc ml-6 space-y-1">
-      {% for h in hosts %}
-        <li><a class="hover:underline" href="/hosts/{{ h.id }}">{{ h.address }}</a> {% if h.hostname %}<span class="text-slate-400">({{ h.hostname }})</span>{% endif %}</li>
-      {% else %}
-        <li class="text-slate-500">No matching hosts.</li>
-      {% endfor %}
-    </ul>
+
+<div class="container-fluid py-4">
+  <!-- Search Header -->
+  <div class="mb-4">
+    <h2 class="mb-3">
+      <i class="bi bi-search me-2"></i>Search
+    </h2>
+
+    <!-- Search Form -->
+    <form method="get" action="/search" class="mb-4">
+      <div class="input-group input-group-lg ">
+        <span class="input-group-text">
+          <i class="bi bi-search text-info"></i>
+        </span>
+        <input
+          type="text"
+          name="q"
+          class="form-control form-control-lg"
+          placeholder="Search hosts, services, banners, script output..."
+          value="{{ query or '' }}"
+          autofocus
+        >
+        <button class="btn btn-primary px-4" type="submit">
+          <i class="bi bi-search me-2"></i>Search
+        </button>
+      </div>
+      <div class="form-text text-light mt-2">
+        <i class="bi bi-info-circle me-1"></i>
+        Search across IP addresses, hostnames, service names, banners, and script outputs
+      </div>
+    </form>
   </div>
-  <div>
-    <h2 class="font-semibold mb-2">Services</h2>
-    <ul class="list-disc ml-6 space-y-1">
-      {% for p in ports %}
-        <li>{{ p.host.address }} : {{ p.port }} — {{ p.service or "unknown" }}</li>
-      {% else %}
-        <li class="text-slate-500">No matching services.</li>
-      {% endfor %}
-    </ul>
-  </div>
-  <div>
-    <h2 class="font-semibold mb-2">Script Output</h2>
-    <ul class="list-disc ml-6 space-y-1">
-      {% for s in scripts %}
-        <li><span class="text-slate-400">{{ s.name }}</span>: <span class="whitespace-pre-wrap">{{ s.output }}</span></li>
-      {% else %}
-        <li class="text-slate-500">No matching script output.</li>
-      {% endfor %}
-    </ul>
-  </div>
+
+  {% if query %}
+    <!-- Results Summary -->
+    <div class="alert alert-info border-0 mb-4">
+      <i class="bi bi-info-circle me-2"></i>
+      Showing results for: <strong>"{{ query }}"</strong>
+      <span class="ms-3 text-light">
+        ({{ hosts_total }} hosts, {{ ports_total }} services, {{ scripts_total }} scripts)
+      </span>
+    </div>
+
+    <!-- Results Grid -->
+    <div class="row g-4">
+      <!-- Hosts Column -->
+      <div class="col-lg-4">
+        <div class="card bg-dark h-100">
+          <div class="card-header">
+            <h5 class="mb-0">
+              <i class="bi bi-hdd-network me-2"></i>Hosts
+              <span class="badge bg-primary ms-2">{{ hosts_total }}</span>
+            </h5>
+          </div>
+          <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+            {% if hosts %}
+              <ul class="list-unstyled mb-0">
+                {% for h in hosts %}
+                  <li class="mb-3 pb-3 border-bottom border-secondary">
+                    <a href="/hosts/{{ h.id }}" class="text-decoration-none">
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-hdd-network text-info me-2"></i>
+                        <div>
+                          <div class="text-light fw-semibold">{{ h.address }}</div>
+                          {% if h.hostname %}
+                            <div class="text-light small">{{ h.hostname }}</div>
+                          {% endif %}
+                        </div>
+                      </div>
+                    </a>
+                  </li>
+                {% endfor %}
+              </ul>
+
+              {% if hosts_pages > 1 %}
+                <div class="mt-3">
+                  {% from "pagination.html" import render_pagination %}
+                  {{ render_pagination(page, hosts_pages, per_page, '/search', True) }}
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="text-center text-light py-4">
+                <i class="bi bi-inbox fs-1 mb-2"></i>
+                <div>No matching hosts found</div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Services Column -->
+      <div class="col-lg-4">
+        <div class="card bg-dark h-100">
+          <div class="card-header">
+            <h5 class="mb-0">
+              <i class="bi bi-diagram-3 me-2"></i>Services
+              <span class="badge bg-success ms-2">{{ ports_total }}</span>
+            </h5>
+          </div>
+          <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+            {% if ports %}
+              <ul class="list-unstyled mb-0">
+                {% for p in ports %}
+                  <li class="mb-3 pb-3 border-bottom border-secondary">
+                    <div class="d-flex align-items-start">
+                      <i class="bi bi-diagram-3 text-success me-2 mt-1"></i>
+                      <div class="flex-grow-1">
+                        <div class="text-light">
+                          <a href="/hosts/{{ p.host.id }}" class="text-info text-decoration-none">
+                            {{ p.host.address }}
+                          </a>
+                          <span class="text-light mx-1">:</span>
+                          <span class="text-warning fw-semibold">{{ p.port }}</span>
+                        </div>
+                        <div class="text-light small">
+                          <span class="badge bg-secondary">{{ p.service or "unknown" }}</span>
+                          {% if p.banner %}
+                            <div class="mt-1 text-light font-monospace small">{{ p.banner[:100] }}{% if p.banner|length > 100 %}...{% endif %}</div>
+                          {% endif %}
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                {% endfor %}
+              </ul>
+
+              {% if ports_pages > 1 %}
+                <div class="mt-3">
+                  {% from "pagination.html" import render_pagination %}
+                  {{ render_pagination(page, ports_pages, per_page, '/search', True) }}
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="text-center text-light py-4">
+                <i class="bi bi-inbox fs-1 mb-2"></i>
+                <div>No matching services found</div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Script Output Column -->
+      <div class="col-lg-4">
+        <div class="card bg-dark h-100">
+          <div class="card-header">
+            <h5 class="mb-0">
+              <i class="bi bi-file-code me-2"></i>Script Output
+              <span class="badge bg-warning text-dark ms-2">{{ scripts_total }}</span>
+            </h5>
+          </div>
+          <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+            {% if scripts %}
+              <ul class="list-unstyled mb-0">
+                {% for s in scripts %}
+                  <li class="mb-3 pb-3 border-bottom border-secondary">
+                    <div class="d-flex align-items-start">
+                      <i class="bi bi-file-code text-warning me-2 mt-1"></i>
+                      <div class="flex-grow-1">
+                        <div class="text-light small mb-1">
+                          <span class="badge bg-info">{{ s.name }}</span>
+                        </div>
+                        <div class="text-light small font-monospace" style="white-space: pre-wrap; word-break: break-word;">{{ s.output[:200] }}{% if s.output|length > 200 %}...{% endif %}</div>
+                      </div>
+                    </div>
+                  </li>
+                {% endfor %}
+              </ul>
+
+              {% if scripts_pages > 1 %}
+                <div class="mt-3">
+                  {% from "pagination.html" import render_pagination %}
+                  {{ render_pagination(page, scripts_pages, per_page, '/search', True) }}
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="text-center text-light py-4">
+                <i class="bi bi-inbox fs-1 mb-2"></i>
+                <div>No matching script output found</div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <!-- No search query - show help -->
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="card bg-dark">
+          <div class="card-body text-center py-5">
+            <i class="bi bi-search fs-1 text-light mb-3"></i>
+            <h4 class="text-light mb-3">Start Searching</h4>
+            <p class="text-light mb-4">
+              Search across all your scan data including IP addresses, hostnames, services, banners, and script outputs.
+            </p>
+            <div class="text-start">
+              <h6 class="text-light mb-2">Search Examples:</h6>
+              <ul class="text-light">
+                <li><code class="text-info">192.168.1</code> - Find hosts in this subnet</li>
+                <li><code class="text-info">ssh</code> - Find SSH services</li>
+                <li><code class="text-info">Apache</code> - Find Apache web servers</li>
+                <li><code class="text-info">SSL</code> - Find SSL/TLS related script output</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
 </div>
+
 {% endblock %}

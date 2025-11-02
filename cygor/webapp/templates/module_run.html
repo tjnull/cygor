@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% block content %}
+
+
+<div class="container-fluid py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-10 col-xl-8">
+
+      <!-- Header -->
+      <div class="d-flex align-items-center mb-4">
+        <a href="/tasks" class="btn btn-outline-secondary me-3">
+          <i class="bi bi-arrow-left"></i>
+        </a>
+        <h2 class="mb-0">
+          <i class="bi bi-gear me-2"></i>Run Enumeration Module
+        </h2>
+      </div>
+
+      <!-- Module Form -->
+      <div class="card bg-dark">
+        <div class="card-body">
+          <form id="moduleForm">
+
+            <!-- Module Selection -->
+            <div class="mb-4">
+              <label for="moduleName" class="form-label fw-bold">
+                <i class="bi bi-plugin me-2"></i>Select Module
+              </label>
+              <select class="form-select bg-dark text-light border-secondary" id="moduleName" required>
+                <option value="">-- Choose a module --</option>
+                {% if request.state.modules %}
+                  {% for mod in request.state.modules %}
+                    <option value="{{ mod.slug }}">{{ mod.name }}</option>
+                  {% endfor %}
+                {% else %}
+                  <option value="lockon">Lockon (Web Screenshots)</option>
+                  <option value="smbexplorer">SMB Explorer</option>
+                  <option value="nfsexplorer">NFS Explorer</option>
+                {% endif %}
+              </select>
+              <div class="form-text">Choose which enumeration module to run</div>
+            </div>
+
+            <!-- Module Descriptions (Dynamic) -->
+            <div id="moduleDescriptions" class="mb-4">
+              <div class="module-desc" data-module="lockon" style="display:none;">
+                <div class="alert alert-info border-0">
+                  <h6 class="alert-heading">
+                    <i class="bi bi-camera me-2"></i>Lockon - Web Screenshots
+                  </h6>
+                  <p class="mb-0 small">
+                    Captures screenshots of HTTP/HTTPS services using Playwright browser automation.
+                    Useful for visual triage of web applications. Requires targets in format: http://IP:PORT
+                  </p>
+                </div>
+              </div>
+              <div class="module-desc" data-module="smbexplorer" style="display:none;">
+                <div class="alert alert-info border-0">
+                  <h6 class="alert-heading">
+                    <i class="bi bi-hdd-network me-2"></i>SMB Explorer
+                  </h6>
+                  <p class="mb-0 small">
+                    Enumerates SMB shares, permissions, and accessible files on Windows/Samba hosts.
+                    Identifies weak or misconfigured access. Targets should be IP addresses or hostnames.
+                  </p>
+                </div>
+              </div>
+              <div class="module-desc" data-module="nfsexplorer" style="display:none;">
+                <div class="alert alert-info border-0">
+                  <h6 class="alert-heading">
+                    <i class="bi bi-folder-symlink me-2"></i>NFS Explorer
+                  </h6>
+                  <p class="mb-0 small">
+                    Interacts with NFS exports to analyze access levels, test UID/GID mappings, and uncover
+                    insecure configurations. Targets should be IP addresses with NFS service.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Targets Input -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                <i class="bi bi-file-earmark-text me-2"></i>Targets File
+              </label>
+              <div class="mb-3">
+                <div class="btn-group w-100" role="group">
+                  <input type="radio" class="btn-check" name="targetFileMode" id="targetFileExisting" value="existing" checked>
+                  <label class="btn btn-outline-secondary" for="targetFileExisting">
+                    <i class="bi bi-folder me-2"></i>Existing Hostlist
+                  </label>
+
+                  <input type="radio" class="btn-check" name="targetFileMode" id="targetFileCustom" value="custom">
+                  <label class="btn btn-outline-secondary" for="targetFileCustom">
+                    <i class="bi bi-keyboard me-2"></i>Custom Path
+                  </label>
+                </div>
+              </div>
+
+              <div id="existingFileDiv">
+                <select class="form-select bg-dark text-light border-secondary mb-2" id="targetsFileSelect">
+                  <option value="">-- Select a parsed hostlist --</option>
+                  <optgroup label="HTTP/HTTPS Services">
+                    <option value="results/parsed-hostlists/http/http-hostlist.txt">HTTP Hosts</option>
+                    <option value="results/parsed-hostlists/https/https-hostlist.txt">HTTPS Hosts</option>
+                    <option value="results/parsed-hostlists/http+https/http-https-hostlist.txt">All Web Services</option>
+                  </optgroup>
+                  <optgroup label="File Sharing">
+                    <option value="results/parsed-hostlists/smb/smb-hostlist.txt">SMB Hosts</option>
+                    <option value="results/parsed-hostlists/nfs/nfs-hostlist.txt">NFS Hosts</option>
+                    <option value="results/parsed-hostlists/ftp/ftp-hostlist.txt">FTP Hosts</option>
+                  </optgroup>
+                  <optgroup label="Remote Access">
+                    <option value="results/parsed-hostlists/ssh/ssh-hostlist.txt">SSH Hosts</option>
+                    <option value="results/parsed-hostlists/rdp/rdp-hostlist.txt">RDP Hosts</option>
+                    <option value="results/parsed-hostlists/vnc/vnc-hostlist.txt">VNC Hosts</option>
+                  </optgroup>
+                  <optgroup label="Discovery Results">
+                    <option value="results/discovery/all-discovered-hosts.txt">All Discovered Hosts</option>
+                    <option value="results/discovery/masscan-discovered.txt">Masscan Results</option>
+                    <option value="results/discovery/naabu-discovered.txt">Naabu Results</option>
+                  </optgroup>
+                </select>
+                <div class="form-text">Common parsed hostlists from scan results</div>
+              </div>
+
+              <div id="customFileDiv" style="display:none;">
+                <input type="text" class="form-control bg-dark text-light border-secondary"
+                       id="targetsFileCustom" placeholder="/path/to/custom-targets.txt">
+                <div class="form-text">Absolute or relative path to your custom targets file</div>
+              </div>
+            </div>
+
+            <!-- Advanced Options (Collapsible) -->
+            <div class="mb-4">
+              <a class="text-decoration-none" data-bs-toggle="collapse" href="#advancedOptions">
+                <i class="bi bi-chevron-down me-2"></i>Advanced Options
+              </a>
+              <div class="collapse" id="advancedOptions">
+                <div class="card bg-dark border-secondary mt-3">
+                  <div class="card-body">
+                    <div class="mb-3">
+                      <label for="outputDir" class="form-label">Output Directory</label>
+                      <input type="text" class="form-control bg-dark text-light border-secondary"
+                             id="outputDir" placeholder="Leave empty to use workspace/default">
+                      <div class="form-text">Custom output directory (defaults to results/cygor-enumeration-modules/)</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Submit Buttons -->
+            <div class="d-flex justify-content-between align-items-center">
+              <a href="/tasks" class="btn btn-outline-secondary">Cancel</a>
+              <button type="submit" class="btn btn-success px-4">
+                <i class="bi bi-play-circle me-2"></i>Run Module
+              </button>
+            </div>
+
+          </form>
+        </div>
+      </div>
+
+      <!-- Help Card -->
+      <div class="card bg-dark border-secondary mt-4">
+        <div class="card-body">
+          <h6 class="card-title">
+            <i class="bi bi-info-circle me-2"></i>Module Requirements
+          </h6>
+          <div class="table-responsive">
+            <table class="table table-sm table-dark table-borderless mb-0 small">
+              <thead>
+                <tr class="text-light">
+                  <th>Module</th>
+                  <th>Target Format</th>
+                  <th>Dependencies</th>
+                </tr>
+              </thead>
+              <tbody class="text-light">
+                <tr>
+                  <td><strong>Lockon</strong></td>
+                  <td><code>http://192.168.1.1:80</code></td>
+                  <td>Playwright (auto-installed)</td>
+                </tr>
+                <tr>
+                  <td><strong>SMB Explorer</strong></td>
+                  <td><code>192.168.1.1</code> or <code>hostname</code></td>
+                  <td>smbmap</td>
+                </tr>
+                <tr>
+                  <td><strong>NFS Explorer</strong></td>
+                  <td><code>192.168.1.1</code></td>
+                  <td>pyNfsClient</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// Show module description based on selection
+document.getElementById('moduleName').addEventListener('change', (e) => {
+  document.querySelectorAll('.module-desc').forEach(desc => {
+    desc.style.display = desc.dataset.module === e.target.value ? 'block' : 'none';
+  });
+});
+
+// Toggle between existing and custom file input
+document.querySelectorAll('[name="targetFileMode"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    document.getElementById('existingFileDiv').style.display =
+      e.target.value === 'existing' ? 'block' : 'none';
+    document.getElementById('customFileDiv').style.display =
+      e.target.value === 'custom' ? 'block' : 'none';
+  });
+});
+
+// Handle form submission
+document.getElementById('moduleForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const moduleName = document.getElementById('moduleName').value;
+  if (!moduleName) {
+    alert('Please select a module');
+    return;
+  }
+
+  const targetFileMode = document.querySelector('[name="targetFileMode"]:checked').value;
+  let targetsFile;
+
+  if (targetFileMode === 'existing') {
+    targetsFile = document.getElementById('targetsFileSelect').value;
+    if (!targetsFile) {
+      alert('Please select a targets file');
+      return;
+    }
+  } else {
+    targetsFile = document.getElementById('targetsFileCustom').value.trim();
+    if (!targetsFile) {
+      alert('Please specify a custom targets file path');
+      return;
+    }
+  }
+
+  const moduleData = {
+    module_name: moduleName,
+    targets_file: targetsFile,
+    output_dir: document.getElementById('outputDir').value.trim() || null
+  };
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Starting...';
+
+  try {
+    const response = await fetch('/api/modules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(moduleData)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to create module task');
+    }
+
+    const result = await response.json();
+
+    // Redirect to task detail page
+    window.location.href = `/tasks/${result.task_id}`;
+
+  } catch (error) {
+    alert('Error starting module: ' + error.message);
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+});
+</script>
+
+{% endblock %}

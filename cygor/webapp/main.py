@@ -3,10 +3,12 @@ from datetime import datetime, timezone
 import os, argparse, asyncio, pkgutil, shutil, json, re, gzip, uvicorn, sys, psycopg, subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from fastapi import FastAPI, Request, Depends, Query
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Request, Depends, Query, Form, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
+from typing import List, Optional
 from psycopg.rows import dict_row
 from sqlalchemy import select, func, exists
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +22,7 @@ from .models import Host, Port, Script, OSGuess
 from ..module_loader import discover_modules, resolve_legacy_context
 from .ingest import ingest_directory
 from .config import settings
+from .tasks import task_manager, TaskStatus
 
 
 templates = None  # will be initialized in lifespan
@@ -934,9 +937,11 @@ async def hosts_view(
     request: Request,
     os: str = Query(None, description="Filter by OS family"),
     ip: str = Query(None, description="Filter by IP address"),
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE, description="Items per page"),
     session: AsyncSession = Depends(get_session)
 ):
-    # Always fetch all hosts + related data
+    # Always fetch all hosts + related data for filtering
     all_hosts = (await session.execute(
         select(Host).options(
             selectinload(Host.ports),
@@ -981,14 +986,26 @@ async def hosts_view(
     else:
         hosts = all_hosts
 
+    # Apply pagination
+    total_hosts = len(hosts)
+    total_pages = (total_hosts + per_page - 1) // per_page if total_hosts > 0 else 1
+    page = min(page, total_pages)  # clamp to valid range
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    paginated_hosts = hosts[start_idx:end_idx]
+
     return templates.TemplateResponse(
         "hosts.html",
         {
             "request": request,
-            "hosts": hosts,
+            "hosts": paginated_hosts,
             "top_os_map": top_map,
             "filter_os": os,
             "filter_ip": ip,
+            "page": page,
+            "per_page": per_page,
+            "total_hosts": total_hosts,
+            "total_pages": total_pages,
         }
     )
 
@@ -1075,6 +1092,8 @@ async def services_view(
 async def service_detail(
     request: Request,
     service_name: str,
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE, description="Items per page"),
     session: AsyncSession = Depends(get_session)
 ):
     # Load all ports with host so we can normalize in Python
@@ -1096,13 +1115,13 @@ async def service_detail(
     total_hosts_result = await session.execute(select(func.count(Host.id)))
     total_hosts = total_hosts_result.scalar_one_or_none() or 0
 
-    # Optional: if you prefer one row per host instead of per port, dedupe here:
-    # seen = set(); host_services = []
-    # for p in matching_ports:
-    #     if p.host and p.host.id not in seen:
-    #         host_services.append(p); seen.add(p.host.id)
-    # else:
-    host_services = matching_ports  # one row per port is often clearer
+    # Apply pagination
+    total_items = len(matching_ports)
+    total_pages = (total_items + per_page - 1) // per_page if total_items > 0 else 1
+    page = min(page, total_pages)
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    host_services = matching_ports[start_idx:end_idx]
 
     return templates.TemplateResponse(
         "service_detail.html",
@@ -1110,8 +1129,12 @@ async def service_detail(
             "request": request,
             "service": service_name,
             "host_services": host_services,
-            "host_count": host_count,   # <-- pass this so the template doesn't have to infer
+            "host_count": host_count,
             "total_hosts": total_hosts,
+            "page": page,
+            "per_page": per_page,
+            "total_items": total_items,
+            "total_pages": total_pages,
         },
     )
 
@@ -1258,14 +1281,163 @@ async def enum_nfsexplorer(request: Request):
     })
 
 @app.get("/search", response_class=HTMLResponse)
-async def search(request: Request, q: str = Query("", description="Search query"), session: AsyncSession = Depends(get_session)):
+async def search(
+    request: Request,
+    q: str = Query("", description="Search query"),
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE, description="Items per page"),
+    session: AsyncSession = Depends(get_session)
+):
     q = (q or "").strip()
-    hosts = ports = scripts = []
+    all_hosts = all_ports = all_scripts = []
     if q:
-        hosts = (await session.execute(select(Host).where((Host.address.contains(q)) | (Host.hostname.contains(q))))).scalars().all()
-        ports = (await session.execute(select(Port).where((Port.service.contains(q)) | (Port.banner.contains(q))))).scalars().all()
-        scripts = (await session.execute(select(Script).where(Script.output.contains(q)))).scalars().all()
-    return templates.TemplateResponse("search.html", {"request": request, "query": q, "hosts": hosts, "ports": ports, "scripts": scripts})
+        all_hosts = (await session.execute(select(Host).where((Host.address.contains(q)) | (Host.hostname.contains(q))))).scalars().all()
+        all_ports = (await session.execute(select(Port).where((Port.service.contains(q)) | (Port.banner.contains(q))))).scalars().all()
+        all_scripts = (await session.execute(select(Script).where(Script.output.contains(q)))).scalars().all()
+
+    # Paginate each result type separately
+    def paginate(items, page_num, page_size):
+        total = len(items)
+        total_pgs = (total + page_size - 1) // page_size if total > 0 else 1
+        p = min(page_num, total_pgs)
+        start = (p - 1) * page_size
+        end = start + page_size
+        return items[start:end], total, total_pgs
+
+    hosts, hosts_total, hosts_pages = paginate(all_hosts, page, per_page)
+    ports, ports_total, ports_pages = paginate(all_ports, page, per_page)
+    scripts, scripts_total, scripts_pages = paginate(all_scripts, page, per_page)
+
+    return templates.TemplateResponse("search.html", {
+        "request": request,
+        "query": q,
+        "hosts": hosts,
+        "ports": ports,
+        "scripts": scripts,
+        "page": page,
+        "per_page": per_page,
+        "hosts_total": hosts_total,
+        "ports_total": ports_total,
+        "scripts_total": scripts_total,
+        "hosts_pages": hosts_pages,
+        "ports_pages": ports_pages,
+        "scripts_pages": scripts_pages,
+    })
+
+# -------- Task Management Pages --------
+@app.get("/tasks", response_class=HTMLResponse)
+async def tasks_page(request: Request):
+    """Tasks dashboard page."""
+    return templates.TemplateResponse("tasks.html", {"request": request})
+
+@app.get("/tasks/scan/new", response_class=HTMLResponse)
+async def new_scan_page(request: Request):
+    """New scan form page."""
+    return templates.TemplateResponse("scan_new.html", {"request": request})
+
+@app.get("/tasks/module/new", response_class=HTMLResponse)
+async def new_module_page(request: Request):
+    """Run module form page."""
+    return templates.TemplateResponse("module_run.html", {"request": request})
+
+@app.get("/tasks/{task_id}", response_class=HTMLResponse)
+async def task_detail_page(request: Request, task_id: str):
+    """Task detail page with live output."""
+    return templates.TemplateResponse("task_detail.html", {"request": request, "task_id": task_id})
+
+# -------- Task Management API --------
+class ScanRequest(BaseModel):
+    targets: List[str]
+    interface: Optional[str] = None
+    discover: Optional[List[str]] = ["masscan"]
+    scan_type: str = "top-ports"
+    output_dir: Optional[str] = None
+
+class ModuleRequest(BaseModel):
+    module_name: str
+    targets_file: str
+    output_dir: Optional[str] = None
+
+@app.post("/api/scans")
+async def create_scan(req: ScanRequest):
+    """Create a new scan task."""
+    if not req.targets:
+        raise HTTPException(status_code=400, detail="No targets provided")
+
+    output_dir = req.output_dir or str(settings.RESULTS_DIR)
+
+    task_id = await task_manager.create_scan_task(
+        targets=req.targets,
+        interface=req.interface,
+        discover=req.discover,
+        scan_type=req.scan_type,
+        output_dir=output_dir
+    )
+
+    return JSONResponse({"task_id": task_id, "status": "created"})
+
+@app.post("/api/modules")
+async def create_module_task(req: ModuleRequest):
+    """Create a new enumeration module task."""
+    if not req.targets_file:
+        raise HTTPException(status_code=400, detail="No targets file provided")
+
+    if not Path(req.targets_file).exists():
+        raise HTTPException(status_code=400, detail=f"Targets file not found: {req.targets_file}")
+
+    output_dir = req.output_dir or str(settings.RESULTS_DIR)
+
+    task_id = await task_manager.create_module_task(
+        module_name=req.module_name,
+        targets_file=req.targets_file,
+        output_dir=output_dir
+    )
+
+    return JSONResponse({"task_id": task_id, "status": "created"})
+
+@app.get("/api/tasks")
+async def list_tasks():
+    """List all tasks."""
+    tasks = await task_manager.list_tasks()
+    return JSONResponse(tasks)
+
+@app.get("/api/tasks/{task_id}")
+async def get_task_status(task_id: str):
+    """Get status of a specific task."""
+    task = await task_manager.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return JSONResponse(task.to_dict())
+
+@app.get("/api/tasks/{task_id}/output")
+async def get_task_output(task_id: str):
+    """Get output of a specific task."""
+    task = await task_manager.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    return JSONResponse({
+        "task_id": task_id,
+        "status": task.status.value,
+        "output": task.output_lines,
+        "errors": task.error_lines,
+    })
+
+@app.post("/api/tasks/{task_id}/cancel")
+async def cancel_task(task_id: str):
+    """Cancel a running task."""
+    success = await task_manager.cancel_task(task_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="Cannot cancel task (not running or not found)")
+    return JSONResponse({"status": "cancelled"})
+
+@app.delete("/api/tasks/{task_id}")
+async def delete_task(task_id: str):
+    """Delete a task."""
+    success = await task_manager.delete_task(task_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="Cannot delete task (running or not found)")
+    return JSONResponse({"status": "deleted"})
 
 # -------- Entrypoint --------
 def exec_argv(argv):

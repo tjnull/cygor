@@ -2,8 +2,41 @@
 {% block content %}
 
 <style>
+/* Material dashboard styling */
+.compact .card-body {
+  padding: 1.5rem !important;
+}
+
+.compact .card-body i.fs-1 {
+  font-size: 2.5rem !important;
+  padding: 0.75rem;
+  border-radius: 4px;
+  background: rgba(59,130,246,0.1);
+  transition: all 0.15s ease;
+}
+
+.compact .card-body:hover i.fs-1 {
+  background: rgba(59,130,246,0.15);
+}
+
+.compact h6 {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #71717a !important;
+}
+
+.compact h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ffffff !important;
+}
+
 /* Chart card helpers */
-.chart-card .card-body { display: flex; flex-direction: column; padding: 1rem; }
+.chart-card .card-body { display: flex; flex-direction: column; padding: 1.5rem; }
 
 /* Dashboard canvas sizing */
 .chart-canvas-wrap {
@@ -22,7 +55,7 @@
   border: 1px solid rgba(255,255,255,0.06);
   color: #fff;
   padding: 0.18rem 0.36rem;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -42,7 +75,7 @@
   gap: 12px;
   background: rgba(0,0,0,0.18);
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: 4px;
   color: #ffffff !important;
   font-weight: 600;
   font-size: 13px;
@@ -69,7 +102,7 @@
   box-sizing: border-box;
 }
 #popupCanvasHolder::-webkit-scrollbar { height: 10px; }
-#popupCanvasHolder::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 6px; }
+#popupCanvasHolder::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
 
 /* Make legend and labels readable */
 .modal-content .chartjs-legend { text-align:center; margin-top:6px; }
@@ -90,6 +123,225 @@
   font-weight: 600;
   font-size: 12px;
   margin-top: 6px;
+}
+
+/* Material chart card styling */
+.chart-card {
+  border-radius: 6px !important;
+  overflow: hidden;
+  transition: all 0.15s ease;
+}
+
+.chart-card .card-header {
+  border-radius: 6px 6px 0 0 !important;
+  padding: 1rem 1.25rem;
+}
+
+.chart-card .card-header h5,
+.chart-card .card-header h6 {
+  font-weight: 600;
+  margin-bottom: 0;
+  letter-spacing: 0;
+  color: #ffffff !important;
+}
+
+/* Material OS Discovery section */
+.display-6 {
+  font-weight: 700 !important;
+  transition: color 0.15s ease;
+}
+
+.display-6 a {
+  transition: color 0.15s ease;
+}
+
+.display-6 a:hover {
+  color: #3b82f6 !important;
+}
+
+/* Material table styling */
+.table-dark {
+  border-radius: 4px;
+  overflow: hidden;
+  background: #0a0a0a !important;
+  border: 1px solid #18181b !important;
+}
+
+.table-dark thead th {
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  background: #0f0f0f !important;
+  border-bottom: 1px solid #18181b !important;
+  padding: 0.75rem 1rem;
+  color: #71717a !important;
+}
+
+.table-dark tbody tr {
+  border-bottom: 1px solid #18181b !important;
+  transition: background 0.15s ease;
+}
+
+.table-dark tbody tr:hover {
+  background: #18181b !important;
+}
+
+/* Material popup button styling */
+.chart-popup-btn {
+  border-radius: 4px !important;
+  transition: all 0.15s ease !important;
+  padding: 0.4rem 0.7rem !important;
+  background: #18181b !important;
+  border: 1px solid #27272a !important;
+  box-shadow: none !important;
+}
+
+.chart-popup-btn:hover {
+  background: #27272a !important;
+  border-color: #3f3f46 !important;
+}
+
+/* Material legend styling */
+.custom-legend {
+  background: #0a0a0a !important;
+  border: 1px solid #18181b !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+  border-radius: 4px !important;
+  padding: 6px 12px !important;
+}
+
+.custom-legend .legend-swatch {
+  box-shadow: none !important;
+  border-radius: 2px !important;
+}
+
+/* Light theme overrides for dashboard */
+body.light-theme .custom-legend {
+  background: #ffffff !important;
+  border: 1px solid rgba(0,0,0,0.15) !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+}
+
+body.light-theme .custom-legend .legend-text {
+  color: #212529 !important;
+}
+
+body.light-theme .custom-legend .legend-item {
+  color: #212529 !important;
+}
+
+body.light-theme .chart-popup-btn {
+  background: #f8f9fa !important;
+  border-color: rgba(0,0,0,0.15) !important;
+  color: #212529 !important;
+}
+
+body.light-theme .chart-popup-btn:hover {
+  background: #e9ecef !important;
+  border-color: rgba(0,0,0,0.2) !important;
+}
+
+body.light-theme .display-6 {
+  color: #212529 !important;
+}
+
+body.light-theme .display-6 a {
+  color: #0d6efd !important;
+}
+
+body.light-theme .display-6 a:hover {
+  color: #0a58ca !important;
+}
+
+body.light-theme .table-dark {
+  background: #ffffff !important;
+  border: 1px solid rgba(0,0,0,0.1) !important;
+}
+
+body.light-theme .table-dark thead th {
+  background: #f8f9fa !important;
+  color: #212529 !important;
+  border-color: rgba(0,0,0,0.1) !important;
+}
+
+body.light-theme .table-dark tbody td {
+  color: #212529 !important;
+  border-color: rgba(0,0,0,0.08) !important;
+}
+
+body.light-theme .table-dark tbody tr {
+  border-color: rgba(0,0,0,0.08) !important;
+}
+
+body.light-theme .table-dark tbody tr:hover {
+  background: rgba(13,110,253,0.05) !important;
+}
+
+body.light-theme .table-striped tbody tr:nth-of-type(odd) {
+  background: #f8f9fa !important;
+}
+
+body.light-theme .compact h6 {
+  color: #6c757d !important;
+}
+
+body.light-theme .compact h2 {
+  color: #212529 !important;
+}
+
+body.light-theme .compact .card-body i.fs-1 {
+  background: rgba(13,110,253,0.1) !important;
+}
+
+body.light-theme .text-info {
+  color: #0dcaf0 !important;
+}
+
+body.light-theme .text-success {
+  color: #198754 !important;
+}
+
+body.light-theme .hosts-adjusted-note {
+  color: #856404 !important;
+}
+
+body.light-theme .chart-card {
+  background: #ffffff !important;
+  border: 1px solid rgba(0,0,0,0.1) !important;
+}
+
+body.light-theme .chart-card .card-header {
+  background: #f8f9fa !important;
+  border-bottom: 1px solid rgba(0,0,0,0.1) !important;
+}
+
+body.light-theme .chart-card .card-header h5,
+body.light-theme .chart-card .card-header h6 {
+  color: #212529 !important;
+}
+
+body.light-theme .chart-card .small {
+  color: #6c757d !important;
+}
+
+body.light-theme .modal-header {
+  background: #f8f9fa !important;
+  border-bottom: 1px solid rgba(0,0,0,0.1) !important;
+}
+
+body.light-theme .modal-header h5,
+body.light-theme .modal-title {
+  color: #212529 !important;
+}
+
+body.light-theme .btn-close-white {
+  filter: invert(1);
+}
+
+body.light-theme hr {
+  border-color: rgba(0,0,0,0.1) !important;
+  opacity: 1 !important;
 }
 </style>
 
@@ -265,15 +517,40 @@
 
 <script>
 /* Theme defaults for dark UI */
-if (typeof Chart !== 'undefined') {
-  Chart.defaults.color = '#cfcfcf';
-  Chart.defaults.font.family = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial';
-  Chart.defaults.font.size = 12;
-  Chart.defaults.plugins.legend.labels.color = '#e0e0e0';
-  Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
-  Chart.defaults.plugins.tooltip.bodyColor = '#e6e6e6';
-  Chart.defaults.plugins.legend.labels.usePointStyle = true;
+function updateChartDefaults() {
+  if (typeof Chart === 'undefined') return;
+
+  const isLight = document.body.classList.contains('light-theme');
+
+  if (isLight) {
+    // Light theme chart colors
+    Chart.defaults.color = '#212529';
+    Chart.defaults.font.family = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial';
+    Chart.defaults.font.size = 12;
+    Chart.defaults.plugins.legend.labels.color = '#212529';
+    Chart.defaults.plugins.tooltip.titleColor = '#212529';
+    Chart.defaults.plugins.tooltip.bodyColor = '#212529';
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+    Chart.defaults.plugins.tooltip.borderColor = 'rgba(0, 0, 0, 0.1)';
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
+    Chart.defaults.plugins.legend.labels.usePointStyle = true;
+  } else {
+    // Dark theme chart colors
+    Chart.defaults.color = '#cfcfcf';
+    Chart.defaults.font.family = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial';
+    Chart.defaults.font.size = 12;
+    Chart.defaults.plugins.legend.labels.color = '#e0e0e0';
+    Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
+    Chart.defaults.plugins.tooltip.bodyColor = '#e6e6e6';
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    Chart.defaults.plugins.tooltip.borderColor = 'rgba(255, 255, 255, 0.1)';
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
+    Chart.defaults.plugins.legend.labels.usePointStyle = true;
+  }
 }
+
+// Initialize chart defaults
+updateChartDefaults();
 
 /* ---- Services chart ---- */
 function renderServicesChart() {
