@@ -120,26 +120,132 @@
     body.light-theme .card-body {
       color: #212529 !important;
     }
+    /* Aggressive table-dark overrides for light theme */
+    body.light-theme .table,
+    body.light-theme .table > :not(caption) > * > *,
+    body.light-theme .table-dark,
+    body.light-theme .table-dark > :not(caption) > * > * {
+      background-color: transparent !important;
+      color: #212529 !important;
+      --bs-table-bg: transparent !important;
+      --bs-table-striped-bg: transparent !important;
+      --bs-table-active-bg: transparent !important;
+      --bs-table-hover-bg: rgba(13,110,253,0.05) !important;
+    }
+
+    /* Table wrapper background */
     body.light-theme .table,
     body.light-theme .table-dark {
       background: #ffffff !important;
-      color: #212529 !important;
+      border: 1px solid rgba(0,0,0,0.1) !important;
     }
+
+    /* Table header - light gray background */
+    body.light-theme .table thead,
     body.light-theme .table thead th,
     body.light-theme .table thead td,
-    body.light-theme .table-dark thead th {
-      background: #f8f9fa !important;
+    body.light-theme .table thead tr,
+    body.light-theme .table-dark thead,
+    body.light-theme .table-dark thead th,
+    body.light-theme .table-dark thead td,
+    body.light-theme .table-dark thead tr {
+      background-color: #e9ecef !important;
       color: #212529 !important;
       border-color: rgba(0,0,0,0.1) !important;
+      font-weight: 600 !important;
     }
+
+    /* Table body cells */
+    body.light-theme .table tbody,
     body.light-theme .table tbody td,
-    body.light-theme .table-dark tbody td {
+    body.light-theme .table tbody th,
+    body.light-theme .table-dark tbody,
+    body.light-theme .table-dark tbody td,
+    body.light-theme .table-dark tbody th {
       color: #212529 !important;
       border-color: rgba(0,0,0,0.08) !important;
+      background-color: transparent !important;
     }
+
+    /* Table rows - white background */
+    body.light-theme .table tbody tr,
+    body.light-theme .table-dark tbody tr {
+      background-color: #ffffff !important;
+      border-color: rgba(0,0,0,0.08) !important;
+    }
+
+    /* Striped rows */
+    body.light-theme .table-striped > tbody > tr:nth-of-type(odd) > *,
+    body.light-theme .table-dark.table-striped > tbody > tr:nth-of-type(odd) > * {
+      background-color: transparent !important;
+      color: #212529 !important;
+      --bs-table-accent-bg: #f8f9fa !important;
+    }
+
+    body.light-theme .table-striped tbody tr:nth-of-type(odd),
+    body.light-theme .table-dark.table-striped tbody tr:nth-of-type(odd) {
+      background-color: #f8f9fa !important;
+    }
+
+    body.light-theme .table-striped tbody tr:nth-of-type(even),
+    body.light-theme .table-dark.table-striped tbody tr:nth-of-type(even) {
+      background-color: #ffffff !important;
+    }
+
+    /* Hover state */
     body.light-theme .table tbody tr:hover,
-    body.light-theme .table-dark tbody tr:hover {
-      background: rgba(13,110,253,0.05) !important;
+    body.light-theme .table tbody tr:hover td,
+    body.light-theme .table tbody tr:hover th,
+    body.light-theme .table-dark tbody tr:hover,
+    body.light-theme .table-dark tbody tr:hover td,
+    body.light-theme .table-dark tbody tr:hover th {
+      background-color: rgba(13,110,253,0.08) !important;
+      color: #212529 !important;
+    }
+
+    /* Links and text inside tables */
+    body.light-theme .table a,
+    body.light-theme .table-dark a {
+      color: #0d6efd !important;
+    }
+
+    body.light-theme .table a:hover,
+    body.light-theme .table-dark a:hover {
+      color: #0a58ca !important;
+    }
+
+    body.light-theme .table .text-white,
+    body.light-theme .table-dark .text-white {
+      color: #212529 !important;
+    }
+
+    body.light-theme .table .btn,
+    body.light-theme .table-dark .btn {
+      color: inherit !important;
+    }
+    body.light-theme .badge.bg-primary {
+      background: #0d6efd !important;
+      color: #ffffff !important;
+    }
+    body.light-theme .badge.bg-success {
+      background: #198754 !important;
+      color: #ffffff !important;
+    }
+    body.light-theme .badge.bg-secondary {
+      background: #6c757d !important;
+      color: #ffffff !important;
+    }
+    body.light-theme .badge.bg-info {
+      background: #0dcaf0 !important;
+      color: #000000 !important;
+    }
+    body.light-theme .btn-outline-info {
+      color: #0dcaf0 !important;
+      border-color: #0dcaf0 !important;
+    }
+    body.light-theme .btn-outline-info:hover {
+      background: #0dcaf0 !important;
+      color: #000000 !important;
     }
     body.light-theme .text-light,
     body.light-theme .text-muted,
@@ -1135,6 +1241,16 @@
         body.classList.add('light-theme');
         localStorage.setItem('cygor-theme', 'light');
         updateThemeUI('light');
+      }
+
+      // Update Chart.js defaults if available
+      if (typeof window.updateChartDefaults === 'function') {
+        window.updateChartDefaults();
+      }
+
+      // Refresh all charts if available
+      if (typeof window.refreshCharts === 'function') {
+        window.refreshCharts();
       }
     });
 
