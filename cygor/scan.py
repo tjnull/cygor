@@ -226,12 +226,14 @@ def save_discovery_results(masscan_hosts, naabu_hosts, merged_hosts, base_outdir
         "masscan-discovered.txt": sorted(masscan_hosts),
         "naabu-discovered.txt": sorted(naabu_hosts),
         "merged-discovered.txt": sorted(merged_hosts),
+        "all-discovered-hosts.txt": sorted(merged_hosts),  # unified hostlist
     }
     for fname, hosts in files.items():
         fpath = os.path.join(outdir, fname)
         with open(fpath, "w", encoding="utf-8") as f:
             f.write("\n".join(hosts))
         print(f"{Fore.GREEN}[+] Saved {len(hosts)} hosts to {fpath}")
+
 
 def _determine_target_uid_gid():
     """
@@ -322,7 +324,8 @@ def run_masscan(host, interface=None, base_outdir='results', ports=None, rate=10
 
     interface_option = f"--interface {interface}" if interface else ""
     ports_option = f"-p {ports}" if ports else (
-        "-p 21,22,23,25,80,88,111,135,139,389,443,445,636,1099,1433,2049,3389,4786,5900,5985,8080,9100"
+    # Default discovery ports (common services)
+    "-p 21,22,23,25,80,88,111,135,139,389,443,445,636,1099,1433,2049,3389,4786,5900,5985,8080,9100"
     )
 
     # --- NEW: exclusions support ---
@@ -568,23 +571,24 @@ examples = f"""
     {Fore.YELLOW}# 1. Run host discovery with Masscan only{Style.RESET_ALL}
     cygor scan -i eth0 -f scope.txt --discover masscan
 
-    {Fore.YELLOW}# 2. Run host discovery with both Masscan and Naabu, then Nmap on merged results{Style.RESET_ALL}
-    cygor scan -i eth0 -f scope.txt --discover masscan naabu --nmap-source merge
+    {Fore.YELLOW}# 2. Run discovery with custom ports for Masscan{Style.RESET_ALL}
+    cygor scan -i eth0 -f scope.txt --discover masscan --masscan-ports 80,443,8443
 
-    {Fore.YELLOW}# 3. Discovery only (no Nmap), save results in results/discovery/{Style.RESET_ALL}
+    {Fore.YELLOW}# 3. Run discovery with custom ports for Naabu{Style.RESET_ALL}
+    cygor scan -i eth0 -f scope.txt --discover naabu --naabu-ports 1-1024,8080
+
+    {Fore.YELLOW}# 4. Discovery only (no Nmap), save hostlists in results/discovery/{Style.RESET_ALL}
     cygor scan -i eth0 -f scope.txt --discover masscan naabu --discover-only
+    # ➜ Creates: masscan-discovered.txt, naabu-discovered.txt, merged-discovered.txt, all-discovered-hosts.txt
 
-    {Fore.YELLOW}# 4. Reuse saved discovery results for Nmap full scan{Style.RESET_ALL}
-    cygor scan --use-discovery results/discovery/merged-discovered.txt --scan-type fullscan
+    {Fore.YELLOW}# 5. Reuse full discovered hostlist for Nmap scan{Style.RESET_ALL}
+    cygor scan --use-discovery results/discovery/all-discovered-hosts.txt --scan-type fullscan
 
-    {Fore.YELLOW}# 5. Run Nmap with custom ports on discovered hosts{Style.RESET_ALL}
+    {Fore.YELLOW}# 6. Run Nmap with custom ports on discovered hosts{Style.RESET_ALL}
     cygor scan --use-discovery results/discovery/masscan-discovered.txt --ports 80,443,8443
 
-    {Fore.YELLOW}# 6. Run Nmap with 10 parallel processes on full scope{Style.RESET_ALL}
+    {Fore.YELLOW}# 7. Run with 10 parallel Nmap processes{Style.RESET_ALL}
     cygor scan -i eth0 -f scope.txt --discover naabu --processes 10 --scan-type fullscan
-
-    {Fore.YELLOW}# 7. Run Cygor to discover hosts and scan them with Nmap with a provided lists of IP Addresses or CDRs{Style.RESET_ALL}
-    cygor scan -i eth0 --ips 10.10.10.1 10.10.10.5 10.10.20.0/24 --discover naabu --processes 10 --scan-type fullscan
 
     {Fore.YELLOW}# 8. Exclude specific subnets or hosts from scan{Style.RESET_ALL}
     cygor scan -i eth0 -f scope.txt --exclusions exclusions.txt --discover masscan
@@ -622,6 +626,14 @@ def main():
         choices=["masscan", "naabu"],
         default=["masscan"],
         help="Run host discovery with one or more tools (default: masscan)."
+    )
+    disc_group.add_argument(
+    "--masscan-ports",
+    help="Custom ports for Masscan discovery phase (e.g., '80,443,8080')."
+    )
+    disc_group.add_argument(
+        "--naabu-ports",
+        help="Custom ports for Naabu discovery phase (e.g., '1-1024,8080')."
     )
     disc_group.add_argument(
         "--discover-only",
@@ -732,7 +744,7 @@ def main():
 
     if 'masscan' in args.discover:
         print(f"{Fore.CYAN}[+] Running Masscan discovery...{Style.RESET_ALL}")
-        masscan_results = [run_masscan(h, interface=args.interface, base_outdir=args.outdir, ports=args.ports) for h in hosts]
+        masscan_results = [run_masscan(h, interface=args.interface, base_outdir=args.outdir,ports=args.masscan_ports, ports=args.ports) for h in hosts]
         for f in masscan_results:
             if f and os.path.exists(f):
                 with open(f, 'r', encoding="utf-8") as fh:
@@ -758,7 +770,7 @@ def main():
 
     if 'naabu' in args.discover:
         print(f"{Fore.CYAN}[+] Running Naabu discovery...{Style.RESET_ALL}")
-        naabu_results = [run_naabu(h,interface=args.interface,base_outdir=args.outdir,ports=args.ports,exclusions=exclusions if args.exclusions else None) for h in hosts]
+        naabu_results = [run_naabu(h,interface=args.interface,base_outdir=args.outdir,ports=args.naabu_ports,ports=args.ports,exclusions=exclusions if args.exclusions else None) for h in hosts]
         for f in naabu_results:
             if f and os.path.exists(f):
                 with open(f, 'r', encoding="utf-8") as fh:
