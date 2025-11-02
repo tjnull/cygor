@@ -901,7 +901,18 @@ def main():
 
     if 'masscan' in args.discover:
         print(f"{Fore.CYAN}[+] Running Masscan discovery...{Style.RESET_ALL}")
-        masscan_results = [run_masscan(h, interface=args.interface, base_outdir=args.outdir,ports=args.masscan_ports, ports=args.ports) for h in hosts]
+        # Masscan discovery
+        masscan_results = [
+            run_masscan(
+                h,
+                interface=args.interface,
+                base_outdir=args.outdir,
+                ports=args.masscan_ports,      # custom Masscan ports if set
+                exclusions=exclusions if args.exclusions else None
+            )
+            for h in hosts
+        ]
+
         for f in masscan_results:
             if f and os.path.exists(f):
                 with open(f, 'r', encoding="utf-8") as fh:
@@ -927,9 +938,18 @@ def main():
 
     if 'naabu' in args.discover:
         print(f"{Fore.CYAN}[+] Running Naabu discovery...{Style.RESET_ALL}")
-        naabu_results = [run_naabu(h,interface=args.interface,base_outdir=args.outdir,ports=args.naabu_ports,ports=args.ports,exclusions=exclusions if args.exclusions else None) for h in hosts]
-        for f in naabu_results:
-            if f and os.path.exists(f):
+        # Naabu discovery
+        naabu_results = [
+            run_naabu(
+                h,
+                interface=args.interface,
+                base_outdir=args.outdir,
+                ports=args.naabu_ports,        # custom Naabu ports if set
+                exclusions=exclusions if args.exclusions else None
+            )
+            for h in hosts
+        ]
+        if f and os.path.exists(f):
                 with open(f, 'r', encoding="utf-8") as fh:
                     discovered_hosts_naabu.update([l.split(':')[0].strip() for l in fh if l.strip()])
         print(f"{Fore.CYAN}Naabu discovered {len(discovered_hosts_naabu)} hosts")
