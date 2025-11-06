@@ -90,44 +90,90 @@
                     <i class="bi bi-folder me-2"></i>Existing Hostlist
                   </label>
 
-                  <input type="radio" class="btn-check" name="targetFileMode" id="targetFileCustom" value="custom">
-                  <label class="btn btn-outline-secondary" for="targetFileCustom">
-                    <i class="bi bi-keyboard me-2"></i>Custom Path
+                  <input type="radio" class="btn-check" name="targetFileMode" id="targetFileUpload" value="upload">
+                  <label class="btn btn-outline-secondary" for="targetFileUpload">
+                    <i class="bi bi-cloud-upload me-2"></i>Upload File
+                  </label>
+
+                  <input type="radio" class="btn-check" name="targetFileMode" id="targetFileBrowse" value="browse">
+                  <label class="btn btn-outline-secondary" for="targetFileBrowse">
+                    <i class="bi bi-folder2-open me-2"></i>Browse Path
                   </label>
                 </div>
               </div>
 
               <div id="existingFileDiv">
-                <select class="form-select bg-dark text-light border-secondary mb-2" id="targetsFileSelect">
-                  <option value="">-- Select a parsed hostlist --</option>
-                  <optgroup label="HTTP/HTTPS Services">
-                    <option value="results/parsed-hostlists/http/http-hostlist.txt">HTTP Hosts</option>
-                    <option value="results/parsed-hostlists/https/https-hostlist.txt">HTTPS Hosts</option>
-                    <option value="results/parsed-hostlists/http+https/http-https-hostlist.txt">All Web Services</option>
-                  </optgroup>
-                  <optgroup label="File Sharing">
-                    <option value="results/parsed-hostlists/smb/smb-hostlist.txt">SMB Hosts</option>
-                    <option value="results/parsed-hostlists/nfs/nfs-hostlist.txt">NFS Hosts</option>
-                    <option value="results/parsed-hostlists/ftp/ftp-hostlist.txt">FTP Hosts</option>
-                  </optgroup>
-                  <optgroup label="Remote Access">
-                    <option value="results/parsed-hostlists/ssh/ssh-hostlist.txt">SSH Hosts</option>
-                    <option value="results/parsed-hostlists/rdp/rdp-hostlist.txt">RDP Hosts</option>
-                    <option value="results/parsed-hostlists/vnc/vnc-hostlist.txt">VNC Hosts</option>
-                  </optgroup>
-                  <optgroup label="Discovery Results">
-                    <option value="results/discovery/all-discovered-hosts.txt">All Discovered Hosts</option>
-                    <option value="results/discovery/masscan-discovered.txt">Masscan Results</option>
-                    <option value="results/discovery/naabu-discovered.txt">Naabu Results</option>
-                  </optgroup>
-                </select>
-                <div class="form-text">Common parsed hostlists from scan results</div>
+                <div class="d-flex gap-2 mb-2">
+                  <select class="form-select bg-dark text-light border-secondary flex-grow-1" id="targetsFileSelect">
+                    <option value="">-- Select a parsed hostlist --</option>
+                    {% if available_hostlists %}
+                      <optgroup label="HTTP/HTTPS Services">
+                        {% for key, info in available_hostlists.items() if key in ['http', 'https', 'http-https'] %}
+                          <option value="{{ info.path }}">{{ info.label }}{% if info.count %} ({{ info.count }} hosts){% endif %}</option>
+                        {% endfor %}
+                      </optgroup>
+                      <optgroup label="File Sharing">
+                        {% for key, info in available_hostlists.items() if key in ['smb', 'nfs', 'ftp'] %}
+                          <option value="{{ info.path }}">{{ info.label }}{% if info.count %} ({{ info.count }} hosts){% endif %}</option>
+                        {% endfor %}
+                      </optgroup>
+                      <optgroup label="Remote Access">
+                        {% for key, info in available_hostlists.items() if key in ['ssh', 'rdp', 'vnc'] %}
+                          <option value="{{ info.path }}">{{ info.label }}{% if info.count %} ({{ info.count }} hosts){% endif %}</option>
+                        {% endfor %}
+                      </optgroup>
+                      <optgroup label="Discovery Results">
+                        {% for key, info in available_hostlists.items() if key.startswith('discovery_') %}
+                          <option value="{{ info.path }}">{{ info.label }}{% if info.count %} ({{ info.count }} hosts){% endif %}</option>
+                        {% endfor %}
+                      </optgroup>
+                    {% else %}
+                      <option value="" disabled>No hostlists found in workspace</option>
+                    {% endif %}
+                  </select>
+                  <button type="button" class="btn btn-outline-secondary" id="refreshHostlistsBtn" title="Refresh hostlist">
+                    <i class="bi bi-arrow-clockwise"></i>
+                  </button>
+                </div>
+                <div class="form-text" id="hostlistHelpText">
+                  {% if available_hostlists %}
+                    Available parsed hostlists from your workspace
+                  {% else %}
+                    No parsed hostlists found. Run "cygor parse" to generate them.
+                  {% endif %}
+                </div>
               </div>
 
-              <div id="customFileDiv" style="display:none;">
-                <input type="text" class="form-control bg-dark text-light border-secondary"
-                       id="targetsFileCustom" placeholder="/path/to/custom-targets.txt">
-                <div class="form-text">Absolute or relative path to your custom targets file</div>
+              <div id="uploadFileDiv" style="display:none;">
+                <div id="fileDropZone" class="border border-secondary rounded p-4 text-center" style="border-style: dashed !important; cursor: pointer; background: rgba(255,255,255,0.02);">
+                  <i class="bi bi-cloud-upload fs-1 text-secondary mb-2"></i>
+                  <p class="text-light mb-2">Drag and drop a file here, or click to browse</p>
+                  <p class="text-secondary small mb-0">Accepts .txt, .list, or any text file with targets (one per line)</p>
+                  <input type="file" id="targetsFileInput" accept=".txt,.list" style="display: none;">
+                </div>
+                <div id="fileNameDisplay" class="mt-2" style="display:none;">
+                  <div class="alert alert-info d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-file-earmark-text me-2"></i><span id="selectedFileName"></span></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="clearFileBtn">
+                      <i class="bi bi-x"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div id="browseFileDiv" style="display:none;">
+                <div class="input-group">
+                  <input type="text" class="form-control bg-dark text-light border-secondary"
+                         id="targetsFileBrowse" placeholder="Click browse to select a file" readonly>
+                  <button class="btn btn-outline-secondary" type="button" id="browseFileBtn">
+                    <i class="bi bi-folder2-open me-1"></i>Browse
+                  </button>
+                  <button class="btn btn-outline-secondary" type="button" id="clearBrowseBtn" title="Clear selection">
+                    <i class="bi bi-x"></i>
+                  </button>
+                </div>
+                <div class="form-text">Browse your system to select a targets file</div>
+                <input type="file" id="filePathInput" accept=".txt,.list" style="display: none;">
               </div>
             </div>
 
@@ -141,9 +187,18 @@
                   <div class="card-body">
                     <div class="mb-3">
                       <label for="outputDir" class="form-label">Output Directory</label>
-                      <input type="text" class="form-control bg-dark text-light border-secondary"
-                             id="outputDir" placeholder="Leave empty to use workspace/default">
+                      <div class="input-group">
+                        <input type="text" class="form-control bg-dark text-light border-secondary"
+                               id="outputDir" placeholder="Leave empty to use workspace/default" readonly>
+                        <button class="btn btn-outline-secondary" type="button" id="browseOutputDirBtn">
+                          <i class="bi bi-folder2-open me-1"></i>Browse
+                        </button>
+                        <button class="btn btn-outline-secondary" type="button" id="clearOutputDirBtn" title="Clear selection">
+                          <i class="bi bi-x"></i>
+                        </button>
+                      </div>
                       <div class="form-text">Custom output directory (defaults to results/cygor-enumeration-modules/)</div>
+                      <input type="file" id="outputDirInput" webkitdirectory directory style="display: none;">
                     </div>
                   </div>
                 </div>
@@ -203,7 +258,181 @@
   </div>
 </div>
 
+<style>
+/* Enhanced readability for form text */
+.form-text {
+  color: #adb5bd !important;
+  font-size: 0.875rem !important;
+  font-weight: 400 !important;
+}
+
+/* Enhanced input field styling for browse mode */
+#targetsFileBrowse,
+#outputDir {
+  background-color: #1a1d23 !important;
+  color: #ffffff !important;
+  border-color: #495057 !important;
+  font-family: 'Courier New', monospace !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+/* Spin animation for refresh button */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+</style>
+
 <script>
+// Global variable to store uploaded file content and path
+let uploadedFileContent = null;
+let selectedFilePath = null;
+
+// ========== Refresh Hostlists Functionality ==========
+async function refreshHostlists() {
+  const refreshBtn = document.getElementById('refreshHostlistsBtn');
+  const selectEl = document.getElementById('targetsFileSelect');
+  const helpText = document.getElementById('hostlistHelpText');
+
+  // Show loading state
+  const originalIcon = refreshBtn.innerHTML;
+  refreshBtn.disabled = true;
+  refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
+  refreshBtn.querySelector('i').style.animation = 'spin 1s linear infinite';
+
+  try {
+    const response = await fetch('/api/hostlists');
+    if (!response.ok) throw new Error('Failed to fetch hostlists');
+
+    const hostlists = await response.json();
+
+    // Save current selection
+    const currentValue = selectEl.value;
+
+    // Clear and rebuild dropdown
+    selectEl.innerHTML = '<option value="">-- Select a parsed hostlist --</option>';
+
+    if (Object.keys(hostlists).length > 0) {
+      // HTTP/HTTPS Services
+      const httpGroup = document.createElement('optgroup');
+      httpGroup.label = 'HTTP/HTTPS Services';
+      ['http', 'https', 'http-https'].forEach(key => {
+        if (hostlists[key]) {
+          const opt = document.createElement('option');
+          opt.value = hostlists[key].path;
+          opt.textContent = hostlists[key].label + (hostlists[key].count ? ` (${hostlists[key].count} hosts)` : '');
+          httpGroup.appendChild(opt);
+        }
+      });
+      if (httpGroup.children.length > 0) selectEl.appendChild(httpGroup);
+
+      // File Sharing
+      const fileGroup = document.createElement('optgroup');
+      fileGroup.label = 'File Sharing';
+      ['smb', 'nfs', 'ftp'].forEach(key => {
+        if (hostlists[key]) {
+          const opt = document.createElement('option');
+          opt.value = hostlists[key].path;
+          opt.textContent = hostlists[key].label + (hostlists[key].count ? ` (${hostlists[key].count} hosts)` : '');
+          fileGroup.appendChild(opt);
+        }
+      });
+      if (fileGroup.children.length > 0) selectEl.appendChild(fileGroup);
+
+      // Remote Access
+      const remoteGroup = document.createElement('optgroup');
+      remoteGroup.label = 'Remote Access';
+      ['ssh', 'rdp', 'vnc', 'telnet', 'winrm'].forEach(key => {
+        if (hostlists[key]) {
+          const opt = document.createElement('option');
+          opt.value = hostlists[key].path;
+          opt.textContent = hostlists[key].label + (hostlists[key].count ? ` (${hostlists[key].count} hosts)` : '');
+          remoteGroup.appendChild(opt);
+        }
+      });
+      if (remoteGroup.children.length > 0) selectEl.appendChild(remoteGroup);
+
+      // Databases
+      const dbGroup = document.createElement('optgroup');
+      dbGroup.label = 'Databases';
+      ['mysql', 'postgres', 'mssql', 'mongodb', 'redis'].forEach(key => {
+        if (hostlists[key]) {
+          const opt = document.createElement('option');
+          opt.value = hostlists[key].path;
+          opt.textContent = hostlists[key].label + (hostlists[key].count ? ` (${hostlists[key].count} hosts)` : '');
+          dbGroup.appendChild(opt);
+        }
+      });
+      if (dbGroup.children.length > 0) selectEl.appendChild(dbGroup);
+
+      // Other Services
+      const otherGroup = document.createElement('optgroup');
+      otherGroup.label = 'Other Services';
+      ['dns', 'proxmox'].forEach(key => {
+        if (hostlists[key]) {
+          const opt = document.createElement('option');
+          opt.value = hostlists[key].path;
+          opt.textContent = hostlists[key].label + (hostlists[key].count ? ` (${hostlists[key].count} hosts)` : '');
+          otherGroup.appendChild(opt);
+        }
+      });
+      if (otherGroup.children.length > 0) selectEl.appendChild(otherGroup);
+
+      // Discovery Results
+      const discoveryGroup = document.createElement('optgroup');
+      discoveryGroup.label = 'Discovery Results';
+      Object.keys(hostlists).forEach(key => {
+        if (key.startsWith('discovery_')) {
+          const opt = document.createElement('option');
+          opt.value = hostlists[key].path;
+          opt.textContent = hostlists[key].label + (hostlists[key].count ? ` (${hostlists[key].count} hosts)` : '');
+          discoveryGroup.appendChild(opt);
+        }
+      });
+      if (discoveryGroup.children.length > 0) selectEl.appendChild(discoveryGroup);
+
+      helpText.textContent = `Available parsed hostlists from your workspace (${Object.keys(hostlists).length} found)`;
+
+      // Restore selection if it still exists
+      if (currentValue) {
+        selectEl.value = currentValue;
+      }
+    } else {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.disabled = true;
+      opt.textContent = 'No hostlists found in workspace';
+      selectEl.appendChild(opt);
+      helpText.textContent = 'No parsed hostlists found. Run "cygor parse" to generate them.';
+    }
+
+  } catch (error) {
+    console.error('Error refreshing hostlists:', error);
+    helpText.textContent = 'Error loading hostlists. Please try again.';
+    helpText.classList.add('text-danger');
+  } finally {
+    // Reset button state
+    refreshBtn.disabled = false;
+    refreshBtn.innerHTML = originalIcon;
+  }
+}
+
+// Attach refresh handler
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('refreshHostlistsBtn').addEventListener('click', refreshHostlists);
+
+  // Auto-refresh hostlists when page gains focus (user switches back to tab)
+  window.addEventListener('focus', () => {
+    console.log('Page focused - refreshing hostlists...');
+    refreshHostlists();
+  });
+
+  // Optional: Auto-refresh every 30 seconds if user wants real-time updates
+  // Uncomment the line below to enable periodic auto-refresh
+  // setInterval(refreshHostlists, 30000);
+});
+
 // Show module description based on selection
 document.getElementById('moduleName').addEventListener('change', (e) => {
   document.querySelectorAll('.module-desc').forEach(desc => {
@@ -211,17 +440,143 @@ document.getElementById('moduleName').addEventListener('change', (e) => {
   });
 });
 
-// Toggle between existing and custom file input
+// Toggle between existing, upload, and browse file input
 document.querySelectorAll('[name="targetFileMode"]').forEach(radio => {
   radio.addEventListener('change', (e) => {
     document.getElementById('existingFileDiv').style.display =
       e.target.value === 'existing' ? 'block' : 'none';
-    document.getElementById('customFileDiv').style.display =
-      e.target.value === 'custom' ? 'block' : 'none';
+    document.getElementById('uploadFileDiv').style.display =
+      e.target.value === 'upload' ? 'block' : 'none';
+    document.getElementById('browseFileDiv').style.display =
+      e.target.value === 'browse' ? 'block' : 'none';
   });
 });
 
-// Handle form submission
+// ========== File Upload Functionality ==========
+const fileDropZone = document.getElementById('fileDropZone');
+const fileInput = document.getElementById('targetsFileInput');
+const fileNameDisplay = document.getElementById('fileNameDisplay');
+const selectedFileName = document.getElementById('selectedFileName');
+const clearFileBtn = document.getElementById('clearFileBtn');
+
+// Click to browse
+fileDropZone.addEventListener('click', () => {
+  fileInput.click();
+});
+
+// File input change
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files.length > 0) {
+    handleFileUpload(e.target.files[0]);
+  }
+});
+
+// Drag and drop handlers
+fileDropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  fileDropZone.style.background = 'rgba(13, 110, 253, 0.1)';
+  fileDropZone.style.borderColor = '#0d6efd';
+});
+
+fileDropZone.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  fileDropZone.style.background = 'rgba(255,255,255,0.02)';
+  fileDropZone.style.borderColor = '';
+});
+
+fileDropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  fileDropZone.style.background = 'rgba(255,255,255,0.02)';
+  fileDropZone.style.borderColor = '';
+
+  if (e.dataTransfer.files.length > 0) {
+    handleFileUpload(e.dataTransfer.files[0]);
+  }
+});
+
+// Handle file upload
+function handleFileUpload(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    uploadedFileContent = e.target.result;
+    selectedFileName.textContent = file.name;
+    fileNameDisplay.style.display = 'block';
+    fileDropZone.style.display = 'none';
+  };
+  reader.readAsText(file);
+}
+
+// Clear file selection
+clearFileBtn.addEventListener('click', () => {
+  uploadedFileContent = null;
+  fileInput.value = '';
+  fileNameDisplay.style.display = 'none';
+  fileDropZone.style.display = 'block';
+});
+
+// ========== File Browse Functionality ==========
+const browseFileBtn = document.getElementById('browseFileBtn');
+const filePathInput = document.getElementById('filePathInput');
+const targetsFileBrowse = document.getElementById('targetsFileBrowse');
+const clearBrowseBtn = document.getElementById('clearBrowseBtn');
+let browsedFileContent = null;
+
+browseFileBtn.addEventListener('click', () => {
+  filePathInput.click();
+});
+
+filePathInput.addEventListener('change', (e) => {
+  if (e.target.files.length > 0) {
+    const file = e.target.files[0];
+    selectedFilePath = file.name;
+    targetsFileBrowse.value = file.name;
+
+    // Read the file content
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      browsedFileContent = evt.target.result;
+    };
+    reader.readAsText(file);
+  }
+});
+
+clearBrowseBtn.addEventListener('click', () => {
+  selectedFilePath = null;
+  browsedFileContent = null;
+  filePathInput.value = '';
+  targetsFileBrowse.value = '';
+});
+
+// ========== Output Directory Browser Functionality ==========
+const browseOutputDirBtn = document.getElementById('browseOutputDirBtn');
+const outputDirInput = document.getElementById('outputDirInput');
+const outputDirField = document.getElementById('outputDir');
+const clearOutputDirBtn = document.getElementById('clearOutputDirBtn');
+
+browseOutputDirBtn.addEventListener('click', () => {
+  outputDirInput.click();
+});
+
+outputDirInput.addEventListener('change', (e) => {
+  if (e.target.files.length > 0) {
+    // Get the directory path from the first file
+    const file = e.target.files[0];
+    const path = file.webkitRelativePath || file.path || '';
+    // Extract directory path (remove filename)
+    const dirPath = path.substring(0, path.lastIndexOf('/'));
+    outputDirField.value = dirPath || file.name;
+  }
+});
+
+clearOutputDirBtn.addEventListener('click', () => {
+  outputDirInput.value = '';
+  outputDirField.value = '';
+});
+
+// ========== Form Submission ==========
 document.getElementById('moduleForm').addEventListener('submit', async (e) => {
   e.preventDefault();
 
@@ -240,12 +595,22 @@ document.getElementById('moduleForm').addEventListener('submit', async (e) => {
       alert('Please select a targets file');
       return;
     }
-  } else {
-    targetsFile = document.getElementById('targetsFileCustom').value.trim();
-    if (!targetsFile) {
-      alert('Please specify a custom targets file path');
+  } else if (targetFileMode === 'upload') {
+    // For uploaded files, we need to save the content to a temp file
+    if (!uploadedFileContent) {
+      alert('Please upload a targets file');
       return;
     }
+
+    // Create a temporary file with the uploaded content
+    // We'll send the content in the request and let the backend handle it
+    targetsFile = 'uploaded-targets.txt'; // Placeholder, backend will handle
+  } else if (targetFileMode === 'browse') {
+    if (!selectedFilePath || !browsedFileContent) {
+      alert('Please select a targets file');
+      return;
+    }
+    targetsFile = 'browsed-targets.txt'; // Placeholder, backend will handle
   }
 
   const moduleData = {
@@ -253,6 +618,13 @@ document.getElementById('moduleForm').addEventListener('submit', async (e) => {
     targets_file: targetsFile,
     output_dir: document.getElementById('outputDir').value.trim() || null
   };
+
+  // If file was uploaded or browsed, include the content
+  if (targetFileMode === 'upload' && uploadedFileContent) {
+    moduleData.uploaded_content = uploadedFileContent;
+  } else if (targetFileMode === 'browse' && browsedFileContent) {
+    moduleData.uploaded_content = browsedFileContent;
+  }
 
   const btn = e.target.querySelector('button[type="submit"]');
   const originalText = btn.innerHTML;

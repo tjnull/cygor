@@ -6,61 +6,89 @@
   <!-- Header -->
   <div class="d-flex justify-content-between align-items-center mb-4">
     <div class="d-flex align-items-center">
-      <a href="/tasks" class="btn btn-outline-secondary me-3">
+      <a href="/tasks" class="btn btn-outline-secondary btn-lg me-3">
         <i class="bi bi-arrow-left"></i>
       </a>
-      <h2 class="mb-0">
-        <i class="bi bi-list-task me-2"></i>Task Details
-      </h2>
+      <h1 class="mb-0 display-6">
+        <i class="bi bi-list-task me-3"></i>Task Details
+      </h1>
     </div>
     <div class="btn-group">
-      <button id="refreshBtn" class="btn btn-outline-secondary" onclick="refreshTask()">
-        <i class="bi bi-arrow-clockwise"></i> Refresh
+      <button id="refreshBtn" class="btn btn-outline-secondary btn-lg" onclick="refreshTask()">
+        <i class="bi bi-arrow-clockwise me-2"></i>Refresh
       </button>
-      <button id="cancelBtn" class="btn btn-outline-warning" onclick="cancelTask()" style="display:none;">
-        <i class="bi bi-stop-circle"></i> Cancel
+      <button id="cancelBtn" class="btn btn-outline-warning btn-lg" onclick="cancelTask()" style="display:none;">
+        <i class="bi bi-stop-circle-fill me-2"></i>Cancel
       </button>
-      <button id="deleteBtn" class="btn btn-outline-danger" onclick="deleteTask()" style="display:none;">
-        <i class="bi bi-trash"></i> Delete
+      <button id="deleteBtn" class="btn btn-outline-danger btn-lg" onclick="deleteTask()" style="display:none;">
+        <i class="bi bi-trash-fill me-2"></i>Delete
       </button>
     </div>
   </div>
 
+  <!-- Success Banner (hidden by default, shown after scan completes) -->
+  <div class="alert alert-success d-flex align-items-center mb-4 d-none" id="successBanner">
+    <i class="bi bi-check-circle-fill me-3 fs-4"></i>
+    <div class="flex-grow-1">
+      <strong>Scan Complete!</strong>
+      <p class="mb-0 small" id="successBannerMessage">Your scan has finished successfully. The results have been parsed and are ready to use.</p>
+    </div>
+    <a href="/tasks/module/new" class="btn btn-sm btn-outline-success ms-3">
+      <i class="bi bi-play-circle me-1"></i>Run Module
+    </a>
+  </div>
+
+  <!-- Sync Banner (shown while syncing) -->
+  <div class="alert alert-info d-flex align-items-center mb-4 d-none" id="syncBanner">
+    <div class="spinner-border spinner-border-sm text-info me-3" role="status"></div>
+    <div class="flex-grow-1">
+      <strong>Syncing Database...</strong>
+      <p class="mb-0 small">Ingesting scan results into the database. This may take a few moments.</p>
+    </div>
+  </div>
+
   <!-- Task Info Card -->
-  <div class="row g-3 mb-4">
+  <div class="row g-4 mb-4">
     <div class="col-md-8">
-      <div class="card bg-dark">
-        <div class="card-header">
-          <h5 class="mb-0">Task Information</h5>
+      <div class="card bg-dark shadow">
+        <div class="card-header py-3">
+          <h4 class="mb-0 fw-bold"><i class="bi bi-info-circle-fill me-2"></i>Task Information</h4>
         </div>
         <div class="card-body">
-          <dl class="row mb-0">
+          <dl class="row mb-0 task-info-list">
             <dt class="col-sm-3">Task ID</dt>
-            <dd class="col-sm-9"><code class="text-info" id="taskId">-</code></dd>
+            <dd class="col-sm-9"><code class="text-info fw-bold" id="taskId" style="font-size: 0.95rem;">-</code></dd>
 
             <dt class="col-sm-3">Type</dt>
-            <dd class="col-sm-9"><span id="taskType" class="badge bg-secondary">-</span></dd>
+            <dd class="col-sm-9"><span id="taskType" class="badge bg-secondary" style="font-size: 0.9rem; padding: 0.5rem 0.75rem;">-</span></dd>
 
             <dt class="col-sm-3">Status</dt>
             <dd class="col-sm-9"><span id="taskStatus">-</span></dd>
 
             <dt class="col-sm-3">Command</dt>
-            <dd class="col-sm-9"><code class="text-light small" id="taskCommand">-</code></dd>
+            <dd class="col-sm-9">
+              <div class="d-flex align-items-start gap-2">
+                <code class="text-light flex-grow-1" id="taskCommand" style="font-size: 0.9rem; background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: 0.25rem; display: block; word-break: break-all;">-</code>
+                <button class="btn btn-sm btn-outline-secondary flex-shrink-0" onclick="copyCommand()" title="Copy command">
+                  <i class="bi bi-clipboard"></i>
+                </button>
+              </div>
+            </dd>
 
-            <dt class="col-sm-3">Created</dt>
-            <dd class="col-sm-9 text-light" id="taskCreated">-</dd>
+            <dt class="col-sm-3">Created At</dt>
+            <dd class="col-sm-9 text-light" id="taskCreated" style="font-size: 1rem;">-</dd>
 
-            <dt class="col-sm-3">Started</dt>
-            <dd class="col-sm-9 text-light" id="taskStarted">-</dd>
+            <dt class="col-sm-3">Started At</dt>
+            <dd class="col-sm-9 text-light" id="taskStarted" style="font-size: 1rem;">-</dd>
 
-            <dt class="col-sm-3">Completed</dt>
-            <dd class="col-sm-9 text-light" id="taskCompleted">-</dd>
+            <dt class="col-sm-3">Completed At</dt>
+            <dd class="col-sm-9 text-light" id="taskCompleted" style="font-size: 1rem;">-</dd>
 
             <dt class="col-sm-3">Duration</dt>
-            <dd class="col-sm-9 text-light" id="taskDuration">-</dd>
+            <dd class="col-sm-9 text-light fw-bold" id="taskDuration" style="font-size: 1.1rem;">-</dd>
 
             <dt class="col-sm-3">Exit Code</dt>
-            <dd class="col-sm-9"><span id="taskExitCode">-</span></dd>
+            <dd class="col-sm-9"><span id="taskExitCode" style="font-size: 1rem;">-</span></dd>
           </dl>
         </div>
       </div>
@@ -68,36 +96,36 @@
 
     <!-- Stats Card -->
     <div class="col-md-4">
-      <div class="card bg-dark h-100">
-        <div class="card-header">
-          <h5 class="mb-0">Statistics</h5>
+      <div class="card bg-dark h-100 shadow">
+        <div class="card-header py-3">
+          <h4 class="mb-0 fw-bold"><i class="bi bi-bar-chart-fill me-2"></i>Statistics</h4>
         </div>
         <div class="card-body">
-          <div class="mb-3">
-            <div class="d-flex justify-content-between align-items-center mb-1">
-              <span class="text-light small fw-semibold">Output Lines</span>
-              <span class="badge bg-primary" id="statOutputLines">0</span>
+          <div class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="text-light fw-semibold" style="font-size: 0.95rem;">Output Lines</span>
+              <span class="badge bg-primary fs-6" id="statOutputLines" style="padding: 0.5rem 0.75rem;">0</span>
             </div>
-            <div class="progress" style="height: 4px;">
+            <div class="progress" style="height: 6px;">
               <div id="outputProgress" class="progress-bar" role="progressbar" style="width: 0%"></div>
             </div>
           </div>
 
-          <div class="mb-3">
-            <div class="d-flex justify-content-between align-items-center mb-1">
-              <span class="text-light small fw-semibold">Error Lines</span>
-              <span class="badge bg-danger" id="statErrorLines">0</span>
+          <div class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="text-light fw-semibold" style="font-size: 0.95rem;">Error Lines</span>
+              <span class="badge bg-danger fs-6" id="statErrorLines" style="padding: 0.5rem 0.75rem;">0</span>
             </div>
-            <div class="progress" style="height: 4px;">
+            <div class="progress" style="height: 6px;">
               <div id="errorProgress" class="progress-bar bg-danger" role="progressbar" style="width: 0%"></div>
             </div>
           </div>
 
           <div id="runningTimer" style="display:none;">
             <hr class="my-3">
-            <div class="text-center">
-              <div class="text-light small mb-1 fw-semibold">Running for</div>
-              <div class="fs-4 fw-bold text-warning" id="elapsedTime">00:00</div>
+            <div class="text-center p-3 bg-warning bg-opacity-10 rounded">
+              <div class="text-secondary text-uppercase fw-semibold mb-2" style="font-size: 0.85rem; letter-spacing: 0.5px;">Running For</div>
+              <div class="display-5 fw-bold text-warning" id="elapsedTime">00:00</div>
             </div>
           </div>
         </div>
@@ -106,19 +134,19 @@
   </div>
 
   <!-- Output Tabs -->
-  <div class="card bg-dark">
-    <div class="card-header">
-      <ul class="nav nav-tabs card-header-tabs" role="tablist">
+  <div class="card bg-dark shadow">
+    <div class="card-header py-0">
+      <ul class="nav nav-tabs card-header-tabs" role="tablist" style="border-bottom: none;">
         <li class="nav-item">
-          <a class="nav-link active" data-bs-toggle="tab" href="#outputTab">
-            <i class="bi bi-terminal me-2"></i>Output
-            <span class="badge bg-primary ms-2" id="outputBadge">0</span>
+          <a class="nav-link active px-4 py-3" data-bs-toggle="tab" href="#outputTab" style="font-size: 1rem;">
+            <i class="bi bi-terminal-fill me-2"></i>Standard Output
+            <span class="badge bg-primary ms-2 fs-6" id="outputBadge" style="padding: 0.35rem 0.6rem;">0</span>
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" data-bs-toggle="tab" href="#errorsTab">
-            <i class="bi bi-exclamation-triangle me-2"></i>Errors
-            <span class="badge bg-danger ms-2" id="errorsBadge">0</span>
+          <a class="nav-link px-4 py-3" data-bs-toggle="tab" href="#errorsTab" style="font-size: 1rem;">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>Standard Error
+            <span class="badge bg-danger ms-2 fs-6" id="errorsBadge" style="padding: 0.35rem 0.6rem;">0</span>
           </a>
         </li>
       </ul>
@@ -127,27 +155,19 @@
       <div class="tab-content">
         <!-- Output Tab -->
         <div class="tab-pane fade show active" id="outputTab">
-          <div class="p-3" style="max-height: 600px; overflow-y: auto; background: #0a0a0a;">
-            <div class="d-flex justify-content-between mb-2">
-              <span class="text-light small fw-semibold">Standard Output</span>
-              <button class="btn btn-sm btn-outline-secondary" onclick="copyOutput()">
-                <i class="bi bi-clipboard"></i> Copy
-              </button>
-            </div>
-            <pre id="outputContent" class="mb-0 p-3 bg-dark rounded border border-secondary" style="font-family: 'Courier New', monospace; font-size: 0.875rem; line-height: 1.4; color: #00ff00;">Loading...</pre>
+          <div class="p-3 bg-black text-light" style="max-height: 650px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; border-radius: 6px; border: 1px solid #333;">
+            <pre id="outputContent" style="white-space: pre-wrap; word-break: break-word; margin: 0;">Loading...</pre>
           </div>
         </div>
 
         <!-- Errors Tab -->
         <div class="tab-pane fade" id="errorsTab">
-          <div class="p-3" style="max-height: 600px; overflow-y: auto; background: #0a0a0a;">
-            <div class="d-flex justify-content-between mb-2">
-              <span class="text-light small fw-semibold">Standard Error</span>
-              <button class="btn btn-sm btn-outline-secondary" onclick="copyErrors()">
-                <i class="bi bi-clipboard"></i> Copy
-              </button>
-            </div>
-            <pre id="errorsContent" class="mb-0 p-3 bg-dark rounded border border-secondary" style="font-family: 'Courier New', monospace; font-size: 0.875rem; line-height: 1.4; color: #ff6b6b;">No errors</pre>
+          <div class="p-3 bg-black text-danger" style="max-height: 650px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; border-radius: 6px; border: 1px solid #333;">
+            <pre id="errorsContent" style="white-space: pre-wrap; word-break: break-word; margin: 0;">No errors detected</pre>
+          </div>
+        </div>
+
+            <!-- Terminal Body -->
           </div>
         </div>
       </div>
@@ -156,20 +176,115 @@
 </div>
 
 <style>
-  .status-badge {
-    padding: 0.35rem 0.85rem;
-    border-radius: 0.375rem;
-    font-size: 0.95rem;
-    font-weight: 600;
-  }
-  .status-pending { background-color: rgba(13, 110, 253, 0.3); color: #9ec5fe; }
-  .status-running { background-color: rgba(255, 193, 7, 0.3); color: #ffc107; }
-  .status-completed { background-color: rgba(25, 135, 84, 0.3); color: #95d5b2; }
-  .status-failed { background-color: rgba(220, 53, 69, 0.3); color: #f8939f; }
-  .status-cancelled { background-color: rgba(108, 117, 125, 0.3); color: #ced4da; }
+/* =========================================================
+   Task Detail Styling (Enhanced Readability & Terminal Look)
+   ========================================================= */
 
-  pre { white-space: pre-wrap; word-wrap: break-word; }
+/* Status badges */
+.status-badge {
+  padding: 0.5rem 1.25rem;
+  border-radius: 0.375rem;
+  font-size: 1rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}
+.status-badge i {
+  font-size: 1.1rem;
+  margin-right: 0.5rem;
+}
+.status-pending { background-color: rgba(13, 202, 240, 0.15); color: #0dcaf0; border: 1px solid rgba(13, 202, 240, 0.3); }
+.status-running { background-color: rgba(255, 193, 7, 0.15); color: #ffc107; border: 1px solid rgba(255, 193, 7, 0.3); animation: pulse-glow 2s ease-in-out infinite; }
+.status-completed { background-color: rgba(25, 135, 84, 0.15); color: #198754; border: 1px solid rgba(25, 135, 84, 0.3); }
+.status-failed { background-color: rgba(220, 53, 69, 0.15); color: #dc3545; border: 1px solid rgba(220, 53, 69, 0.3); }
+.status-cancelled { background-color: rgba(108, 117, 125, 0.15); color: #6c757d; border: 1px solid rgba(108, 117, 125, 0.3); }
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(255, 193, 7, 0.4); }
+  50% { box-shadow: 0 0 15px rgba(255, 193, 7, 0.6); }
+}
+
+/* Task info layout */
+.task-info-list dt {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #adb5bd;
+  padding: 0.75rem 0;
+}
+.task-info-list dd {
+  padding: 0.75rem 0;
+  margin-bottom: 0;
+}
+.task-info-list dt:not(:first-child),
+.task-info-list dd:not(:nth-child(2)) {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Tabs */
+.nav-tabs .nav-link {
+  color: #8b949e;
+  border: none;
+  background: transparent;
+}
+.nav-tabs .nav-link:hover {
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.05);
+}
+.nav-tabs .nav-link.active {
+  color: #58a6ff;
+  background: #0d1117;
+  border-bottom: 2px solid #58a6ff;
+}
+
+/* =========================================================
+   Terminal-Like Output Area
+   ========================================================= */
+#outputContent,
+#errorsContent {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 1.05rem;        /* bump up for readability */
+  line-height: 1.65;
+  padding: 1.25rem;
+  color: #e6edf3;
+  background: #0d1117;
+  border-radius: 8px;
+  overflow-y: auto;
+  max-height: 650px;
+  border: 1px solid #30363d;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Scrollbar consistency */
+#outputContent::-webkit-scrollbar,
+#errorsContent::-webkit-scrollbar {
+  width: 10px;
+}
+#outputContent::-webkit-scrollbar-thumb,
+#errorsContent::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 6px;
+}
+
+/* Highlight categories for readability */
+.output-line-info   { color: #79c0ff; }   /* tool info (nmap, masscan) */
+.output-line-success{ color: #3fb950; font-weight: 600; } /* success */
+.output-line-warning{ color: #d29922; }   /* warnings */
+.output-line-error  { color: #f85149; }   /* errors */
+
+/* Light theme support (optional future-proofing) */
+body.light-theme #outputContent,
+body.light-theme #errorsContent {
+  background: #fafafa;
+  color: #1f1f1f;
+  border-color: #ddd;
+}
+body.light-theme .output-line-info   { color: #0070f3; }
+body.light-theme .output-line-success{ color: #007f3f; }
+body.light-theme .output-line-warning{ color: #d18b00; }
+body.light-theme .output-line-error  { color: #d32f2f; }
 </style>
+
 
 <script>
 const taskId = window.location.pathname.split('/').pop();
@@ -189,10 +304,21 @@ async function fetchTaskDetails() {
     }
 
     const task = await response.json();
+
+    // Reset buffers if starting a new or rerun scan
+    if ((task.status === 'pending' || task.status === 'running') && outputBuffer.length === 0) {
+      outputBuffer = [];
+      errorBuffer = [];
+      lastOutputCount = 0;
+      lastErrorCount = 0;
+      document.getElementById("outputContent").textContent = "Loading...";
+      document.getElementById("errorsContent").textContent = "";
+    }
+
     updateTaskInfo(task);
 
-    // Fetch output
-    const outputResponse = await fetch(`/api/tasks/${taskId}/output`);
+    // --- [UPDATED: fetch and stream new output incrementally] ---
+    const outputResponse = await fetch(`/api/tasks/${taskId}/output?since=${outputBuffer.length}`);
     if (outputResponse.ok) {
       const outputData = await outputResponse.json();
       updateOutput(outputData);
@@ -205,32 +331,32 @@ async function fetchTaskDetails() {
 
 function updateTaskInfo(task) {
   // Basic info
-  document.getElementById('taskId').textContent = task.task_id;
+  document.getElementById('taskId').textContent = task.task_id.substring(0, 12);
   document.getElementById('taskType').textContent = task.task_type;
   document.getElementById('taskCommand').textContent = task.command;
   document.getElementById('taskCreated').textContent = formatTime(task.created_at);
   document.getElementById('taskStarted').textContent = formatTime(task.started_at);
   document.getElementById('taskCompleted').textContent = formatTime(task.completed_at);
 
-  // Status badge
+  // Status badge with icons
   const statusEl = document.getElementById('taskStatus');
   const statusClass = `status-${task.status}`;
   const statusIcon = {
     pending: 'clock-history',
     running: 'hourglass-split',
-    completed: 'check-circle',
-    failed: 'x-circle',
+    completed: 'check-circle-fill',
+    failed: 'x-circle-fill',
     cancelled: 'dash-circle'
   }[task.status] || 'question-circle';
 
-  statusEl.innerHTML = `<span class="status-badge ${statusClass}"><i class="bi bi-${statusIcon} me-1"></i>${task.status}</span>`;
+  statusEl.innerHTML = `<span class="status-badge ${statusClass}"><i class="bi bi-${statusIcon}"></i>${task.status}</span>`;
 
   // Duration
   document.getElementById('taskDuration').textContent = calculateDuration(task);
 
   // Exit code
   const exitCodeEl = document.getElementById('taskExitCode');
-  if (task.exit_code !== null) {
+  if (task.exit_code !== null && task.exit_code !== undefined) {
     const exitClass = task.exit_code === 0 ? 'text-success' : 'text-danger';
     exitCodeEl.innerHTML = `<span class="${exitClass}">${task.exit_code}</span>`;
   } else {
@@ -241,11 +367,31 @@ function updateTaskInfo(task) {
   document.getElementById('cancelBtn').style.display = task.status === 'running' ? 'inline-block' : 'none';
   document.getElementById('deleteBtn').style.display = task.status !== 'running' ? 'inline-block' : 'none';
 
+  // Show success banner for completed scan tasks with exit code 0
+  const successBanner = document.getElementById('successBanner');
+  if (task.status === 'completed' && task.task_type === 'scan' && task.exit_code === 0) {
+    successBanner.classList.remove('d-none');
+
+    // Auto-sync database if this is the first time we're seeing this completed status
+    if (!window.taskSynced) {
+      window.taskSynced = true;
+      autoSyncDatabase(task);
+    }
+  } else {
+    successBanner.classList.add('d-none');
+  }
+
   // Running timer
   if (task.status === 'running') {
     if (!startTime && task.started_at) {
-      startTime = new Date(task.started_at);
-      startTimer();
+      const parsedStart = new Date(task.started_at);
+      // Validate the parsed date
+      if (!isNaN(parsedStart.getTime())) {
+        startTime = parsedStart;
+        startTimer();
+      } else {
+        console.error('Invalid started_at timestamp:', task.started_at);
+      }
     }
     document.getElementById('runningTimer').style.display = 'block';
   } else {
@@ -266,75 +412,159 @@ function updateTaskInfo(task) {
   }
 }
 
+// --- [FIXED incremental output – no duplicates & clean error display] ---
+let outputBuffer = [];
+let errorBuffer = [];
+let lastOutputCount = 0;
+let lastErrorCount = 0;
+
 function updateOutput(data) {
-  const outputLines = data.output || [];
-  const errorLines = data.errors || [];
+  const newOutput = data.output || [];
+  const newErrors = data.errors || [];
 
-  document.getElementById('outputBadge').textContent = outputLines.length;
-  document.getElementById('errorsBadge').textContent = errorLines.length;
-  document.getElementById('statOutputLines').textContent = outputLines.length;
-  document.getElementById('statErrorLines').textContent = errorLines.length;
+  // Append only new lines that haven't been shown yet
+  if (newOutput.length > lastOutputCount) {
+    const delta = newOutput.slice(lastOutputCount);
+    outputBuffer.push(...delta);
+    lastOutputCount = newOutput.length;
 
-  // Update progress bars
-  const total = outputLines.length + errorLines.length;
+    const outputEl = document.getElementById("outputContent");
+    outputEl.textContent += "\n" + delta.join("\n");
+    outputEl.scrollTop = outputEl.scrollHeight;
+  }
+
+  if (newErrors.length > lastErrorCount) {
+    const deltaErr = newErrors.slice(lastErrorCount);
+    errorBuffer.push(...deltaErr);
+    lastErrorCount = newErrors.length;
+
+    const errEl = document.getElementById("errorsContent");
+    // Remove placeholder if it's still there
+    if (errEl.textContent.includes("No errors detected")) {
+      errEl.textContent = "";
+    }
+    errEl.textContent += "\n" + deltaErr.join("\n");
+    errEl.scrollTop = errEl.scrollHeight;
+  }
+
+  // Update stats
+  document.getElementById("outputBadge").textContent = outputBuffer.length;
+  document.getElementById("errorsBadge").textContent = errorBuffer.length;
+  document.getElementById("statOutputLines").textContent = outputBuffer.length;
+  document.getElementById("statErrorLines").textContent = errorBuffer.length;
+
+  const total = outputBuffer.length + errorBuffer.length;
   if (total > 0) {
-    document.getElementById('outputProgress').style.width = `${(outputLines.length / total) * 100}%`;
-    document.getElementById('errorProgress').style.width = `${(errorLines.length / total) * 100}%`;
+    document.getElementById("outputProgress").style.width = `${(outputBuffer.length / total) * 100}%`;
+    document.getElementById("errorProgress").style.width = `${(errorBuffer.length / total) * 100}%`;
   }
 
-  // Update content
-  const outputContent = document.getElementById('outputContent');
-  const errorsContent = document.getElementById('errorsContent');
-
-  if (outputLines.length > 0) {
-    outputContent.textContent = outputLines.join('\n');
-    outputContent.scrollTop = outputContent.scrollHeight;
-  } else {
-    outputContent.textContent = 'No output yet...';
-  }
-
-  if (errorLines.length > 0) {
-    errorsContent.textContent = errorLines.join('\n');
-  } else {
-    errorsContent.textContent = 'No errors';
+  // If there are still no errors, clear placeholder
+  if (errorBuffer.length === 0) {
+    document.getElementById("errorsContent").textContent = "";
   }
 }
 
+
+
 function formatTime(isoString) {
   if (!isoString) return '-';
-  const date = new Date(isoString);
-  return date.toLocaleString();
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) {
+      console.error('Invalid date:', isoString);
+      return '-';
+    }
+
+    // Format: Nov 6, 2025 4:40:11 AM (better than relative time for task details)
+    const options = {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    };
+
+    return date.toLocaleString('en-US', options);
+  } catch (e) {
+    console.error('Error parsing date:', isoString, e);
+    return '-';
+  }
 }
 
 function calculateDuration(task) {
   if (!task.started_at) return '-';
 
-  const start = new Date(task.started_at);
-  const end = task.completed_at ? new Date(task.completed_at) : new Date();
-  const diff = end - start;
+  try {
+    const start = new Date(task.started_at);
+    const end = task.completed_at ? new Date(task.completed_at) : new Date();
 
-  const hours = Math.floor(diff / 3600000);
-  const minutes = Math.floor((diff % 3600000) / 60000);
-  const seconds = Math.floor((diff % 60000) / 1000);
+    // Validate dates
+    if (isNaN(start.getTime())) {
+      console.error('Invalid start date:', task.started_at);
+      return '-';
+    }
+    if (isNaN(end.getTime())) {
+      console.error('Invalid end date:', task.completed_at);
+      return '-';
+    }
 
-  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
-  return `${seconds}s`;
+    let diff = end - start;
+
+    // Handle negative durations (clock skew or future timestamps)
+    if (diff < 0) {
+      console.warn('Negative duration detected:', diff, 'ms. Start:', task.started_at, 'End:', end);
+      diff = 0;
+    }
+
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000);
+
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+  } catch (e) {
+    console.error('Error calculating duration:', e, task);
+    return '-';
+  }
 }
 
 function startTimer() {
   if (timerInterval) return;
 
+  // Validate startTime before starting the interval
+  if (!startTime || isNaN(startTime.getTime())) {
+    console.error('Cannot start timer: invalid startTime', startTime);
+    return;
+  }
+
   timerInterval = setInterval(() => {
     if (!startTime) return;
 
     const now = new Date();
-    const diff = now - startTime;
-    const minutes = Math.floor(diff / 60000);
+    let diff = now - startTime;
+
+    // Handle negative durations (clock skew or future timestamps)
+    if (diff < 0) {
+      console.warn('Timer: negative duration detected, setting to 0');
+      diff = 0;
+    }
+
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
     const seconds = Math.floor((diff % 60000) / 1000);
 
-    document.getElementById('elapsedTime').textContent =
-      `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    // Format with hours if > 0
+    if (hours > 0) {
+      document.getElementById('elapsedTime').textContent =
+        `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    } else {
+      document.getElementById('elapsedTime').textContent =
+        `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
   }, 1000);
 }
 
@@ -344,6 +574,80 @@ function stopTimer() {
     timerInterval = null;
   }
   startTime = null;
+}
+
+async function autoSyncDatabase(task) {
+  console.log(`[*] Auto-syncing database after task ${task.task_id} completion...`);
+
+  const syncBanner = document.getElementById('syncBanner');
+  const successBanner = document.getElementById('successBanner');
+  const successMessage = document.getElementById('successBannerMessage');
+
+  try {
+    // Hide success banner and show sync banner
+    successBanner.classList.add('d-none');
+    syncBanner.classList.remove('d-none');
+
+    // Build sync request body
+    let syncBody = {};
+
+    // For on-demand scans, extract the specific scan directory to sync (much faster!)
+    if (task.is_ondemand && task.output_dir) {
+      // Extract relative path from output_dir (e.g., "ondemand-scans/2025-01-06_12-34-56")
+      const match = task.output_dir.match(/ondemand-scans\/[^\/]+$/);
+      if (match) {
+        syncBody.scan_dir = match[0];
+        console.log(`[*] Fast sync: targeting specific directory ${syncBody.scan_dir}`);
+      }
+    }
+
+    // Call sync endpoint
+    const response = await fetch('/api/sync-database', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(syncBody)
+    });
+
+    const result = await response.json();
+
+    // Hide sync banner and show success banner
+    syncBanner.classList.add('d-none');
+    successBanner.classList.remove('d-none');
+
+    if (response.ok && result.status === 'success') {
+      console.log(`[✓] Auto-sync complete: ${result.hosts_added} hosts added, ${result.ports_added} ports added`);
+
+      // Update success banner with sync results
+      if (result.hosts_added > 0 || result.ports_added > 0) {
+        successMessage.innerHTML = `Your scan has finished successfully and <strong>${result.hosts_added} new host(s)</strong> and <strong>${result.ports_added} new port(s)</strong> have been added to the database.`;
+      } else {
+        successMessage.innerHTML = 'Your scan has finished successfully. The results have been synced to the database.';
+      }
+
+      // Broadcast sync completion to other tabs/pages (e.g., dashboard)
+      try {
+        localStorage.setItem('cygor_last_sync', JSON.stringify({
+          timestamp: Date.now(),
+          hosts_added: result.hosts_added,
+          ports_added: result.ports_added,
+          hosts_after: result.hosts_after,
+          ports_after: result.ports_after
+        }));
+        // Remove immediately to trigger storage event in other tabs
+        localStorage.removeItem('cygor_last_sync');
+      } catch (e) {
+        console.warn('Failed to broadcast sync event:', e);
+      }
+    } else {
+      console.error('[!] Auto-sync failed:', result.error || 'Unknown error');
+      successMessage.innerHTML = 'Your scan completed, but auto-sync failed. Please use the "Sync Database" button in the sidebar to manually sync results.';
+    }
+  } catch (error) {
+    console.error('[!] Auto-sync error:', error);
+    syncBanner.classList.add('d-none');
+    successBanner.classList.remove('d-none');
+    successMessage.innerHTML = 'Your scan completed, but auto-sync encountered an error. Please use the "Sync Database" button in the sidebar.';
+  }
 }
 
 async function cancelTask() {
@@ -388,8 +692,34 @@ function copyErrors() {
   });
 }
 
+function copyCommand() {
+  const text = document.getElementById('taskCommand').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    // Show success feedback with icon change
+    const btn = event.target.closest('button');
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+    btn.classList.remove('btn-outline-secondary');
+    btn.classList.add('btn-success');
+    setTimeout(() => {
+      btn.innerHTML = originalHTML;
+      btn.classList.remove('btn-success');
+      btn.classList.add('btn-outline-secondary');
+    }, 2000);
+  }).catch(err => {
+    console.error('Failed to copy command:', err);
+    alert('Failed to copy command to clipboard');
+  });
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', fetchTaskDetails);
+
+// Auto-refresh when page gains focus
+window.addEventListener('focus', () => {
+  console.log('Task detail focused - refreshing...');
+  fetchTaskDetails();
+});
 
 // Cleanup
 window.addEventListener('beforeunload', () => {

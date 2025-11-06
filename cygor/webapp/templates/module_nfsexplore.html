@@ -41,6 +41,64 @@
   </div>
 {% endif %}
 
+<style>
+/* ========== LIGHT THEME OVERRIDES ========== */
+body.light-theme h1 {
+  color: #212529 !important;
+}
+
+body.light-theme .card.bg-dark {
+  background: #ffffff !important;
+  color: #212529 !important;
+  border: 1px solid rgba(0, 0, 0, 0.125) !important;
+}
+
+body.light-theme .form-control {
+  background: #ffffff !important;
+  color: #212529 !important;
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme .form-control::placeholder {
+  color: #6c757d !important;
+}
+
+body.light-theme .table-dark {
+  --bs-table-bg: #ffffff !important;
+  --bs-table-striped-bg: #f8f9fa !important;
+  --bs-table-hover-bg: #e9ecef !important;
+  --bs-table-border-color: #dee2e6 !important;
+  color: #212529 !important;
+}
+
+body.light-theme .table-dark thead {
+  background: #f8f9fa !important;
+}
+
+body.light-theme .table-dark thead th {
+  color: #212529 !important;
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme .table-dark tbody tr {
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme .table-dark tbody td {
+  color: #212529 !important;
+}
+
+body.light-theme small.text-muted {
+  color: #6c757d !important;
+}
+
+body.light-theme .alert-secondary {
+  background: #e9ecef !important;
+  color: #212529 !important;
+  border-color: #dee2e6 !important;
+}
+</style>
+
 <script>
   // Client-side filter
   const input = document.getElementById("nfsFilter");

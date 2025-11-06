@@ -18,6 +18,7 @@ from importlib.resources import files
 
 from . import db
 from .db import get_session, reset_db
+from datetime import datetime, timezone, timedelta
 from .models import Host, Port, Script, OSGuess
 from ..module_loader import discover_modules, resolve_legacy_context
 from .ingest import ingest_directory
@@ -110,35 +111,37 @@ def _count_hosts_in_nmap_text(path: Path) -> int:
 
 def _parse_nmap_xml_times(path: Path):
     """
-    Read an nmap XML file and return (start_iso, end_iso, host_count).
-    - start_iso and end_iso are ISO8601 strings in UTC (or None)
-    - host_count is integer (from runstats/hosts up attribute or <host> count fallback)
-    This function is defensive against namespaces and slightly different XML layouts,
-    and will fall back to searching the raw file text for a 'scan initiated' comment.
+    Read an Nmap XML file and return (start_iso, end_iso, host_count).
+
+    - start_iso and end_iso are ISO8601 UTC strings or None
+    - host_count is integer (from runstats/hosts up= or host count fallback)
+
+    Handles compressed .gz, missing namespaces, and raw comment timestamps.
     """
+    start_iso = None
+    end_iso = None
+    host_count = 1
+
     try:
-        # read raw text (gzip-safe)
-        raw_text = None
+        # ---- Load raw text (supports gzip) ----
+        raw_text = ""
         try:
-            if path.suffix.lower().endswith('.gz'):
-                with gzip.open(path, 'rt', errors='ignore') as fh:
+            if path.suffix.lower().endswith(".gz"):
+                with gzip.open(path, "rt", errors="ignore") as fh:
                     raw_text = fh.read()
             else:
-                raw_text = path.read_text(errors='ignore')
+                raw_text = path.read_text(errors="ignore")
         except Exception:
-            # fallback to binary read
             try:
-                raw_text = path.read_bytes().decode('utf-8', errors='ignore')
+                raw_text = path.read_bytes().decode("utf-8", errors="ignore")
             except Exception:
-                raw_text = ''
+                raw_text = ""
 
-        # Parse XML tree (ElementTree) if possible
+        # ---- Parse XML ----
         tree = None
         try:
-            # ET can parse from a file-like or path string
             tree = ET.parse(path)
         except Exception:
-            # If the file is gzipped or ET.parse failed, try parsing from raw_text
             try:
                 tree = ET.ElementTree(ET.fromstring(raw_text))
             except Exception:
@@ -146,87 +149,66 @@ def _parse_nmap_xml_times(path: Path):
 
         root = tree.getroot() if tree is not None else None
 
-        # helper: find element ignoring namespace by suffix match
         def _find_tag_suffix(root_el, suffix):
             if root_el is None:
                 return None
-            # check root itself
             if isinstance(root_el.tag, str) and root_el.tag.endswith(suffix):
                 return root_el
-            # walk tree
             for el in root_el.iter():
                 if isinstance(el.tag, str) and el.tag.endswith(suffix):
                     return el
             return None
 
-        # nmaprun: either root or a child; be resilient
-        nmaprun_el = _find_tag_suffix(root, 'nmaprun') if root is not None else None
+        # ---- Extract elements ----
+        nmaprun_el = root if root is not None and root.tag.endswith("nmaprun") else _find_tag_suffix(root, "nmaprun")
+        finished_el = _find_tag_suffix(root, "finished")
+        hosts_el = _find_tag_suffix(root, "hosts")
 
-        # runstats/finished: find finished element
-        finished_el = _find_tag_suffix(root, 'finished') if root is not None else None
-
-        # hosts element under runstats or elsewhere
-        hosts_el = _find_tag_suffix(root, 'hosts') if root is not None else None
-
-        # Attempt to read attributes
-        start_iso = None
-        end_iso = None
-        host_count = 1
-
-        # 1) start attribute (epoch) on nmaprun
+        # ---- Parse start ----
         if nmaprun_el is not None:
-            start_attr = nmaprun_el.attrib.get('start')
-            startstr_attr = nmaprun_el.attrib.get('startstr')
-        else:
-            start_attr = None
-            startstr_attr = None
+            start_attr = nmaprun_el.attrib.get("start")
+            startstr_attr = nmaprun_el.attrib.get("startstr")
 
-        # prefer epoch 'start' attribute
-        if start_attr:
-            try:
-                start_dt = datetime.fromtimestamp(int(start_attr), tz=timezone.utc)
-                start_iso = start_dt.isoformat()
-            except Exception:
-                start_iso = None
-
-        # try startstr if epoch not available
-        if start_iso is None and startstr_attr:
-            try:
-                # common format: "Wed Oct 15 00:26:26 2025"
-                start_dt = datetime.strptime(startstr_attr, "%a %b %d %H:%M:%S %Y")
-                # treat as UTC to keep consistent (nmap start epoch is authoritative when present)
-                start_dt = start_dt.replace(tzinfo=timezone.utc)
-                start_iso = start_dt.isoformat()
-            except Exception:
-                # try iso format parse
+            if start_attr:
                 try:
-                    start_dt = datetime.fromisoformat(startstr_attr)
-                    if start_dt.tzinfo is None:
-                        start_dt = start_dt.replace(tzinfo=timezone.utc)
+                    start_dt = datetime.fromtimestamp(int(start_attr), tz=timezone.utc)
                     start_iso = start_dt.isoformat()
                 except Exception:
                     start_iso = None
 
-        # 2) finished time from runstats/finished
+            if start_iso is None and startstr_attr:
+                try:
+                    start_dt = datetime.strptime(startstr_attr.strip(), "%a %b %d %H:%M:%S %Y").replace(tzinfo=timezone.utc)
+                    start_iso = start_dt.isoformat()
+                except Exception:
+                    try:
+                        start_dt = datetime.fromisoformat(startstr_attr)
+                        if start_dt.tzinfo is None:
+                            start_dt = start_dt.replace(tzinfo=timezone.utc)
+                        start_iso = start_dt.isoformat()
+                    except Exception:
+                        start_iso = None
+
+        # ---- Parse end ----
         if finished_el is not None:
-            finished_time = finished_el.attrib.get('time')
-            finished_timestr = finished_el.attrib.get('timestr') or finished_el.attrib.get('timestr')  # conservative
+            finished_time = finished_el.attrib.get("time")
+            finished_timestr = finished_el.attrib.get("timestr")
+
             if finished_time:
                 try:
                     if str(finished_time).isdigit():
                         end_dt = datetime.fromtimestamp(int(finished_time), tz=timezone.utc)
                     else:
-                        # try ISO-like parse
                         end_dt = datetime.fromisoformat(finished_time)
                         if end_dt.tzinfo is None:
                             end_dt = end_dt.replace(tzinfo=timezone.utc)
                     end_iso = end_dt.isoformat()
                 except Exception:
                     end_iso = None
+
             if end_iso is None and finished_timestr:
                 try:
-                    end_dt = datetime.strptime(finished_timestr, "%a %b %d %H:%M:%S %Y")
-                    end_dt = end_dt.replace(tzinfo=timezone.utc)
+                    end_dt = datetime.strptime(finished_timestr.strip(), "%a %b %d %H:%M:%S %Y").replace(tzinfo=timezone.utc)
                     end_iso = end_dt.isoformat()
                 except Exception:
                     try:
@@ -237,51 +219,56 @@ def _parse_nmap_xml_times(path: Path):
                     except Exception:
                         end_iso = None
 
-        # 3) host_count: prefer runstats/hosts @up, else count <host> elements
-        if hosts_el is not None and 'up' in hosts_el.attrib:
+        # ---- Host count ----
+        if hosts_el is not None:
+            up = hosts_el.attrib.get("up")
+            if up:
+                try:
+                    host_count = max(1, int(up))
+                except Exception:
+                    pass
+        if host_count == 1 and root is not None:
             try:
-                hc = int(hosts_el.attrib.get('up') or 0)
-                if hc > 0:
-                    host_count = hc
-            except Exception:
-                host_count = host_count
-
-        # fallback: count host elements if runstats didn't provide up
-        if host_count == 1:
-            try:
-                # look for any <host> occurrences (namespace-tolerant)
-                if tree is not None:
-                    host_nodes = [el for el in root.iter() if isinstance(el.tag, str) and el.tag.endswith('host')]
-                    if host_nodes:
-                        host_count = max(1, len(host_nodes))
-            except Exception:
-                host_count = host_count
-
-        # 4) If we still don't have a start time, attempt to extract from the raw comment line:
-        #    e.g. "<!-- Nmap 7.95 scan initiated Wed Oct 15 00:26:26 2025 as: /usr/lib/nmap/nmap ... -->"
-        if start_iso is None and raw_text:
-            try:
-                # case-insensitive search for 'scan initiated ... as:'
-                m = re.search(r"scan initiated\s+([A-Za-z]{3}\s+[A-Za-z]{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+as:", raw_text, re.I)
-                if m:
-                    ts = m.group(1).strip()
-                    try:
-                        dt = datetime.strptime(ts, "%a %b %d %H:%M:%S %Y").replace(tzinfo=timezone.utc)
-                        start_iso = dt.isoformat()
-                    except Exception:
-                        try:
-                            dt = datetime.fromisoformat(ts)
-                            if dt.tzinfo is None:
-                                dt = dt.replace(tzinfo=timezone.utc)
-                            start_iso = dt.isoformat()
-                        except Exception:
-                            start_iso = None
+                hosts = [el for el in root.iter() if isinstance(el.tag, str) and el.tag.endswith("host")]
+                if hosts:
+                    host_count = len(hosts)
             except Exception:
                 pass
 
+        # ---- Fallback: try comment line like "scan initiated ..." ----
+        if start_iso is None and raw_text:
+            m = re.search(
+                r"scan initiated\s+([A-Za-z]{3}\s+[A-Za-z]{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+as:",
+                raw_text,
+                re.I,
+            )
+            if m:
+                ts = m.group(1).strip()
+                try:
+                    dt = datetime.strptime(ts, "%a %b %d %H:%M:%S %Y").replace(tzinfo=timezone.utc)
+                    start_iso = dt.isoformat()
+                except Exception:
+                    try:
+                        dt = datetime.fromisoformat(ts)
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        start_iso = dt.isoformat()
+                    except Exception:
+                        pass
+
+        # ---- Final fallbacks ----
+        if start_iso is None and end_iso is not None:
+            # assume scan took 1 minute if only end known
+            dt_end = datetime.fromisoformat(end_iso)
+            start_iso = (dt_end - timedelta(seconds=60)).isoformat()
+
+        if end_iso is None and start_iso is not None:
+            dt_start = datetime.fromisoformat(start_iso)
+            end_iso = (dt_start + timedelta(seconds=60)).isoformat()
+
         return start_iso, end_iso, host_count
+
     except Exception:
-        # fail closed: return None for times but default host_count=1
         return None, None, 1
     
 def extract_host_key(label_or_path: str) -> str | None:
@@ -388,6 +375,134 @@ def gather_scan_times(results_dir: str):
             "end": parsed_end,
             "host_count": host_count,
         })
+
+    # sort the collected scans by start time (safely parse ISO -> datetime)
+    def _parse_iso_to_dt(iso_str):
+        if not iso_str:
+            return datetime.fromtimestamp(0, tz=timezone.utc)
+        try:
+            dt = datetime.fromisoformat(iso_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except Exception:
+            try:
+                # try trimming trailing Z or fractions
+                s = iso_str.replace('Z', '')
+                s = re.sub(r'(\.\d{3})\d+', r'\1', s)
+                dt = datetime.fromisoformat(s)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
+            except Exception:
+                return datetime.fromtimestamp(0, tz=timezone.utc)
+
+    scans.sort(key=lambda s: _parse_iso_to_dt(s.get("start")))
+
+    return scans
+
+def gather_ondemand_scan_times(results_dir: str):
+    """
+    Walk RESULTS_DIR/ondemand-scans and collect scan start/end times.
+    Returns a list of dicts similar to gather_scan_times but from the ondemand-scans subdirectory.
+    """
+    scans = []
+    base = Path(results_dir) / "ondemand-scans"
+    if not base.exists():
+        return scans
+
+    # Iterate through timestamped directories
+    for scan_dir in sorted(base.iterdir()):
+        if not scan_dir.is_dir():
+            continue
+
+        # Look for nmap results within this scan directory
+        nmap_dir = scan_dir / "nmap"
+        if not nmap_dir.exists():
+            continue
+
+        for f in sorted(nmap_dir.rglob("*")):
+            if not f.is_file():
+                continue
+
+            parsed_start = None
+            parsed_end = None
+            host_count = 1
+
+            try:
+                if f.suffix.lower() == ".xml" or f.suffix.lower().endswith(".gz"):
+                    parsed_start, parsed_end, host_count = _parse_nmap_xml_times(f)
+                else:
+                    # try text formats (.nmap, .gnmap, .txt)
+                    txt = None
+                    try:
+                        txt = f.read_text(errors="ignore")
+                    except Exception:
+                        try:
+                            txt = f.open('rb').read().decode('utf-8', errors='ignore')
+                        except Exception:
+                            txt = ''
+                    if txt:
+                        # look for started line in textual header
+                        m = re.search(r"^#?\s*Nmap scan initiated\s*:\s*(.+)$", txt, re.M | re.I)
+                        if not m:
+                            # try common textual header variants
+                            m = re.search(r"^#?\s*Nmap .* scan initiated\s*(.+)$", txt, re.M | re.I)
+                        if m:
+                            ts = m.group(1).strip()
+                            try:
+                                dt = datetime.fromisoformat(ts)
+                                if dt.tzinfo is None:
+                                    dt = dt.replace(tzinfo=timezone.utc)
+                                parsed_start = dt.isoformat()
+                            except Exception:
+                                try:
+                                    dt = datetime.strptime(ts, "%a %b %d %H:%M:%S %Y").replace(tzinfo=timezone.utc)
+                                    parsed_start = dt.isoformat()
+                                except Exception:
+                                    parsed_start = None
+
+                        # if textual contains a "Nmap done" line with hosts up, try to extract finished times
+                        m2 = re.search(r"Nmap done at (.+); .* scanned in", txt)
+                        if m2:
+                            ts2 = m2.group(1).strip()
+                            try:
+                                dt2 = datetime.fromisoformat(ts2)
+                                if dt2.tzinfo is None:
+                                    dt2 = dt2.replace(tzinfo=timezone.utc)
+                                parsed_end = dt2.isoformat()
+                            except Exception:
+                                try:
+                                    dt2 = datetime.strptime(ts2, "%a %b %d %H:%M:%S %Y").replace(tzinfo=timezone.utc)
+                                    parsed_end = dt2.isoformat()
+                                except Exception:
+                                    parsed_end = None
+
+                        # try to detect host count
+                        m3 = re.search(r"\((\d+)\s+hosts?\s+up\)", txt)
+                        if m3:
+                            try:
+                                host_count = int(m3.group(1))
+                            except Exception:
+                                host_count = host_count
+
+            except Exception:
+                parsed_start = None
+                parsed_end = None
+                host_count = host_count
+
+            # fallback: use file mtime as start if nothing parsed
+            if parsed_start is None:
+                parsed_start = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc).isoformat()
+
+            scans.append({
+                "label": f"{scan_dir.name} - {f.name}",
+                "path": str(f.relative_to(base.parent)),
+                "start": parsed_start,
+                "end": parsed_end,
+                "host_count": host_count,
+                "scan_dir": scan_dir.name,  # Include the timestamp directory name
+            })
 
     # sort the collected scans by start time (safely parse ISO -> datetime)
     def _parse_iso_to_dt(iso_str):
@@ -1290,12 +1405,33 @@ async def search(
 ):
     q = (q or "").strip()
     all_hosts = all_ports = all_scripts = []
-    if q:
-        all_hosts = (await session.execute(select(Host).where((Host.address.contains(q)) | (Host.hostname.contains(q))))).scalars().all()
-        all_ports = (await session.execute(select(Port).where((Port.service.contains(q)) | (Port.banner.contains(q))))).scalars().all()
-        all_scripts = (await session.execute(select(Script).where(Script.output.contains(q)))).scalars().all()
 
-    # Paginate each result type separately
+    if q:
+        # Eager load ports + scripts for hosts (so template can access safely)
+        host_result = await session.execute(
+            select(Host)
+            .where((Host.address.contains(q)) | (Host.hostname.contains(q)))
+            .options(selectinload(Host.ports), selectinload(Host.scripts))
+        )
+        all_hosts = host_result.scalars().unique().all()
+
+        # Eager load host for ports (fixes MissingGreenlet)
+        port_result = await session.execute(
+            select(Port)
+            .where((Port.service.contains(q)) | (Port.banner.contains(q)))
+            .options(selectinload(Port.host))
+        )
+        all_ports = port_result.scalars().unique().all()
+
+        # Eager load host + port for scripts if needed in template
+        script_result = await session.execute(
+            select(Script)
+            .where(Script.output.contains(q))
+            .options(selectinload(Script.host), selectinload(Script.port))
+        )
+        all_scripts = script_result.scalars().unique().all()
+
+    # Pagination helper
     def paginate(items, page_num, page_size):
         total = len(items)
         total_pgs = (total + page_size - 1) // page_size if total > 0 else 1
@@ -1323,7 +1459,6 @@ async def search(
         "ports_pages": ports_pages,
         "scripts_pages": scripts_pages,
     })
-
 # -------- Task Management Pages --------
 @app.get("/tasks", response_class=HTMLResponse)
 async def tasks_page(request: Request):
@@ -1335,10 +1470,96 @@ async def new_scan_page(request: Request):
     """New scan form page."""
     return templates.TemplateResponse("scan_new.html", {"request": request})
 
+@app.get("/sync-status", response_class=HTMLResponse)
+async def sync_status_page(request: Request):
+    """Sync status and history page."""
+    # Get current database stats
+    async with db.SessionLocal() as session:
+        from sqlalchemy import func, select
+        total_hosts = await session.scalar(select(func.count(Host.id))) or 0
+        total_ports = await session.scalar(select(func.count(Port.id))) or 0
+
+    results_dir = os.environ.get("CYGOR_LOAD_DIR") or settings.RESULTS_DIR
+
+    return templates.TemplateResponse("sync_status.html", {
+        "request": request,
+        "total_hosts": total_hosts,
+        "total_ports": total_ports,
+        "results_dir": results_dir
+    })
+
+def scan_available_hostlists() -> dict:
+    """Scan workspace for available parsed hostlists and discovery results."""
+    available_hostlists = {}
+    parsed_dir = Path(settings.RESULTS_DIR) / "parsed-hostlists"
+
+    if parsed_dir.exists():
+        # Common service directories to check
+        service_dirs = {
+            "http": "HTTP Hosts",
+            "https": "HTTPS Hosts",
+            "http-https": "All Web Services",
+            "smb": "SMB Hosts",
+            "nfs": "NFS Hosts",
+            "ftp": "FTP Hosts",
+            "ssh": "SSH Hosts",
+            "rdp": "RDP Hosts",
+            "vnc": "VNC Hosts",
+            "telnet": "Telnet Hosts",
+            "winrm": "WinRM Hosts",
+            "dns": "DNS Servers",
+            "proxmox": "Proxmox Hosts",
+            "mysql": "MySQL Databases",
+            "postgres": "PostgreSQL Databases",
+            "mssql": "MSSQL Databases",
+            "mongodb": "MongoDB Databases",
+            "redis": "Redis Servers",
+        }
+
+        for service_dir, label in service_dirs.items():
+            hostlist_file = parsed_dir / service_dir / f"{service_dir}-hostlist.txt"
+            if hostlist_file.exists():
+                # Store relative path from RESULTS_DIR
+                rel_path = f"parsed-hostlists/{service_dir}/{service_dir}-hostlist.txt"
+                available_hostlists[service_dir] = {
+                    "label": label,
+                    "path": rel_path,
+                    "count": len(hostlist_file.read_text().strip().split('\n')) if hostlist_file.stat().st_size > 0 else 0
+                }
+
+    # Also check for discovery results
+    discovery_dir = Path(settings.RESULTS_DIR) / "discovery"
+    if discovery_dir.exists():
+        discovery_files = {
+            "all-discovered-hosts.txt": "All Discovered Hosts",
+            "masscan-discovered.txt": "Masscan Results",
+            "naabu-discovered.txt": "Naabu Results"
+        }
+        for filename, label in discovery_files.items():
+            filepath = discovery_dir / filename
+            if filepath.exists():
+                rel_path = f"discovery/{filename}"
+                available_hostlists[f"discovery_{filename}"] = {
+                    "label": label,
+                    "path": rel_path,
+                    "count": len(filepath.read_text().strip().split('\n')) if filepath.stat().st_size > 0 else 0
+                }
+
+    return available_hostlists
+
 @app.get("/tasks/module/new", response_class=HTMLResponse)
 async def new_module_page(request: Request):
     """Run module form page."""
-    return templates.TemplateResponse("module_run.html", {"request": request})
+    available_hostlists = scan_available_hostlists()
+    return templates.TemplateResponse("module_run.html", {
+        "request": request,
+        "available_hostlists": available_hostlists
+    })
+
+@app.get("/api/hostlists")
+async def get_available_hostlists():
+    """API endpoint to get available hostlists (for dynamic reloading)."""
+    return JSONResponse(scan_available_hostlists())
 
 @app.get("/tasks/{task_id}", response_class=HTMLResponse)
 async def task_detail_page(request: Request, task_id: str):
@@ -1351,12 +1572,17 @@ class ScanRequest(BaseModel):
     interface: Optional[str] = None
     discover: Optional[List[str]] = ["masscan"]
     scan_type: str = "top-ports"
+    ports: Optional[str] = None
+    nmap_options: Optional[str] = None
     output_dir: Optional[str] = None
+    exclusions: Optional[List[str]] = None
+    is_ondemand: bool = True  # Default to True for web UI scans
 
 class ModuleRequest(BaseModel):
     module_name: str
     targets_file: str
     output_dir: Optional[str] = None
+    uploaded_content: Optional[str] = None  # For file uploads from web UI
 
 @app.post("/api/scans")
 async def create_scan(req: ScanRequest):
@@ -1371,7 +1597,11 @@ async def create_scan(req: ScanRequest):
         interface=req.interface,
         discover=req.discover,
         scan_type=req.scan_type,
-        output_dir=output_dir
+        ports=req.ports,
+        nmap_options=req.nmap_options,
+        output_dir=output_dir,
+        exclusions=req.exclusions,
+        is_ondemand=req.is_ondemand
     )
 
     return JSONResponse({"task_id": task_id, "status": "created"})
@@ -1382,14 +1612,38 @@ async def create_module_task(req: ModuleRequest):
     if not req.targets_file:
         raise HTTPException(status_code=400, detail="No targets file provided")
 
-    if not Path(req.targets_file).exists():
-        raise HTTPException(status_code=400, detail=f"Targets file not found: {req.targets_file}")
+    targets_file_path = req.targets_file
+
+    # Handle uploaded file content
+    if req.uploaded_content:
+        # Create a temporary file for uploaded content
+        import tempfile
+        temp_dir = Path(tempfile.gettempdir()) / "cygor-uploads"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        temp_file = temp_dir / f"module-targets-{uuid.uuid4()}.txt"
+        temp_file.write_text(req.uploaded_content)
+        targets_file_path = str(temp_file)
+    else:
+        # Resolve path relative to RESULTS_DIR if it's a relative path
+        file_path = Path(targets_file_path)
+        if not file_path.is_absolute():
+            # Try resolving relative to RESULTS_DIR first
+            resolved_path = Path(settings.RESULTS_DIR) / targets_file_path
+            if resolved_path.exists():
+                targets_file_path = str(resolved_path)
+            elif not file_path.exists():
+                raise HTTPException(status_code=400, detail=f"Targets file not found: {targets_file_path}")
+        else:
+            # Validate absolute path
+            if not file_path.exists():
+                raise HTTPException(status_code=400, detail=f"Targets file not found: {targets_file_path}")
 
     output_dir = req.output_dir or str(settings.RESULTS_DIR)
 
     task_id = await task_manager.create_module_task(
         module_name=req.module_name,
-        targets_file=req.targets_file,
+        targets_file=targets_file_path,
         output_dir=output_dir
     )
 
@@ -1400,6 +1654,15 @@ async def list_tasks():
     """List all tasks."""
     tasks = await task_manager.list_tasks()
     return JSONResponse(tasks)
+
+@app.get("/api/ondemand-scans")
+async def list_ondemand_scans():
+    """List on-demand scan history from results/ondemand-scans directory."""
+    try:
+        ondemand_scans = gather_ondemand_scan_times(settings.RESULTS_DIR)
+        return JSONResponse(ondemand_scans)
+    except Exception as e:
+        return JSONResponse({"error": str(e), "scans": []}, status_code=500)
 
 @app.get("/api/tasks/{task_id}")
 async def get_task_status(task_id: str):
@@ -1438,6 +1701,82 @@ async def delete_task(task_id: str):
     if not success:
         raise HTTPException(status_code=400, detail="Cannot delete task (running or not found)")
     return JSONResponse({"status": "deleted"})
+
+class SyncRequest(BaseModel):
+    scan_dir: Optional[str] = None  # Optional specific directory to sync (e.g., ondemand-scans/2025-01-06_12-34-56)
+
+@app.post("/api/sync-database")
+async def sync_database(req: Optional[SyncRequest] = None):
+    """
+    Sync database by ingesting scan results.
+
+    If scan_dir is provided, only syncs that specific directory (fast, for on-demand scans).
+    Otherwise, syncs the entire results directory (slower, for full refresh).
+    """
+    base_dir = os.environ.get("CYGOR_LOAD_DIR") or settings.RESULTS_DIR
+
+    # Determine which directory to sync
+    if req and req.scan_dir:
+        # Sync only the specific scan directory (relative to base_dir)
+        load_dir = Path(base_dir) / req.scan_dir
+        if not load_dir.exists():
+            return JSONResponse({
+                "status": "error",
+                "error": f"Scan directory not found: {load_dir}"
+            }, status_code=404)
+        print(f"[*] Fast sync: ingesting only {req.scan_dir}")
+    else:
+        # Full sync of entire results directory
+        load_dir = Path(base_dir)
+        print(f"[*] Full database sync started from: {load_dir}")
+
+    try:
+        # Count hosts and ports before sync
+        async with db.SessionLocal() as session:
+            from sqlalchemy import func, select
+            hosts_before = await session.scalar(select(func.count(Host.id))) or 0
+            ports_before = await session.scalar(select(func.count(Port.id))) or 0
+
+        print(f"[i] Database state before sync: {hosts_before} hosts, {ports_before} ports")
+
+        # Run ingestion with verbose output
+        async with db.SessionLocal() as session:
+            count = await ingest_directory(load_dir, session, dedupe=True, verbose=1)
+            await session.commit()
+
+        print(f"[✓] Ingested {count} file(s)")
+
+        # Count hosts and ports after sync
+        async with db.SessionLocal() as session:
+            hosts_after = await session.scalar(select(func.count(Host.id))) or 0
+            ports_after = await session.scalar(select(func.count(Port.id))) or 0
+
+        hosts_added = hosts_after - hosts_before
+        ports_added = ports_after - ports_before
+
+        print(f"[✓] Database state after sync: {hosts_after} hosts (+{hosts_added}), {ports_after} ports (+{ports_added})")
+
+        return JSONResponse({
+            "status": "success",
+            "ingested_files": count,
+            "directory": str(load_dir),
+            "hosts_before": hosts_before,
+            "hosts_after": hosts_after,
+            "hosts_added": hosts_added,
+            "ports_before": ports_before,
+            "ports_after": ports_after,
+            "ports_added": ports_added,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"[!] Sync error: {error_details}")
+        return JSONResponse({
+            "status": "error",
+            "error": str(e),
+            "details": error_details
+        }, status_code=500)
 
 # -------- Entrypoint --------
 def exec_argv(argv):

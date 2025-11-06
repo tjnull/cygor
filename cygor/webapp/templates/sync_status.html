@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container-fluid py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+
+      <!-- Header -->
+      <div class="d-flex align-items-center justify-content-between mb-4">
+        <h2 class="mb-0">
+          <i class="bi bi-clock-history me-2"></i>Database Sync Status
+        </h2>
+        <button class="btn btn-primary" id="triggerSyncBtn">
+          <i class="bi bi-arrow-repeat me-2"></i>Sync Now
+        </button>
+      </div>
+
+      <!-- Current Status Card -->
+      <div class="card bg-dark mb-4">
+        <div class="card-header">
+          <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Current Database Status</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-4">
+            <div class="col-md-3">
+              <div class="text-center">
+                <i class="bi bi-hdd-network fs-1 text-primary"></i>
+                <h3 class="mt-2 mb-0" id="totalHosts">{{ total_hosts }}</h3>
+                <p class="text-secondary mb-0">Total Hosts</p>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center">
+                <i class="bi bi-diagram-3 fs-1 text-success"></i>
+                <h3 class="mt-2 mb-0" id="totalPorts">{{ total_ports }}</h3>
+                <p class="text-secondary mb-0">Total Ports</p>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center">
+                <i class="bi bi-folder fs-1 text-warning"></i>
+                <h3 class="mt-2 mb-0" id="resultsDir">{{ results_dir | length }}</h3>
+                <p class="text-secondary mb-0">Results Directory</p>
+                <small class="text-light d-block" style="word-break: break-all;">{{ results_dir }}</small>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center">
+                <i class="bi bi-clock fs-1 text-info"></i>
+                <h3 class="mt-2 mb-0">Ready</h3>
+                <p class="text-secondary mb-0">Sync Status</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sync Instructions -->
+      <div class="card bg-dark mb-4">
+        <div class="card-header">
+          <h5 class="mb-0"><i class="bi bi-question-circle me-2"></i>About Database Sync</h5>
+        </div>
+        <div class="card-body">
+          <p class="text-light">
+            The database sync feature scans your results directory and ingests all Nmap XML and module JSON files into the database.
+            This is useful after running on-demand scans to immediately see results without restarting the web application.
+          </p>
+          <h6 class="text-secondary mt-3">What gets synced:</h6>
+          <ul class="text-light">
+            <li><strong>Nmap Scan Results</strong> - XML files containing host, port, and service information</li>
+            <li><strong>Module Results</strong> - JSON output from enumeration modules</li>
+            <li><strong>Deduplication</strong> - Existing hosts/ports are updated, duplicates are merged</li>
+          </ul>
+          <h6 class="text-secondary mt-3">When to sync:</h6>
+          <ul class="text-light">
+            <li>After completing an on-demand scan via the Tasks page</li>
+            <li>After running manual scans via CLI that output to the results directory</li>
+            <li>When you notice scan results are not appearing in the web UI</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Live Sync Output -->
+      <div class="card bg-dark">
+        <div class="card-header">
+          <h5 class="mb-0"><i class="bi bi-terminal me-2"></i>Sync Console Output</h5>
+        </div>
+        <div class="card-body">
+          <div id="syncConsole" class="bg-black p-3 rounded" style="font-family: 'Courier New', monospace; font-size: 0.875rem; max-height: 400px; overflow-y: auto; color: #00ff00;">
+            <div class="text-secondary">Click "Sync Now" to see live output...</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const triggerSyncBtn = document.getElementById('triggerSyncBtn');
+const syncConsole = document.getElementById('syncConsole');
+const totalHostsEl = document.getElementById('totalHosts');
+
+function addConsoleLog(message, type = 'info') {
+  const timestamp = new Date().toLocaleTimeString();
+  const colors = {
+    info: '#00ff00',
+    success: '#00ff00',
+    error: '#ff4444',
+    warning: '#ffaa00'
+  };
+  const color = colors[type] || '#00ff00';
+
+  const line = document.createElement('div');
+  line.style.color = color;
+  line.textContent = `[${timestamp}] ${message}`;
+  syncConsole.appendChild(line);
+  syncConsole.scrollTop = syncConsole.scrollHeight;
+}
+
+triggerSyncBtn.addEventListener('click', async () => {
+  // Disable button
+  triggerSyncBtn.disabled = true;
+  triggerSyncBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Syncing...';
+
+  // Clear console
+  syncConsole.innerHTML = '';
+  addConsoleLog('Starting database sync...', 'info');
+  addConsoleLog('Reading results directory: {{ results_dir }}', 'info');
+
+  try {
+    const response = await fetch('/api/sync-database', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.status === 'success') {
+      addConsoleLog('✓ Sync completed successfully!', 'success');
+      addConsoleLog('─'.repeat(60), 'info');
+      addConsoleLog(`Files ingested: ${result.ingested_files}`, 'info');
+      addConsoleLog('─'.repeat(60), 'info');
+      addConsoleLog(`Hosts before sync: ${result.hosts_before}`, 'info');
+      addConsoleLog(`Hosts after sync:  ${result.hosts_after}`, 'info');
+      addConsoleLog(`New hosts added:   +${result.hosts_added}`, result.hosts_added > 0 ? 'success' : 'info');
+      addConsoleLog('─'.repeat(60), 'info');
+      addConsoleLog(`Ports before sync: ${result.ports_before}`, 'info');
+      addConsoleLog(`Ports after sync:  ${result.ports_after}`, 'info');
+      addConsoleLog(`New ports added:   +${result.ports_added}`, result.ports_added > 0 ? 'success' : 'info');
+      addConsoleLog('─'.repeat(60), 'info');
+      addConsoleLog(`Directory: ${result.directory}`, 'info');
+      addConsoleLog(`Timestamp: ${result.timestamp}`, 'info');
+
+      // Update total hosts display
+      totalHostsEl.textContent = result.hosts_after;
+      document.getElementById('totalPorts').textContent = result.ports_after;
+
+      // Broadcast sync completion to other tabs/pages (e.g., dashboard)
+      try {
+        localStorage.setItem('cygor_last_sync', JSON.stringify({
+          timestamp: Date.now(),
+          hosts_added: result.hosts_added,
+          ports_added: result.ports_added,
+          hosts_after: result.hosts_after,
+          ports_after: result.ports_after
+        }));
+        // Remove immediately to trigger storage event in other tabs
+        localStorage.removeItem('cygor_last_sync');
+      } catch (e) {
+        console.warn('Failed to broadcast sync event:', e);
+      }
+
+      // Re-enable button
+      triggerSyncBtn.disabled = false;
+      triggerSyncBtn.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Sync Now';
+
+      // Show success message
+      addConsoleLog('─'.repeat(60), 'info');
+      addConsoleLog('✓ Database is now up to date!', 'success');
+      addConsoleLog('You can now close this page or run another sync.', 'info');
+    } else {
+      throw new Error(result.error || 'Sync failed');
+    }
+  } catch (error) {
+    addConsoleLog('✗ Sync failed!', 'error');
+    addConsoleLog(`Error: ${error.message}`, 'error');
+
+    // Re-enable button
+    triggerSyncBtn.disabled = false;
+    triggerSyncBtn.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Sync Now';
+  }
+});
+</script>
+
+{% endblock %}

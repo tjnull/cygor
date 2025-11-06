@@ -20,11 +20,12 @@ class TaskStatus(str, Enum):
 
 class Task:
     """Represents a background scan or module task."""
-    def __init__(self, task_id: str, task_type: str, command: List[str], output_dir: Path):
+    def __init__(self, task_id: str, task_type: str, command: List[str], output_dir: Path, is_ondemand: bool = False):
         self.task_id = task_id
         self.task_type = task_type  # "scan" or "module"
         self.command = command
         self.output_dir = output_dir
+        self.is_ondemand = is_ondemand  # True if created from on-demand scanner
         self.status = TaskStatus.PENDING
         self.created_at = datetime.utcnow()
         self.started_at: Optional[datetime] = None
@@ -40,6 +41,8 @@ class Task:
             "task_type": self.task_type,
             "command": " ".join(self.command),
             "status": self.status.value,
+            "is_ondemand": self.is_ondemand,
+            "output_dir": str(self.output_dir),
             "created_at": self.created_at.isoformat(),
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
@@ -60,10 +63,19 @@ class TaskManager:
         interface: Optional[str] = None,
         discover: List[str] = None,
         scan_type: str = "top-ports",
-        output_dir: str = "results"
+        ports: Optional[str] = None,
+        nmap_options: Optional[str] = None,
+        output_dir: str = "results",
+        exclusions: Optional[List[str]] = None,
+        is_ondemand: bool = False
     ) -> str:
         """Create a new scan task."""
         task_id = str(uuid.uuid4())
+
+        # For on-demand scans, create a timestamped subdirectory
+        if is_ondemand:
+            timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
+            output_dir = os.path.join(output_dir, "ondemand-scans", timestamp)
 
         # Build cygor scan command
         cmd = ["cygor", "scan"]
@@ -81,13 +93,27 @@ class TaskManager:
             cmd.extend(["--discover"] + discover)
 
         cmd.extend(["--scan-type", scan_type])
+
+        # Add custom ports if provided
+        if ports:
+            cmd.extend(["--ports", ports])
+
+        # Add custom Nmap options if provided
+        if nmap_options:
+            cmd.extend(["--nmap-options", nmap_options])
+
+        # Add exclusions if provided
+        if exclusions:
+            cmd.extend(["--exclusions"] + exclusions)
+
         cmd.extend(["-o", output_dir])
 
         task = Task(
             task_id=task_id,
             task_type="scan",
             command=cmd,
-            output_dir=Path(output_dir)
+            output_dir=Path(output_dir),
+            is_ondemand=is_ondemand
         )
 
         async with self._lock:
@@ -125,17 +151,13 @@ class TaskManager:
         asyncio.create_task(self._run_task(task))
 
         return task_id
-
     async def _run_task(self, task: Task):
         """Execute a task in the background."""
         try:
             task.status = TaskStatus.RUNNING
             task.started_at = datetime.utcnow()
-
-            # Create output directory
             task.output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Run the command
             process = await asyncio.create_subprocess_exec(
                 *task.command,
                 stdout=asyncio.subprocess.PIPE,
@@ -144,24 +166,56 @@ class TaskManager:
             )
 
             task.process = process
+            start_time = datetime.utcnow()
 
-            # Stream output
-            async def read_stream(stream, lines_list):
+            # --- Enhanced stream readers ---
+            async def read_stream(stream, lines_list, redirect_to_output=False):
+                """Read and filter process output in real time."""
                 while True:
                     line = await stream.readline()
                     if not line:
                         break
-                    decoded = line.decode('utf-8', errors='ignore').strip()
-                    lines_list.append(decoded)
+                    decoded = line.decode("utf-8", errors="ignore").strip()
 
-            # Read stdout and stderr concurrently
+                    # Skip empty or redundant progress rate lines
+                    if decoded.startswith("rate:"):
+                        continue
+
+                    # Redirect known benign stderr lines (masscan / nmap status)
+                    if redirect_to_output:
+                        if (
+                            decoded.startswith("Starting masscan")
+                            or decoded.startswith("Initiating SYN")
+                            or decoded.startswith("Scanning ")
+                            or decoded.startswith("rate:")
+                            or "remaining" in decoded
+                            or ("done" in decoded and "rate:" in decoded)
+                        ):
+                            task.output_lines.append(decoded)
+                        else:
+                            lines_list.append(decoded)
+                    else:
+                        lines_list.append(decoded)
+
+            # Read concurrently
             await asyncio.gather(
                 read_stream(process.stdout, task.output_lines),
-                read_stream(process.stderr, task.error_lines)
+                read_stream(process.stderr, task.error_lines, redirect_to_output=True)
             )
 
-            # Wait for process to complete
+            # Wait for completion
             task.exit_code = await process.wait()
+            elapsed = datetime.utcnow() - start_time
+
+            # Append a clean final summary if this was a scan task
+            hours, remainder = divmod(int(elapsed.total_seconds()), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            summary = (
+                f"Total scan process completed in {hours} hours, "
+                f"{minutes} minutes, and {seconds} seconds."
+            )
+
+            task.output_lines.append(summary)
 
             if task.exit_code == 0:
                 task.status = TaskStatus.COMPLETED

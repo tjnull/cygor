@@ -509,7 +509,7 @@ def ensure_nmap_directory_exists(directory):
     if not os.path.exists(directory):
         os.makedirs(directory, exist_ok=True)
 
-def run_nmap(ip, base_outdir='results', scan_type='top-ports', ports=None):
+def run_nmap(ip, base_outdir='results', scan_type='top-ports', ports=None, nmap_options=None):
     """
     Run Nmap on a single host.
     Ensures all output directories are writable and owned by the invoking user (not root),
@@ -545,13 +545,36 @@ def run_nmap(ip, base_outdir='results', scan_type='top-ports', ports=None):
         cmd_args.append(ip_option)
     cmd_args.extend(["-Pn", "-sC", "-sV", "-O", "-T4"])
 
-    # Add port specification
+    # Add port specification based on scan type
     if ports:
+        # Custom ports override scan_type
         cmd_args.extend(["-p", ports])
-    elif scan_type == 'top-ports':
+    elif scan_type == 'quick':
+        cmd_args.extend(["--top-ports", "100"])
+    elif scan_type in ('top-ports', 'top-1000'):
         cmd_args.extend(["--top-ports", "1000"])
-    else:
+    elif scan_type == 'top-10000':
+        cmd_args.extend(["--top-ports", "10000"])
+    elif scan_type == 'fullscan':
         cmd_args.append("-p-")
+    elif scan_type == 'custom':
+        if not ports:
+            print(f"{Fore.YELLOW}[!] Warning: scan_type is 'custom' but no --ports specified. Using top 1000 ports.{Style.RESET_ALL}")
+            cmd_args.extend(["--top-ports", "1000"])
+        else:
+            cmd_args.extend(["-p", ports])
+
+    # Add custom Nmap options if provided
+    if nmap_options:
+        # Split options string and add to command
+        # Use shlex to properly handle quoted arguments
+        import shlex
+        try:
+            custom_opts = shlex.split(nmap_options)
+            cmd_args.extend(custom_opts)
+            print(f"{Fore.CYAN}[i] Adding custom Nmap options: {nmap_options}{Style.RESET_ALL}")
+        except ValueError as e:
+            print(f"{Fore.YELLOW}[!] Warning: Failed to parse nmap-options: {e}{Style.RESET_ALL}")
 
     cmd_args.extend([ip, "-oA", output_file_prefix])
 
@@ -571,11 +594,11 @@ def run_nmap(ip, base_outdir='results', scan_type='top-ports', ports=None):
 
 
 
-def run_nmap_parallel(ips, processes, base_outdir='results', scan_type='top-ports', ports=None):
+def run_nmap_parallel(ips, processes, base_outdir='results', scan_type='top-ports', ports=None, nmap_options=None):
     output_dir = os.path.join(base_outdir, 'nmap')
     ensure_nmap_directory_exists(os.path.join(output_dir, scan_type))
     with ThreadPoolExecutor(max_workers=processes) as executor:
-        executor.map(lambda ip: run_nmap(ip, base_outdir=base_outdir, scan_type=scan_type, ports=ports), ips)
+        executor.map(lambda ip: run_nmap(ip, base_outdir=base_outdir, scan_type=scan_type, ports=ports, nmap_options=nmap_options), ips)
 
 def _is_domain_like(token: str) -> bool:
     # Basic heuristic: contains a dot and at least one alpha char in the name part
@@ -843,14 +866,19 @@ def main():
     nmap_group = parser.add_argument_group("Nmap Scanning")
     nmap_group.add_argument(
         "--scan-type",
-        choices=["top-ports", "fullscan"],
+        choices=["quick", "top-ports", "top-1000", "top-10000", "fullscan", "custom"],
         default="top-ports",
-        help="Nmap scan type (default: top-ports)."
+        help="Nmap scan type: quick (top 100), top-ports (top 1000), top-1000 (alias), top-10000, fullscan (all 65535), custom (use --ports). Default: top-ports."
     )
     nmap_group.add_argument(
         "--ports",
         help="Custom ports for scanning (e.g., '80,443' or '1-1024'). "
-             "Overrides --scan-type if provided."
+             "Required when --scan-type is 'custom', overrides scan-type otherwise."
+    )
+    nmap_group.add_argument(
+        "--nmap-options",
+        help="Custom Nmap switches/options (e.g., '-sS -T5 --max-retries 2'). "
+             "These will be added to the base Nmap command. Use with caution."
     )
     nmap_group.add_argument(
         "--nmap-source",
@@ -902,7 +930,7 @@ def main():
 
         print(f"{Fore.CYAN}Loaded {len(nmap_targets)} hosts from discovery patterns: {discovery_patterns}")
         # ensure Nmap writes to outdir when using --use-discovery
-        run_nmap_parallel(nmap_targets, args.processes, base_outdir=args.outdir, scan_type=args.scan_type, ports=args.ports)
+        run_nmap_parallel(nmap_targets, args.processes, base_outdir=args.outdir, scan_type=args.scan_type, ports=args.ports, nmap_options=getattr(args, 'nmap_options', None))
         combine_nmap_files(args.scan_type, args.outdir)
         print(f"{Fore.CYAN}Nmap scanned {len(nmap_targets)} hosts")
         return
@@ -1048,7 +1076,7 @@ def main():
 
     print(f"\n{Fore.CYAN}[+] Starting Nmap phase on {len(nmap_targets)} targets (scan-type={args.scan_type}){Style.RESET_ALL}")
 
-    run_nmap_parallel(nmap_targets, args.processes, base_outdir=args.outdir, scan_type=args.scan_type, ports=args.ports)
+    run_nmap_parallel(nmap_targets, args.processes, base_outdir=args.outdir, scan_type=args.scan_type, ports=args.ports, nmap_options=getattr(args, 'nmap_options', None))
     combine_nmap_files(args.scan_type, args.outdir)
     print(f"{Fore.CYAN}Nmap scanned {len(nmap_targets)} hosts")
 

@@ -43,11 +43,13 @@
   position: relative;
   width: 100%;
   min-height: 200px;
-  max-height: 420px;
   margin-bottom: 0.5rem;
-  overflow: hidden;
+  overflow: visible;
+  padding: 0;
 }
-.chart-canvas-wrap canvas { width: 100% !important; height: 100% !important; display: block; }
+.chart-canvas-wrap canvas { width: 100% !important; height: 100% !important; display: block; max-height: 420px; }
+.chart-canvas-wrap svg { width: 100% !important; height: auto !important; display: block; max-height: none !important; }
+#scanTimelineWrap { overflow: visible !important; min-height: 380px !important; }
 
 /* small popup/expand button - placed in card header area */
 .card-header .chart-popup-btn {
@@ -95,14 +97,27 @@
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 8px;
+  display: block;
+  padding: 1rem;
   box-sizing: border-box;
 }
-#popupCanvasHolder::-webkit-scrollbar { height: 10px; }
-#popupCanvasHolder::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+#popupCanvasHolder::-webkit-scrollbar {
+  height: 14px;
+  background: rgba(0,0,0,0.3);
+}
+#popupCanvasHolder::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+  margin: 0 10px;
+}
+#popupCanvasHolder::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.3);
+  border-radius: 4px;
+  border: 2px solid rgba(0,0,0,0.2);
+}
+#popupCanvasHolder::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.5);
+}
 
 /* Make legend and labels readable */
 .modal-content .chartjs-legend { text-align:center; margin-top:6px; }
@@ -414,17 +429,35 @@ body.light-theme hr {
         <div class="card-header border-0 d-flex align-items-start justify-content-between">
           <div>
             <h6 class="text-uppercase text-secondary fw-bold mb-1">Scan Timeline</h6>
-            <div class="small text-secondary">Shows when scans started and (if available) finished</div>
+            <div class="small text-secondary mb-2">Shows cumulative completed scans over time</div>
+            <!-- Timeline Filter Dropdown -->
+            <div class="d-flex align-items-center mt-1 flex-wrap">
+              <label for="timelineFilter" class="me-2 small text-secondary mb-0">View:</label>
+              <select id="timelineFilter" class="form-select form-select-sm bg-dark text-light border-secondary" style="width:auto; min-width:180px;">
+                <option value="all" selected>All scans (100%)</option>
+                <option value="first">First 25% of scans</option>
+                <option value="latest">Latest 25% of scans</option>
+                <option value="middle">Middle 50% of scans</option>
+              </select>
+
+              <!-- On-Demand Scans Toggle -->
+              <div class="form-check form-switch ms-3 mb-0">
+                <input class="form-check-input" type="checkbox" id="showOnDemandScans" style="cursor: pointer;">
+                <label class="form-check-label small text-secondary" for="showOnDemandScans" style="cursor: pointer;">
+                  Show On-Demand Scans
+                </label>
+              </div>
+            </div>
           </div>
 
           <div class="d-flex align-items-center">
             <!-- html legend (top-right) -->
             <div class="custom-legend" id="scanTimelineLegend" role="list" aria-label="Scan timeline legend" style="margin-right:10px;">
-              <span class="legend-item" data-group="started" role="listitem" title="Toggle Scan started">
+              <span class="legend-item" data-group="started" role="listitem" title="Scan started" style="margin-right:15px;">
                 <span class="legend-swatch" style="background:#0d6efd;"></span>
                 <span class="legend-text">Scan started</span>
               </span>
-              <span class="legend-item" data-group="completed" role="listitem" title="Toggle Scan completed">
+              <span class="legend-item" data-group="completed" role="listitem" title="Scan completed">
                 <span class="legend-swatch" style="background:#ffc107;"></span>
                 <span class="legend-text">Scan completed</span>
               </span>
@@ -442,12 +475,12 @@ body.light-theme hr {
           </div>
         </div>
 
-        <div class="card-body">
+        <div class="card-body" style="min-height: 420px;">
           <div id="scanTimelineWrap" class="chart-canvas-wrap">
-            <canvas id="scanTimeline" data-scantimes='{{ scan_times | tojson | safe }}' style="width:100%; height:100%; display:block;"></canvas>
+            <div id="scanTimeline" data-scantimes='{{ scan_times | tojson | safe }}'></div>
           </div>
 
-          <div class="mt-2 small text-secondary">
+          <div class="mt-3 small text-secondary">
             Parsed from collected nmap data. Other files were used as fallback to forecast scan times.
           </div>
         </div>
@@ -541,6 +574,8 @@ body.light-theme hr {
 <!-- Chart libs -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="{{ url_for('static', path='/js/scan_timeline_d3.js') }}"></script>
 
 <script>
 /* Theme defaults for dark UI */
@@ -620,8 +655,29 @@ window.refreshCharts = function() {
 // Initialize chart defaults
 window.updateChartDefaults();
 
+/* ---- On-Demand Scans Support ---- */
+window.onDemandScans = [];
+
+async function fetchOnDemandScans() {
+  try {
+    const response = await fetch('/api/ondemand-scans');
+    if (response.ok) {
+      const data = await response.json();
+      window.onDemandScans = Array.isArray(data) ? data : [];
+    }
+  } catch (e) {
+    console.error('Failed to fetch on-demand scans:', e);
+    window.onDemandScans = [];
+  }
+}
+
 /* ---- Services chart ---- */
 function renderServicesChart() {
+  // Render D3 timeline with a small delay to ensure container is sized
+  setTimeout(() => {
+    try { renderScanTimelineD3(); } catch (e) { console.error("renderScanTimelineD3 failed:", e); }
+  }, 100);
+
   try {
     const labels = {{ service_summary.keys()|list|tojson }};
     const values = {{ service_summary.values()|list|tojson }};
@@ -638,7 +694,9 @@ function renderServicesChart() {
       type: 'bar',
       data: { labels: labels, datasets: [{ data: values, backgroundColor: "#0d6efd" }] },
       options: {
-        responsive: true, maintainAspectRatio: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        devicePixelRatio: window.devicePixelRatio || 2,
         plugins: { legend: { display: false } },
         onClick: (evt, elements) => {
           if (elements.length > 0) {
@@ -647,8 +705,21 @@ function renderServicesChart() {
           }
         },
         scales: {
-          x: { ticks: { color: "#e0e0e0" }, grid: { color: "rgba(255,255,255,0.06)" } },
-          y: { ticks: { color: "#e0e0e0", precision: 0 }, grid: { color: "rgba(255,255,255,0.06)" } }
+          x: {
+            ticks: {
+              color: document.body.classList.contains('light-theme') ? "#212529" : "#e0e0e0",
+              font: { size: 11 }
+            },
+            grid: { color: document.body.classList.contains('light-theme') ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.06)" }
+          },
+          y: {
+            ticks: {
+              color: document.body.classList.contains('light-theme') ? "#212529" : "#e0e0e0",
+              precision: 0,
+              font: { size: 11 }
+            },
+            grid: { color: document.body.classList.contains('light-theme') ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.06)" }
+          }
         }
       }
     });
@@ -661,21 +732,24 @@ function debounce(fn, wait) { let t; return (...args) => { clearTimeout(t); t = 
 
 function syncChartHeights() {
   try {
-    const leftWrap  = document.querySelector('#scanTimeline')?.closest('.chart-canvas-wrap');
+    // Only sync the services chart canvas, not the D3 timeline SVG
     const rightWrap = document.querySelector('#servicesChart')?.closest('.chart-canvas-wrap');
-    if (!leftWrap || !rightWrap) return;
-    const leftH  = leftWrap.getBoundingClientRect().height;
-    const rightH = rightWrap.getBoundingClientRect().height;
-    let target = Math.max(leftH, rightH);
-    target = Math.min(target, 420);
-    target = Math.max(target, 160);
-    leftWrap.style.minHeight  = target + 'px';
-    rightWrap.style.minHeight = target + 'px';
-    const leftCanvas  = document.getElementById('scanTimeline');
     const rightCanvas = document.getElementById('servicesChart');
-    if (leftCanvas)  leftCanvas.style.height  = target + 'px';
-    if (rightCanvas) rightCanvas.style.height = target + 'px';
-    [leftCanvas, rightCanvas].forEach(c => { if (c && c._chartInstance && typeof c._chartInstance.resize === 'function') c._chartInstance.resize(); });
+
+    if (rightWrap && rightCanvas) {
+      // Set reasonable height for services chart
+      const rightH = rightWrap.getBoundingClientRect().height;
+      let target = Math.max(rightH, 300);
+      target = Math.min(target, 420);
+      rightWrap.style.minHeight = target + 'px';
+      rightCanvas.style.height = target + 'px';
+
+      if (rightCanvas._chartInstance && typeof rightCanvas._chartInstance.resize === 'function') {
+        rightCanvas._chartInstance.resize();
+      }
+    }
+
+    // Don't touch the D3 timeline - it manages its own height
   } catch (e) { console.error(e); }
 }
 
@@ -700,20 +774,34 @@ function computeTimelineCanvasWidth(durationMs) {
 
 /* Robust retrieval of the templated scan_times variable (client-side) */
 function _getScanTimesFromPage() {
+  let baseScanTimes = [];
+
+  // Get base scan times from the page
   try {
-    if (typeof scan_times !== 'undefined' && Array.isArray(scan_times)) return scan_times;
+    if (typeof scan_times !== 'undefined' && Array.isArray(scan_times)) baseScanTimes = scan_times;
   } catch (e) {}
-  try {
-    if (typeof scan_times_json !== 'undefined') {
-      if (typeof scan_times_json === 'string' && scan_times_json.trim().length) return JSON.parse(scan_times_json);
-      if (Array.isArray(scan_times_json)) return scan_times_json;
-    }
-  } catch (e) { console.warn("failed parsing scan_times_json:", e); }
-  try {
-    const canvas = document.getElementById('scanTimeline');
-    if (canvas && canvas.dataset && canvas.dataset.scantimes) return JSON.parse(canvas.dataset.scantimes);
-  } catch (e) { console.warn("failed parsing data-scantimes:", e); }
-  return [];
+  if (baseScanTimes.length === 0) {
+    try {
+      if (typeof scan_times_json !== 'undefined') {
+        if (typeof scan_times_json === 'string' && scan_times_json.trim().length) baseScanTimes = JSON.parse(scan_times_json);
+        else if (Array.isArray(scan_times_json)) baseScanTimes = scan_times_json;
+      }
+    } catch (e) { console.warn("failed parsing scan_times_json:", e); }
+  }
+  if (baseScanTimes.length === 0) {
+    try {
+      const canvas = document.getElementById('scanTimeline');
+      if (canvas && canvas.dataset && canvas.dataset.scantimes) baseScanTimes = JSON.parse(canvas.dataset.scantimes);
+    } catch (e) { console.warn("failed parsing data-scantimes:", e); }
+  }
+
+  // Check if on-demand scans should be included
+  const showOnDemand = document.getElementById('showOnDemandScans')?.checked || false;
+  if (showOnDemand && typeof window.onDemandScans !== 'undefined' && Array.isArray(window.onDemandScans) && window.onDemandScans.length > 0) {
+    return [...baseScanTimes, ...window.onDemandScans];
+  }
+
+  return baseScanTimes;
 }
 
 /* Extract host key (IPv4 preferred, otherwise base filename w/o extensions) */
@@ -796,422 +884,6 @@ function jitterByTime(points, baseStepMs = 2500, maxSpreadMs = 90000, yJitter = 
 
 
 
-
-
-
-/* ---- Full renderScanTimeline implementation (host-level cumulative progression) ---- */
-function renderScanTimeline() {
-  try {
-    // load scan_times (Jinja -> JSON) with robust fallbacks
-    let scanTimes = [];
-    try {
-      scanTimes = {{ scan_times | tojson | safe }};
-    } catch (e1) {
-      try {
-        scanTimes = JSON.parse({{ scan_times_json | default('[]') | tojson | safe }});
-      } catch (e2) {
-        scanTimes = _getScanTimesFromPage();
-      }
-    }
-
-    // filter out noisy files
-    if (Array.isArray(scanTimes) && scanTimes.length) {
-      scanTimes = scanTimes.filter(s => {
-        try {
-          const lbl = String(s.label || s.path || '').toLowerCase();
-          if (!lbl) return true;
-          if (lbl.includes('fullscan.nmap') || lbl.includes('top-ports.nmap')) return false;
-          return true;
-        } catch (e) { return true; }
-      });
-    }
-
-    const canvas = document.getElementById("scanTimeline");
-    if (!canvas) return;
-    const ctxTimeline = canvas.getContext('2d');
-
-  
-
-    // no data
-    if (!Array.isArray(scanTimes) || scanTimes.length === 0) {
-      canvas.style.display = "none";
-      const msg = document.createElement("div");
-      msg.className = "text-secondary small pt-5 pb-5";
-      msg.textContent = "No scan timeline data (check results/nmap).";
-      canvas.parentNode.appendChild(msg);
-      return;
-    }
-
-    // robust timestamp parser
-    const parseMs = raw => {
-      if (raw == null) return null;
-      try {
-        if (typeof raw === 'number') {
-          if (isNaN(raw)) return null;
-          return raw > 1e12 ? Math.floor(raw) : Math.floor(raw * 1000);
-        }
-        const s = String(raw).trim();
-        if (/^\d{10}$/.test(s)) return parseInt(s,10) * 1000;
-        if (/^\d{13}$/.test(s)) return parseInt(s,10);
-        const d = new Date(s);
-        if (!isNaN(d.getTime())) return d.getTime();
-        return null;
-      } catch (e) { return null; }
-    };
-
-    const parsed = scanTimes.map((s, idx) => ({
-      label: s.label || s.path || `scan-${idx+1}`,
-      startMs: parseMs(s.start),
-      endMs: parseMs(s.end),
-      host_count: (typeof s.host_count === 'number' && s.host_count > 0) ? s.host_count : 1
-    })).filter(x => x.startMs !== null);
-
-    if (parsed.length === 0) {
-      canvas.style.display = "none";
-      return;
-    }
-
-    parsed.sort((a,b) => a.startMs - b.startMs);
-
-    const explicitEnds = parsed.map(p => p.endMs).filter(Boolean);
-    const latestEndCandidate = explicitEnds.length ? Math.max(...explicitEnds) : Math.max(...parsed.map(p => p.startMs));
-    const ranges = parsed.map((p, i, arr) => {
-      let end = p.endMs;
-      if (!end) end = (i + 1 < arr.length) ? arr[i+1].startMs : (latestEndCandidate || p.startMs);
-      if (end < p.startMs) end = p.startMs;
-      return { label: p.label, startMs: p.startMs, endMs: end, host_count: p.host_count };
-    });
-
-    function extractHostKey(label) {
-      if (!label) return label;
-      const ipv4 = label.match(/(\d{1,3}(?:\.\d{1,3}){3})/);
-      if (ipv4 && ipv4[1]) return ipv4[1];
-      let base = label.split('/').pop();
-      base = base.replace(/\.(xml|nmap|gnmap|xml\.gz|nmap\.gz|gnmap\.gz)$/i, '');
-      return base || label;
-    }
-
-    const hostMap = {};
-    ranges.forEach(r => {
-      const key = extractHostKey(r.label);
-      const niceLabel = (key && key !== r.label) ? key : r.label;
-      if (!hostMap[key]) {
-        hostMap[key] = { label: niceLabel, startMs: r.startMs, endMs: r.endMs, host_count: 1 };
-      } else {
-        hostMap[key].startMs = Math.min(hostMap[key].startMs, r.startMs);
-        hostMap[key].endMs = Math.max(hostMap[key].endMs || hostMap[key].startMs, r.endMs || hostMap[key].startMs);
-        if (!hostMap[key].host_id && r.host_id) hostMap[key].host_id = r.host_id;
-      }
-    });
-
-    const hostRanges = Object.keys(hostMap).map(k => ({
-      label: hostMap[k].label,
-      startMs: hostMap[k].startMs,
-      endMs: hostMap[k].endMs,
-      host_count: 1,
-      host_id: hostMap[k].host_id || null,  // ✅ preserve host_id
-    }));
-
-
-    if (hostRanges.length === 0) { canvas.style.display = "none"; return; }
-
-    // compute domain safely
-    const startVals = hostRanges.map(r => r.startMs).filter(v => typeof v === 'number' && isFinite(v));
-    const endVals   = hostRanges.map(r => r.endMs).filter(v => typeof v === 'number' && isFinite(v));
-    const earliestStart = startVals.length ? Math.min(...startVals) : Date.now();
-    const latestEnd     = endVals.length ? Math.max(...endVals) : earliestStart + 1000;
-
-    const completions = hostRanges.slice().filter(r => typeof r.endMs === 'number' && isFinite(r.endMs))
-      .sort((a,b) => a.endMs - b.endMs);
-
-    function isValidMs(v) { return typeof v === "number" && isFinite(v) && !isNaN(v); }
-
-    let cumPoints = []
-    let cumulative = 0;
-    if (isValidMs(earliestStart)) cumPoints.push({ x: earliestStart, y: 0 });
-
-    completions.forEach((c) => {
-      if (!isValidMs(c.endMs)) return;
-      cumulative += 1;
-      cumPoints.push({ x: c.endMs, y: cumulative, label: c.label, hosts: 1 });
-    });
-
-    if (isValidMs(latestEnd) && cumPoints.length && cumPoints[cumPoints.length - 1].x < latestEnd)
-      cumPoints.push({ x: latestEnd, y: cumulative });
-
-    const markerData = completions
-      .filter(c => isValidMs(c.endMs))
-      .map((c, idx) => ({ x: c.endMs, y: idx + 1, label: c.label, hosts: 1 }));
-
-    const validCum = cumPoints.filter(p => isValidMs(p.x));
-    const validMarkers = markerData.filter(p => isValidMs(p.x));
-    if (!validCum.length) {
-      console.error("No valid points left for timeline; aborting render.");
-      canvas.style.display = "none";
-      const msg = document.createElement("div");
-      msg.className = "text-danger small pt-3";
-      msg.textContent = "Invalid or missing timestamps in scan data.";
-      canvas.parentNode.appendChild(msg);
-      return;
-    }
-
-    const domainMin = Math.min(...validCum.map(p => p.x));
-    const domainMax = Math.max(...validCum.map(p => p.x));
-
-    // >>> padding & unit selection
-    const span = Math.max(1, domainMax - domainMin);
-    const timeUnit = (function() {
-      if (span < 60 * 1000) return 'second';
-      if (span < 60 * 60 * 1000) return 'minute';
-      if (span < 24 * 60 * 60 * 1000) return 'hour';
-      return 'day';
-    })();
-    
-
-    const blueLine = {
-    label: "Scan started",
-    group: "started",
-    data: cumPoints,
-    parsing: false,
-    stepped: true,
-    fill: 'start',
-    backgroundColor: 'rgba(13,110,253,0.14)',
-    borderColor: '#0d6efd',
-    borderWidth: 2,
-    pointRadius: 0,
-    tension: 0
-  };
-
-  const yellowLine = {
-    label: "Scan completed",
-    group: "completed",
-    data: cumPoints,
-    parsing: false,
-    stepped: true,
-    fill: 'start',
-    backgroundColor: 'rgba(255,193,7,0.10)',
-    borderColor: '#ffc107',
-    borderWidth: 2,
-    pointRadius: 0,
-    tension: 0
-  };
-
-
-    // completions is your array sorted by endMs
-    const completionPoints = completions.map((c, idx) => ({
-      x: c.endMs,
-      y: idx + 1,
-      label: c.label,
-      hosts: 1,
-      host_id: c.host_id || null,   // add id for click linking
-    }));
-
-
-   // Only the markers are jittered; the lines stay untouched
-   const jitteredCompletionPoints = jitterByTime(completionPoints, 4000, 120000, 0.5)
-
-
-    cumPoints.length = 0;
-    cumulative = 0;
-
-    // Force line to start exactly at 0 on the visible timeline
-    const firstX = Math.min(earliestStart, ...jitteredCompletionPoints.map(p => p.x));
-    const lastX  = Math.max(latestEnd, ...jitteredCompletionPoints.map(p => p.x));
-
-    // define padding boundaries
-    const paddedMin = Math.min(firstX, domainMin) - Math.min(60 * 1000, span * 0.08);
-    const paddedMax = Math.max(lastX, domainMax) + Math.min(60 * 1000, span * 0.05);
-
-    // ensure a visible origin baseline at y=0
-    const zeroStartX = paddedMin;  // timeline's far-left boundary
-    cumPoints.push({ x: zeroStartX, y: 0 });
-    cumPoints.push({ x: firstX, y: 0 });  // keep flat until first real event
-
-
-    for (const p of jitteredCompletionPoints.sort((a,b) => a.x - b.x)) {
-      cumulative += 1;
-      cumPoints.push({
-        x: p.x,
-        y: cumulative,
-        label: p.label,
-        hosts: 1,
-        trueX: p.trueX || p.x
-      });
-    }
-
-    // ensure the blue line reaches chart’s end
-    cumPoints.push({ x: lastX, y: cumulative });
-
-
-
-
-
-    const yellowMarkers = {
-      label: "Scan completed",
-      group: "completed",
-      data: jitteredCompletionPoints,
-      parsing: false,
-      type: "scatter",
-      pointRadius: 6,
-      pointHitRadius: 28,       // larger click area
-      pointHoverRadius: 11,     // easier hover
-      pointBackgroundColor: "#ffc107",
-      pointHoverBackgroundColor: "#ffee58",
-      pointBorderColor: "#e0a800",
-      borderWidth: 1.5,
-      showLine: false,
-      order: 9999,               // render above the lines
-    };
-
-    const datasets = [blueLine, yellowLine, yellowMarkers];
-
-
-
-    window.timelineChart = new Chart(ctxTimeline, {
-      type: 'line',
-      data: { datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        layout: { padding: { left: 12, right: 48, top: 6, bottom: 6 } },
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            titleColor: '#ffffff',
-            bodyColor: '#ffffff',
-            callbacks: {
-              title: items => {
-                if (!items || items.length === 0) return '';
-                const raw = items[0].raw;
-                return raw && raw.label ? raw.label : items[0].dataset.label;
-              },
-              label: ctx => {
-                const raw = ctx.raw;
-                if (!raw || raw.x == null || isNaN(raw.x)) return '';
-                const dt = new Date(raw.x);
-                const y = raw.y != null ? raw.y : '';
-                const hostsPart = raw.hosts ? ` (${raw.hosts} hosts)` : '';
-                return `${y ? `#${y} ` : ''}${dt.toLocaleString()}${hostsPart}`;
-              }
-            }
-          }
-        },
-        scales: {
-          x: {
-            type: 'time',
-            time: {
-              unit: timeUnit,
-              tooltipFormat: 'PPpp',
-              displayFormats: {
-                second: 'h:mm:ss a',
-                minute: 'h:mm a',
-                hour: 'h:mm a',
-                day: 'MM/dd/yyyy'
-              }
-            },
-            position: 'bottom',
-            min: paddedMin,     
-            max: paddedMax,     
-            offset: false,
-            alignToPixels: true,
-            ticks: {
-              color: "#ffffff",
-              autoSkip: true,
-              maxTicksLimit: 6,
-              source: 'auto',
-              callback: function(value) {
-                try {
-                  const dt = new Date(value);
-                  const datePart = dt.toLocaleDateString([], { month: '2-digit', day: '2-digit', year: 'numeric' });
-                  const timePart = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                  return [datePart, timePart]; // two-line label
-                } catch (e) {
-                  return String(value);
-                }
-              },
-              rotation: 0,
-              align: 'center'
-            },
-            grid: { color: "rgba(255,255,255,0.04)" }
-          },
-          y: {
-            type: 'linear',
-            beginAtZero: true,
-            grace: '20%', // give extra 20% vertical space
-            min: 0,
-            suggestedMax: Math.max(...cumPoints.map(p => p.y)) + 5, // pad top by ~5 units
-            ticks: { color: "#ffffff", precision: 0 },
-            grid: { color: "rgba(255,255,255,0.03)" }
-          }
-        },
-        interaction: { mode: 'point', intersect: false },
-        elements: { point: { hoverRadius: 8 } }
-      }
-    });
-
-    // --- make the dots feel clickable ---
-    canvas.style.cursor = "pointer";
-
-    canvas.addEventListener("click", function (evt) {
-      // Only look for actual points (not lines)
-      const points = window.timelineChart.getElementsAtEventForMode(evt, "point", { intersect: false }, false);
-      if (!points.length) return;
-
-      const firstPoint = points[0];
-      const ds = window.timelineChart.data.datasets[firstPoint.datasetIndex];
-      const raw = ds.data[firstPoint.index];
-      if (ds.group !== "completed" || !raw) return;
-
-      // Flash highlight
-      const meta = window.timelineChart.getDatasetMeta(firstPoint.datasetIndex);
-      const element = meta.data[firstPoint.index];
-      if (element) {
-        const orig = element.options.backgroundColor;
-        element.options.backgroundColor = "#ffee58";
-        window.timelineChart.update("none");
-        setTimeout(() => {
-          element.options.backgroundColor = orig;
-          window.timelineChart.update("none");
-        }, 250);
-      }
-
-      // Build redirect URL
-      let targetUrl = null;
-      if (raw.host_id != null && Number.isInteger(raw.host_id)) {
-        targetUrl = `/hosts/${raw.host_id}`;
-      } else if (raw.label) {
-        const ipMatch = String(raw.label).match(/(\d{1,3}(?:\.\d{1,3}){3})/);
-        const ip = ipMatch ? ipMatch[1] : raw.label;
-        targetUrl = `/hosts?ip=${encodeURIComponent(ip)}`;
-      }
-      if (!targetUrl) return;
-
-      // Open in new tab
-      const win = window.open(targetUrl, "_blank", "noopener,noreferrer");
-      if (win) win.focus();
-    });
-
-
-
-
-    canvas._chartInstance = window.timelineChart;
-    canvas._timelineDomain = { min: domainMin, max: domainMax };
-    attachScanLegendHandlers();
-
-    console.info("[ScanTimeline] rendered host-level progression:", hostRanges.length, "hosts");
-  } catch (err) {
-    console.error("renderScanTimeline host-level exception:", err);
-    const canvas = document.getElementById("scanTimeline");
-    if (canvas) {
-      canvas.style.display = "none";
-      const msg = document.createElement("div");
-      msg.className = "text-danger small pt-3";
-      msg.textContent = "Failed to render scan timeline (see console).";
-      canvas.parentNode.appendChild(msg);
-    }
-  }
-}
-
 /* Toggle datasets in timeline by group via header legend clicks */
 function attachScanLegendHandlers() {
   try {
@@ -1257,7 +929,7 @@ function attachScanLegendHandlers() {
 /* ---- Popup modal behavior ---- */
 document.addEventListener('DOMContentLoaded', () => {
   try { renderServicesChart(); } catch (e) { console.error(e); }
-  try { renderScanTimeline(); } catch (e) { console.error(e); }
+  
 
   try { adjustTilesToUniqueHosts(); } catch (e) { console.warn(e); }
 
@@ -1269,20 +941,21 @@ document.addEventListener('DOMContentLoaded', () => {
   let popupModal = null;
   function ensurePopupModal() {
     if (popupModal) return popupModal;
+    const isLight = document.body.classList.contains('light-theme');
     const div = document.createElement('div');
     div.id = 'chartPopupModal';
     div.className = 'modal fade';
     div.tabIndex = -1;
     div.innerHTML = `
-      <div class="modal-dialog modal-dialog-centered" role="document" style="max-width:1200px;">
-        <div class="modal-content bg-dark text-white">
+      <div class="modal-dialog modal-dialog-centered" role="document" style="max-width:90vw;">
+        <div class="modal-content ${isLight ? 'bg-light text-dark' : 'bg-dark text-white'}">
           <div class="modal-header border-0 d-flex justify-content-between align-items-center">
             <h5 class="modal-title" id="chartPopupTitle">Chart</h5>
             <div class="d-flex align-items-center">
-              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+              <button type="button" class="btn-close ${isLight ? '' : 'btn-close-white'}" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
           </div>
-          <div class="modal-body"><div id="popupCanvasHolder"></div></div>
+          <div class="modal-body" style="max-height: 80vh; overflow-y: auto; overflow-x: hidden; padding: 0;"><div id="popupCanvasHolder" style="padding: 1rem;"></div></div>
         </div>
       </div>`;
     document.body.appendChild(div);
@@ -1290,63 +963,264 @@ document.addEventListener('DOMContentLoaded', () => {
     return popupModal;
   }
 
+  // ---- Timeline dropdown auto-refresh ----
+  const filterSel = document.getElementById("timelineFilter");
+  if (filterSel) {
+    filterSel.addEventListener("change", () => {
+      try { renderScanTimelineD3(); } catch (e) { console.error(e); }
+    });
+  }
+
+  // ---- On-Demand Scans Toggle ----
+  const onDemandToggle = document.getElementById("showOnDemandScans");
+  if (onDemandToggle) {
+    onDemandToggle.addEventListener("change", async () => {
+      if (onDemandToggle.checked && window.onDemandScans.length === 0) {
+        // Fetch on-demand scans if not already loaded
+        await fetchOnDemandScans();
+      }
+      // Re-render timeline with or without on-demand scans
+      try { renderScanTimelineD3(); } catch (e) { console.error(e); }
+      // Also update tile counts
+      try { adjustTilesToUniqueHosts(); } catch (e) { console.warn(e); }
+    });
+  }
+
+  // Fetch on-demand scans in the background on page load
+  fetchOnDemandScans().catch(e => console.error('Background fetch failed:', e));
+
+  // Helper to get scan count from data
+  function getScanCountFromData() {
+    try {
+      const canvas = document.getElementById("scanTimeline");
+      if (canvas && canvas.dataset && canvas.dataset.scantimes) {
+        const data = JSON.parse(canvas.dataset.scantimes);
+        return Array.isArray(data) ? data.length : 20;
+      }
+    } catch (e) {
+      console.warn("Failed to get scan count:", e);
+    }
+    return 20; // default
+  }
+
   function openPopupForCanvas(canvasId, title) {
-    const canvas = document.getElementById(canvasId);
-    if (!canvas) return;
+    const element = document.getElementById(canvasId);
+    if (!element) {
+      console.error(`Element ${canvasId} not found for popup`);
+      return;
+    }
+
     const modalEl = ensurePopupModal();
     const holder = modalEl.querySelector('#popupCanvasHolder');
     const titleEl = modalEl.querySelector('#chartPopupTitle');
 
+    // For timeline, we need to handle the wrapper div, not the inner div
+    let targetElement = element;
+    if (canvasId === 'scanTimeline') {
+      targetElement = document.getElementById('scanTimelineWrap');
+      if (!targetElement) {
+        console.error('scanTimelineWrap not found');
+        return;
+      }
+    }
+
     const placeholder = document.createElement('div');
     placeholder.className = 'canvas-placeholder';
-    placeholder.style.width = canvas.getBoundingClientRect().width + 'px';
-    placeholder.style.height = canvas.getBoundingClientRect().height + 'px';
-    canvas.parentNode.insertBefore(placeholder, canvas);
+    placeholder.style.width = targetElement.getBoundingClientRect().width + 'px';
+    placeholder.style.height = targetElement.getBoundingClientRect().height + 'px';
+    targetElement.parentNode.insertBefore(placeholder, targetElement);
 
     holder.innerHTML = '';
-    holder.appendChild(canvas);
 
     if (canvasId === 'servicesChart') {
-      const modalInnerW = Math.min(window.innerWidth * 0.95, 1100);
-      canvas.style.width = (modalInnerW - 40) + 'px';
-      canvas.style.height = Math.max(480, window.innerHeight * 0.55) + 'px';
-      holder.style.overflowX = 'hidden';
-    } else if (canvasId === 'scanTimeline') {
-      const domain = canvas._timelineDomain || {};
-      let dur = 0;
-      if (domain && domain.max && domain.min) dur = Math.max(0, domain.max - domain.min);
-      const w = computeTimelineCanvasWidth(dur);
-      canvas.style.width = w + 'px';
-      canvas.style.height = Math.max(520, window.innerHeight * 0.58) + 'px';
+      // Calculate width based on number of services for proper spacing
+      const chart = window.servicesChart || targetElement._chartInstance;
+      let serviceCount = 20; // default
+      if (chart && chart.data && chart.data.labels) {
+        serviceCount = chart.data.labels.length;
+      }
+
+      // Use same logic as computeServicesCanvasWidth: 70px per service
+      const perLabel = 70;
+      const minW = 1200, maxW = 5000;
+      let calculatedWidth = Math.max(minW, serviceCount * perLabel);
+      calculatedWidth = Math.min(calculatedWidth, maxW);
+
+      // Create a wrapper div to hold the canvas at the proper width
+      const canvasWrap = document.createElement('div');
+      canvasWrap.style.width = calculatedWidth + 'px';
+      canvasWrap.style.height = Math.max(480, window.innerHeight * 0.55) + 'px';
+      canvasWrap.style.position = 'relative';
+
+      canvasWrap.appendChild(targetElement);
+      holder.appendChild(canvasWrap);
+
+      targetElement.style.width = '100%';
+      targetElement.style.height = '100%';
+
       holder.style.overflowX = 'auto';
+      holder.style.overflowY = 'hidden';
+    } else if (canvasId === 'scanTimeline') {
+      // For timeline popup, calculate optimal width based on scan count
+      // Scale intelligently: small datasets get more space per scan, large datasets are more compressed
+      const scanCount = getScanCountFromData();
+
+      let pixelsPerScan;
+      if (scanCount <= 50) {
+        pixelsPerScan = 100; // Lots of space for small datasets
+      } else if (scanCount <= 200) {
+        pixelsPerScan = 60;  // Medium spacing
+      } else if (scanCount <= 1000) {
+        pixelsPerScan = 30;  // Tighter spacing for larger datasets
+      } else {
+        pixelsPerScan = 15;  // Very tight for massive datasets (10k+)
+      }
+
+      const expandedWidth = Math.max(1500, Math.min(scanCount * pixelsPerScan, 10000)); // Cap at 10k px
+
+      holder.appendChild(targetElement);
+
+      targetElement.style.width = expandedWidth + 'px';
+      targetElement.style.height = Math.max(600, window.innerHeight * 0.7) + 'px';
+      targetElement.style.minHeight = '600px';
+      targetElement.style.overflow = 'visible';
+
+      holder.style.overflowX = 'auto';
+      holder.style.overflowY = 'hidden';
+      holder.style.width = '100%';
+      holder.style.maxWidth = 'none';
+      holder.style.display = 'block';
+
+      // Add scrollbar styling for better visibility
+      holder.style.cssText += `
+        overflow-x: auto;
+        overflow-y: hidden;
+        width: 100%;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255,255,255,0.3) rgba(0,0,0,0.3);
+      `;
     } else {
-      canvas.style.width = '900px';
-      canvas.style.height = '480px';
+      // For other chart types, append normally
+      holder.appendChild(targetElement);
+      targetElement.style.width = '900px';
+      targetElement.style.height = '480px';
       holder.style.overflowX = 'auto';
     }
 
     titleEl.textContent = title || 'Chart';
-    modalEl._activeCanvas = canvas;
+    modalEl._activeElement = targetElement;
     modalEl._placeholder = placeholder;
+    modalEl._isTimeline = (canvasId === 'scanTimeline');
+    modalEl._isServicesChart = (canvasId === 'servicesChart');
 
     const modal = new bootstrap.Modal(modalEl);
     modal.show();
 
     modalEl.addEventListener('shown.bs.modal', function onShown() {
-      try { if (canvas._chartInstance && typeof canvas._chartInstance.resize === 'function') canvas._chartInstance.resize(); } catch (e) { console.error(e); }
+      if (canvasId === 'scanTimeline') {
+        // Re-render the D3 timeline at popup size
+        setTimeout(() => {
+          try { renderScanTimelineD3(); } catch (e) { console.error("D3 re-render in modal failed:", e); }
+        }, 150);
+      } else if (canvasId === 'servicesChart') {
+        // For services chart, destroy and recreate at larger size for better quality
+        setTimeout(() => {
+          try {
+            const chart = window.servicesChart;
+            if (chart) {
+              // Store the chart data
+              const chartData = {
+                labels: chart.data.labels,
+                values: chart.data.datasets[0].data
+              };
+
+              // Destroy the old chart
+              chart.destroy();
+
+              // Recreate with higher pixel ratio for the modal
+              const ctx = targetElement.getContext('2d');
+              window.servicesChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                  labels: chartData.labels,
+                  datasets: [{
+                    data: chartData.values,
+                    backgroundColor: "#0d6efd"
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  devicePixelRatio: window.devicePixelRatio * 1.5 || 3,
+                  plugins: { legend: { display: false } },
+                  onClick: (evt, elements) => {
+                    if (elements.length > 0) {
+                      const idx = elements[0].index;
+                      window.location.href = `/services/${String(chartData.labels[idx]).toLowerCase()}`;
+                    }
+                  },
+                  scales: {
+                    x: {
+                      ticks: {
+                        color: document.body.classList.contains('light-theme') ? "#212529" : "#e0e0e0",
+                        font: { size: 12 }
+                      },
+                      grid: { color: document.body.classList.contains('light-theme') ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.06)" }
+                    },
+                    y: {
+                      ticks: {
+                        color: document.body.classList.contains('light-theme') ? "#212529" : "#e0e0e0",
+                        precision: 0,
+                        font: { size: 12 }
+                      },
+                      grid: { color: document.body.classList.contains('light-theme') ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.06)" }
+                    }
+                  }
+                }
+              });
+              targetElement._chartInstance = window.servicesChart;
+            }
+          } catch (e) {
+            console.error("Services chart resize error:", e);
+          }
+        }, 150);
+      } else {
+        try { if (targetElement._chartInstance && typeof targetElement._chartInstance.resize === 'function') targetElement._chartInstance.resize(); } catch (e) { console.error(e); }
+      }
       modalEl.removeEventListener('shown.bs.modal', onShown);
     });
 
     modalEl.addEventListener('hidden.bs.modal', function onHidden() {
       try {
-        if (modalEl._activeCanvas && modalEl._placeholder) {
-          modalEl._placeholder.parentNode.insertBefore(modalEl._activeCanvas, modalEl._placeholder);
+        if (modalEl._activeElement && modalEl._placeholder) {
+          modalEl._placeholder.parentNode.insertBefore(modalEl._activeElement, modalEl._placeholder);
           modalEl._placeholder.parentNode.removeChild(modalEl._placeholder);
-          modalEl._activeCanvas.style.width = '100%';
-          modalEl._activeCanvas.style.height = '';
-          try { if (modalEl._activeCanvas._chartInstance) modalEl._activeCanvas._chartInstance.resize(); } catch (e) { console.error(e); }
-          modalEl._activeCanvas = null;
+          modalEl._activeElement.style.width = '';
+          modalEl._activeElement.style.height = '';
+          modalEl._activeElement.style.minHeight = '';
+
+          if (modalEl._isTimeline) {
+            // Re-render timeline back at dashboard size
+            setTimeout(() => {
+              try { renderScanTimelineD3(); } catch (e) { console.error(e); }
+            }, 150);
+          } else if (modalEl._isServicesChart) {
+            // Recreate services chart at dashboard size
+            setTimeout(() => {
+              try {
+                renderServicesChart();
+              } catch (e) {
+                console.error("Services chart restore error:", e);
+              }
+            }, 150);
+          } else {
+            try { if (modalEl._activeElement._chartInstance) modalEl._activeElement._chartInstance.resize(); } catch (e) { console.error(e); }
+          }
+
+          modalEl._activeElement = null;
           modalEl._placeholder = null;
+          modalEl._isTimeline = false;
+          modalEl._isServicesChart = false;
           setTimeout(syncChartHeights, 80);
         }
       } catch (e) { console.error("restore error:", e); }
@@ -1354,11 +1228,64 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  if (scanBtn) scanBtn.addEventListener('click', () => openPopupForCanvas('scanTimeline', 'Scan Timeline Overview'));
-  if (svcBtn)  svcBtn.addEventListener('click', () => openPopupForCanvas('servicesChart', 'Top Services Overview'));
+  if (scanBtn) {
+    scanBtn.addEventListener('click', () => {
+      const filterSel = document.getElementById("timelineFilter");
+      const currentFilter = filterSel ? filterSel.value : "all";
+      localStorage.setItem("cygor_timeline_filter", currentFilter);
+
+      openPopupForCanvas('scanTimeline', `Scan Timeline (${currentFilter === "latest" ? "Most Recent" : currentFilter === "first" ? "First Batch" : "All"})`);
+      // Re-rendering is now handled in the modal shown event
+    });
+  }
+
+  if (svcBtn) {
+    svcBtn.addEventListener('click', () => {
+      openPopupForCanvas('servicesChart', 'Top Services');
+    });
+  }
+
+  // Auto-refresh dashboard when page gains focus (user switches back to tab)
+  window.addEventListener('focus', () => {
+    console.log('Dashboard focused - refreshing data...');
+    window.location.reload();
+  });
+
+  // Listen for database sync events from other tabs/pages
+  window.addEventListener('storage', (e) => {
+    // Check if this is a sync completion event
+    if (e.key === 'cygor_last_sync' && e.newValue) {
+      try {
+        const syncData = JSON.parse(e.newValue);
+        console.log('Database sync detected from another tab:', syncData);
+
+        // Show a brief notification before reloading
+        const notification = document.createElement('div');
+        notification.className = 'alert alert-success position-fixed top-0 start-50 translate-middle-x mt-3';
+        notification.style.zIndex = '9999';
+        notification.innerHTML = `
+          <i class="bi bi-check-circle-fill me-2"></i>
+          Database synced! ${syncData.hosts_added} new host(s), ${syncData.ports_added} new port(s). Refreshing...
+        `;
+        document.body.appendChild(notification);
+
+        // Reload after brief delay to show notification
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } catch (err) {
+        console.error('Failed to parse sync event:', err);
+      }
+    }
+  });
+
+  // Optional: Auto-refresh every 60 seconds for live monitoring
+  // Uncomment the line below to enable periodic auto-refresh
+  // setInterval(() => { window.location.reload(); }, 60000);
 });
 
 window.addEventListener('resize', debounce(syncChartHeights, 150));
+
 </script>
 
 {% endblock %}

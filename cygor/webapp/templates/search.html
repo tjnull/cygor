@@ -1,46 +1,434 @@
 {% extends "base.html" %}
 {% block content %}
 
+<style>
+/* Advanced Search Styling */
+.search-hero {
+  background: linear-gradient(135deg, #1a1a1a 0%, #0d1117 100%);
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 2.5rem;
+  margin-bottom: 2rem;
+}
+
+.search-input-wrapper {
+  position: relative;
+}
+
+.search-input-lg {
+  font-size: 1.1rem;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  border: 2px solid #30363d;
+  background: #0d1117;
+  color: #e6edf3;
+  transition: all 0.2s ease;
+}
+
+.search-input-lg:focus {
+  border-color: #1f6feb;
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.3);
+  background: #0d1117;
+}
+
+.search-btn-lg {
+  font-size: 1.1rem;
+  padding: 1rem 2rem;
+  font-weight: 600;
+  border-radius: 0;
+}
+
+.input-group .dropdown {
+  display: flex;
+}
+
+.input-group .dropdown .export-btn {
+  border-radius: 0 8px 8px 0;
+  height: 100%;
+}
+
+.filter-chip {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 20px;
+  padding: 0.5rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin: 0.25rem;
+}
+
+.filter-chip:hover {
+  background: #21262d;
+  border-color: #1f6feb;
+}
+
+.filter-chip.active {
+  background: #1f6feb;
+  border-color: #1f6feb;
+  color: #ffffff;
+}
+
+.filter-chip input[type="checkbox"] {
+  margin: 0;
+}
+
+.results-card {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.results-card:hover {
+  border-color: #484f58;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.result-item {
+  padding: 1rem;
+  border-bottom: 1px solid #21262d;
+  transition: background 0.15s ease;
+}
+
+.result-item:hover {
+  background: #161b22;
+}
+
+.result-item:last-child {
+  border-bottom: none;
+}
+
+.export-dropdown {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 0.5rem;
+}
+
+.export-btn {
+  background: #238636;
+  border-color: #238636;
+  color: #ffffff;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+}
+
+.export-btn:hover {
+  background: #2ea043;
+  border-color: #2ea043;
+  color: #ffffff;
+}
+
+.stats-badge {
+  background: #1f6feb;
+  color: #ffffff;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* Light theme overrides */
+body.light-theme .search-hero {
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+  border-color: #dee2e6;
+}
+
+body.light-theme .search-input-lg {
+  background: #ffffff;
+  color: #212529;
+  border-color: #dee2e6;
+}
+
+body.light-theme .search-input-lg:focus {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+  background: #ffffff;
+}
+
+body.light-theme .filter-chip {
+  background: #ffffff;
+  border-color: #dee2e6;
+  color: #212529;
+}
+
+body.light-theme .filter-chip:hover {
+  background: #f8f9fa;
+  border-color: #0d6efd;
+}
+
+body.light-theme .filter-chip.active {
+  background: #0d6efd;
+  border-color: #0d6efd;
+  color: #ffffff;
+}
+
+body.light-theme .results-card {
+  background: #ffffff;
+  border-color: #dee2e6;
+}
+
+body.light-theme .results-card:hover {
+  border-color: #adb5bd;
+}
+
+body.light-theme .result-item {
+  border-bottom-color: #e9ecef;
+}
+
+body.light-theme .result-item:hover {
+  background: #f8f9fa;
+}
+
+body.light-theme .card.bg-dark {
+  background: #ffffff !important;
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme .card-header {
+  background: #f8f9fa !important;
+  border-bottom-color: #dee2e6 !important;
+}
+
+body.light-theme h1,
+body.light-theme h2,
+body.light-theme h3,
+body.light-theme h4,
+body.light-theme h5,
+body.light-theme .text-light {
+  color: #212529 !important;
+}
+
+body.light-theme .export-dropdown {
+  background: #ffffff;
+  border-color: #dee2e6;
+}
+
+body.light-theme .alert-info {
+  background: #cfe2ff !important;
+  color: #084298 !important;
+  border-color: #b6d4fe !important;
+}
+
+body.light-theme .btn-link.text-info {
+  color: #0d6efd !important;
+}
+
+body.light-theme .card.bg-dark.border-secondary {
+  background: #ffffff !important;
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme .card.bg-dark.border-secondary .card-body {
+  background: #ffffff !important;
+}
+
+body.light-theme .card.bg-dark.border-secondary code {
+  background: #f8f9fa !important;
+  color: #0d6efd !important;
+}
+
+body.light-theme .card.bg-dark.border-secondary .rounded {
+  background: #f8f9fa !important;
+  border-color: #dee2e6 !important;
+}
+</style>
+
+<style>
+/* Rotate chevron when help is expanded */
+#searchHelp.show ~ button .bi-chevron-down {
+  transform: rotate(180deg);
+  transition: transform 0.3s ease;
+}
+
+button[data-bs-target="#searchHelp"] .bi-chevron-down {
+  transition: transform 0.3s ease;
+}
+</style>
 
 <div class="container-fluid py-4">
-  <!-- Search Header -->
-  <div class="mb-4">
-    <h2 class="mb-3">
-      <i class="bi bi-search me-2"></i>Search
-    </h2>
+  <!-- Search Hero Section -->
+  <div class="search-hero">
+    <div class="mb-3">
+      <h1 class="mb-2">
+        <i class="bi bi-search me-2"></i>Cygor Search
+      </h1>
+      <p class="text-secondary mb-0">Search and export scan data with powerful filtering</p>
+    </div>
 
-    <!-- Search Form -->
-    <form method="get" action="/search" class="mb-4">
-      <div class="input-group input-group-lg ">
-        <span class="input-group-text">
-          <i class="bi bi-search text-info"></i>
+    <!-- Main Search Form -->
+    <form method="get" action="/search" id="searchForm">
+      <div class="input-group input-group-lg mb-3">
+        <span class="input-group-text bg-dark border-secondary">
+          <i class="bi bi-search text-info fs-5"></i>
         </span>
         <input
           type="text"
           name="q"
-          class="form-control form-control-lg"
+          id="searchQuery"
+          class="form-control search-input-lg"
           placeholder="Search hosts, services, banners, script output..."
           value="{{ query or '' }}"
           autofocus
         >
-        <button class="btn btn-primary px-4" type="submit">
+        <button class="btn btn-primary search-btn-lg" type="submit">
           <i class="bi bi-search me-2"></i>Search
         </button>
+
+        <!-- Export Dropdown in Search Bar -->
+        <div class="dropdown">
+          <button class="btn export-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" style="border-radius: 0 8px 8px 0;">
+            <i class="bi bi-download me-2"></i>Export
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end export-dropdown">
+            <li>
+              <a class="dropdown-item" href="#" onclick="exportResults('json'); return false;">
+                <i class="bi bi-filetype-json me-2 text-warning"></i>JSON Format
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" onclick="exportResults('csv'); return false;">
+                <i class="bi bi-filetype-csv me-2 text-success"></i>CSV Format
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" onclick="exportResults('xml'); return false;">
+                <i class="bi bi-file-earmark-code me-2 text-danger"></i>XML Format
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="#" onclick="exportResults('txt'); return false;">
+                <i class="bi bi-filetype-txt me-2 text-info"></i>Plain Text
+              </a>
+            </li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+              <a class="dropdown-item" href="#" onclick="copyToClipboard(); return false;">
+                <i class="bi bi-clipboard me-2 text-primary"></i>Copy to Clipboard
+              </a>
+            </li>
+          </ul>
+        </div>
       </div>
-      <div class="form-text text-light mt-2">
-        <i class="bi bi-info-circle me-1"></i>
-        Search across IP addresses, hostnames, service names, banners, and script outputs
+
+      <!-- Advanced Filters -->
+      <div class="mb-3">
+        <label class="text-light fw-semibold mb-2">
+          <i class="bi bi-funnel me-1"></i>Filter by:
+        </label>
+        <div class="d-flex flex-wrap gap-2">
+          <label class="filter-chip">
+            <input type="checkbox" name="filter" value="hosts" {% if 'hosts' in (filters or []) %}checked{% endif %}>
+            <i class="bi bi-hdd-network"></i>
+            <span>Hosts</span>
+          </label>
+          <label class="filter-chip">
+            <input type="checkbox" name="filter" value="services" {% if 'services' in (filters or []) %}checked{% endif %}>
+            <i class="bi bi-diagram-3"></i>
+            <span>Services</span>
+          </label>
+          <label class="filter-chip">
+            <input type="checkbox" name="filter" value="scripts" {% if 'scripts' in (filters or []) %}checked{% endif %}>
+            <i class="bi bi-file-code"></i>
+            <span>Scripts</span>
+          </label>
+          <label class="filter-chip">
+            <input type="checkbox" name="filter" value="banners" {% if 'banners' in (filters or []) %}checked{% endif %}>
+            <i class="bi bi-terminal"></i>
+            <span>Banners</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Port Range Filter -->
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label text-light fw-semibold">
+            <i class="bi bi-segmented-nav me-1"></i>Port Range (optional)
+          </label>
+          <div class="input-group">
+            <input type="number" name="port_min" class="form-control bg-dark text-light border-secondary" placeholder="Min (e.g., 1)" value="{{ port_min or '' }}">
+            <span class="input-group-text bg-dark text-light border-secondary">to</span>
+            <input type="number" name="port_max" class="form-control bg-dark text-light border-secondary" placeholder="Max (e.g., 65535)" value="{{ port_max or '' }}">
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label text-light fw-semibold">
+            <i class="bi bi-sort-down me-1"></i>Sort by
+          </label>
+          <select name="sort" class="form-select bg-dark text-light border-secondary">
+            <option value="relevance" {% if sort == 'relevance' %}selected{% endif %}>Relevance</option>
+            <option value="ip_asc" {% if sort == 'ip_asc' %}selected{% endif %}>IP Address (A-Z)</option>
+            <option value="ip_desc" {% if sort == 'ip_desc' %}selected{% endif %}>IP Address (Z-A)</option>
+            <option value="port_asc" {% if sort == 'port_asc' %}selected{% endif %}>Port Number (Low-High)</option>
+            <option value="port_desc" {% if sort == 'port_desc' %}selected{% endif %}>Port Number (High-Low)</option>
+          </select>
+        </div>
       </div>
     </form>
+
+    <!-- Collapsible Help Section -->
+    <div class="mt-3">
+      <button class="btn btn-link text-info p-0" type="button" data-bs-toggle="collapse" data-bs-target="#searchHelp" aria-expanded="false">
+        <i class="bi bi-question-circle-fill me-2"></i>Need help? Click here for search tips and examples
+        <i class="bi bi-chevron-down ms-2"></i>
+      </button>
+
+      <div class="collapse mt-3" id="searchHelp">
+        <div class="card bg-dark border-secondary">
+          <div class="card-body">
+            <div class="row g-4">
+              <div class="col-md-6">
+                <h6 class="text-light mb-3">
+                  <i class="bi bi-lightbulb-fill me-2 text-warning"></i>Search Examples
+                </h6>
+                <ul class="text-secondary mb-0" style="line-height: 1.8;">
+                  <li><code class="text-info bg-black px-2 py-1 rounded">192.168.1</code> - Find hosts in subnet</li>
+                  <li><code class="text-info bg-black px-2 py-1 rounded">ssh</code> - Find SSH services</li>
+                  <li><code class="text-info bg-black px-2 py-1 rounded">Apache</code> - Find Apache servers</li>
+                  <li><code class="text-info bg-black px-2 py-1 rounded">SSL</code> - Find SSL/TLS info</li>
+                  <li><code class="text-info bg-black px-2 py-1 rounded">port:22</code> - Specific port number</li>
+                </ul>
+              </div>
+              <div class="col-md-6">
+                <h6 class="text-light mb-3">
+                  <i class="bi bi-funnel-fill me-2 text-success"></i>Filter Options
+                </h6>
+                <ul class="text-secondary mb-0" style="line-height: 1.8;">
+                  <li><strong class="text-light">Hosts</strong> - Search by IP or hostname</li>
+                  <li><strong class="text-light">Services</strong> - Filter by service name</li>
+                  <li><strong class="text-light">Scripts</strong> - NSE script output</li>
+                  <li><strong class="text-light">Banners</strong> - Service banner info</li>
+                  <li><strong class="text-light">Port Range</strong> - Filter by port numbers</li>
+                </ul>
+              </div>
+            </div>
+            <div class="mt-3 p-3 rounded" style="background: #161b22; border: 1px solid #30363d;">
+              <h6 class="text-light mb-2">
+                <i class="bi bi-download me-2"></i>Export Tip
+              </h6>
+              <p class="text-secondary mb-0 small">
+                After searching, use the <strong class="text-success">Export button</strong> in the search bar to download results in <strong>JSON</strong>, <strong>CSV</strong>, <strong>XML</strong>, or <strong>Plain Text</strong> format!
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   {% if query %}
-    <!-- Results Summary -->
+    <!-- Results Header -->
     <div class="alert alert-info border-0 mb-4">
       <i class="bi bi-info-circle me-2"></i>
       Showing results for: <strong>"{{ query }}"</strong>
-      <span class="ms-3 text-light">
-        ({{ hosts_total }} hosts, {{ ports_total }} services, {{ scripts_total }} scripts)
+      <span class="ms-3">
+        <span class="stats-badge">{{ hosts_total }} hosts</span>
+        <span class="stats-badge ms-2">{{ ports_total }} services</span>
+        <span class="stats-badge ms-2">{{ scripts_total }} scripts</span>
       </span>
     </div>
 
@@ -48,42 +436,50 @@
     <div class="row g-4">
       <!-- Hosts Column -->
       <div class="col-lg-4">
-        <div class="card bg-dark h-100">
-          <div class="card-header">
-            <h5 class="mb-0">
-              <i class="bi bi-hdd-network me-2"></i>Hosts
-              <span class="badge bg-primary ms-2">{{ hosts_total }}</span>
+        <div class="card bg-dark h-100 results-card">
+          <div class="card-header bg-dark border-secondary py-3">
+            <h5 class="mb-0 d-flex align-items-center justify-content-between">
+              <span>
+                <i class="bi bi-hdd-network me-2 text-info"></i>Hosts
+              </span>
+              <span class="badge bg-info">{{ hosts_total }}</span>
             </h5>
           </div>
-          <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+          <div class="card-body p-0" style="max-height: 600px; overflow-y: auto;">
             {% if hosts %}
-              <ul class="list-unstyled mb-0">
+              <div id="hostsResults">
                 {% for h in hosts %}
-                  <li class="mb-3 pb-3 border-bottom border-secondary">
+                  <div class="result-item" data-type="host" data-ip="{{ h.address }}" data-hostname="{{ h.hostname or '' }}">
                     <a href="/hosts/{{ h.id }}" class="text-decoration-none">
                       <div class="d-flex align-items-center">
-                        <i class="bi bi-hdd-network text-info me-2"></i>
-                        <div>
-                          <div class="text-light fw-semibold">{{ h.address }}</div>
+                        <i class="bi bi-hdd-network-fill text-info me-3 fs-5"></i>
+                        <div class="flex-grow-1">
+                          <div class="text-light fw-semibold mb-1" style="font-size: 1.05rem;">{{ h.address }}</div>
                           {% if h.hostname %}
-                            <div class="text-light small">{{ h.hostname }}</div>
+                            <div class="text-secondary small">
+                              <i class="bi bi-globe2 me-1"></i>{{ h.hostname }}
+                            </div>
                           {% endif %}
+                          <div class="text-secondary small mt-1">
+                            <span class="badge bg-secondary">{{ h.ports|length if h.ports else 0 }} ports</span>
+                          </div>
                         </div>
+                        <i class="bi bi-chevron-right text-secondary"></i>
                       </div>
                     </a>
-                  </li>
+                  </div>
                 {% endfor %}
-              </ul>
+              </div>
 
               {% if hosts_pages > 1 %}
-                <div class="mt-3">
+                <div class="p-3 border-top border-secondary">
                   {% from "pagination.html" import render_pagination %}
                   {{ render_pagination(page, hosts_pages, per_page, '/search', True) }}
                 </div>
               {% endif %}
             {% else %}
-              <div class="text-center text-light py-4">
-                <i class="bi bi-inbox fs-1 mb-2"></i>
+              <div class="text-center text-secondary py-5">
+                <i class="bi bi-inbox fs-1 mb-3 d-block"></i>
                 <div>No matching hosts found</div>
               </div>
             {% endif %}
@@ -93,49 +489,56 @@
 
       <!-- Services Column -->
       <div class="col-lg-4">
-        <div class="card bg-dark h-100">
-          <div class="card-header">
-            <h5 class="mb-0">
-              <i class="bi bi-diagram-3 me-2"></i>Services
-              <span class="badge bg-success ms-2">{{ ports_total }}</span>
+        <div class="card bg-dark h-100 results-card">
+          <div class="card-header bg-dark border-secondary py-3">
+            <h5 class="mb-0 d-flex align-items-center justify-content-between">
+              <span>
+                <i class="bi bi-diagram-3-fill me-2 text-success"></i>Services
+              </span>
+              <span class="badge bg-success">{{ ports_total }}</span>
             </h5>
           </div>
-          <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+          <div class="card-body p-0" style="max-height: 600px; overflow-y: auto;">
             {% if ports %}
-              <ul class="list-unstyled mb-0">
+              <div id="servicesResults">
                 {% for p in ports %}
-                  <li class="mb-3 pb-3 border-bottom border-secondary">
+                  <div class="result-item" data-type="service" data-ip="{{ p.host.address }}" data-port="{{ p.port }}" data-service="{{ p.service or 'unknown' }}" data-banner="{{ p.banner or '' }}">
                     <div class="d-flex align-items-start">
-                      <i class="bi bi-diagram-3 text-success me-2 mt-1"></i>
+                      <i class="bi bi-diagram-3-fill text-success me-3 fs-5 mt-1"></i>
                       <div class="flex-grow-1">
-                        <div class="text-light">
-                          <a href="/hosts/{{ p.host.id }}" class="text-info text-decoration-none">
+                        <div class="mb-2">
+                          <a href="/hosts/{{ p.host.id }}" class="text-info text-decoration-none fw-semibold">
                             {{ p.host.address }}
                           </a>
-                          <span class="text-light mx-1">:</span>
-                          <span class="text-warning fw-semibold">{{ p.port }}</span>
+                          <span class="text-secondary mx-1">:</span>
+                          <span class="badge bg-primary" style="font-size: 0.9rem; padding: 0.4rem 0.75rem;">{{ p.port }}/{{ p.protocol or 'tcp' }}</span>
                         </div>
-                        <div class="text-light small">
-                          <span class="badge bg-secondary">{{ p.service or "unknown" }}</span>
+                        <div class="mb-2">
+                          <span class="badge bg-success">{{ p.service or "unknown" }}</span>
                           {% if p.banner %}
-                            <div class="mt-1 text-light font-monospace small">{{ p.banner[:100] }}{% if p.banner|length > 100 %}...{% endif %}</div>
+                            <span class="badge bg-secondary ms-1">has banner</span>
                           {% endif %}
                         </div>
+                        {% if p.banner %}
+                          <div class="text-secondary font-monospace small p-2 rounded" style="background: #0d1117; border: 1px solid #30363d; word-break: break-all;">
+                            {{ p.banner[:150] }}{% if p.banner|length > 150 %}<span class="text-warning">...</span>{% endif %}
+                          </div>
+                        {% endif %}
                       </div>
                     </div>
-                  </li>
+                  </div>
                 {% endfor %}
-              </ul>
+              </div>
 
               {% if ports_pages > 1 %}
-                <div class="mt-3">
+                <div class="p-3 border-top border-secondary">
                   {% from "pagination.html" import render_pagination %}
                   {{ render_pagination(page, ports_pages, per_page, '/search', True) }}
                 </div>
               {% endif %}
             {% else %}
-              <div class="text-center text-light py-4">
-                <i class="bi bi-inbox fs-1 mb-2"></i>
+              <div class="text-center text-secondary py-5">
+                <i class="bi bi-inbox fs-1 mb-3 d-block"></i>
                 <div>No matching services found</div>
               </div>
             {% endif %}
@@ -145,40 +548,42 @@
 
       <!-- Script Output Column -->
       <div class="col-lg-4">
-        <div class="card bg-dark h-100">
-          <div class="card-header">
-            <h5 class="mb-0">
-              <i class="bi bi-file-code me-2"></i>Script Output
-              <span class="badge bg-warning text-dark ms-2">{{ scripts_total }}</span>
+        <div class="card bg-dark h-100 results-card">
+          <div class="card-header bg-dark border-secondary py-3">
+            <h5 class="mb-0 d-flex align-items-center justify-content-between">
+              <span>
+                <i class="bi bi-file-code-fill me-2 text-warning"></i>Script Output
+              </span>
+              <span class="badge bg-warning text-dark">{{ scripts_total }}</span>
             </h5>
           </div>
-          <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+          <div class="card-body p-0" style="max-height: 600px; overflow-y: auto;">
             {% if scripts %}
-              <ul class="list-unstyled mb-0">
+              <div id="scriptsResults">
                 {% for s in scripts %}
-                  <li class="mb-3 pb-3 border-bottom border-secondary">
+                  <div class="result-item" data-type="script" data-name="{{ s.name }}" data-output="{{ s.output[:200] }}">
                     <div class="d-flex align-items-start">
-                      <i class="bi bi-file-code text-warning me-2 mt-1"></i>
+                      <i class="bi bi-file-code-fill text-warning me-3 fs-5 mt-1"></i>
                       <div class="flex-grow-1">
-                        <div class="text-light small mb-1">
-                          <span class="badge bg-info">{{ s.name }}</span>
+                        <div class="mb-2">
+                          <span class="badge bg-warning text-dark fw-semibold" style="font-size: 0.9rem;">{{ s.name }}</span>
                         </div>
-                        <div class="text-light small font-monospace" style="white-space: pre-wrap; word-break: break-word;">{{ s.output[:200] }}{% if s.output|length > 200 %}...{% endif %}</div>
+                        <div class="text-light font-monospace small p-2 rounded" style="background: #0d1117; border: 1px solid #30363d; white-space: pre-wrap; word-break: break-word; line-height: 1.5;">{{ s.output[:250] }}{% if s.output|length > 250 %}<span class="text-warning">...</span>{% endif %}</div>
                       </div>
                     </div>
-                  </li>
+                  </div>
                 {% endfor %}
-              </ul>
+              </div>
 
               {% if scripts_pages > 1 %}
-                <div class="mt-3">
+                <div class="p-3 border-top border-secondary">
                   {% from "pagination.html" import render_pagination %}
                   {{ render_pagination(page, scripts_pages, per_page, '/search', True) }}
                 </div>
               {% endif %}
             {% else %}
-              <div class="text-center text-light py-4">
-                <i class="bi bi-inbox fs-1 mb-2"></i>
+              <div class="text-center text-secondary py-5">
+                <i class="bi bi-inbox fs-1 mb-3 d-block"></i>
                 <div>No matching script output found</div>
               </div>
             {% endif %}
@@ -187,30 +592,305 @@
       </div>
     </div>
   {% else %}
-    <!-- No search query - show help -->
-    <div class="row justify-content-center">
-      <div class="col-lg-8">
-        <div class="card bg-dark">
-          <div class="card-body text-center py-5">
-            <i class="bi bi-search fs-1 text-light mb-3"></i>
-            <h4 class="text-light mb-3">Start Searching</h4>
-            <p class="text-light mb-4">
-              Search across all your scan data including IP addresses, hostnames, services, banners, and script outputs.
-            </p>
-            <div class="text-start">
-              <h6 class="text-light mb-2">Search Examples:</h6>
-              <ul class="text-light">
-                <li><code class="text-info">192.168.1</code> - Find hosts in this subnet</li>
-                <li><code class="text-info">ssh</code> - Find SSH services</li>
-                <li><code class="text-info">Apache</code> - Find Apache web servers</li>
-                <li><code class="text-info">SSL</code> - Find SSL/TLS related script output</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <div class="text-center text-secondary py-5">
   {% endif %}
 </div>
+
+<script>
+// Check if there are results and disable export button if not
+document.addEventListener('DOMContentLoaded', function() {
+  const hasResults = document.querySelectorAll('[data-type]').length > 0;
+  const exportBtn = document.querySelector('.export-btn');
+
+  if (exportBtn && !hasResults) {
+    exportBtn.disabled = true;
+    exportBtn.title = 'No results to export - perform a search first';
+  }
+});
+
+// Auto-submit form when filters change
+document.querySelectorAll('.filter-chip input').forEach(checkbox => {
+  checkbox.addEventListener('change', function() {
+    // Update chip appearance
+    const chip = this.closest('.filter-chip');
+    if (this.checked) {
+      chip.classList.add('active');
+    } else {
+      chip.classList.remove('active');
+    }
+  });
+});
+
+// Initialize active chips on page load
+document.querySelectorAll('.filter-chip input:checked').forEach(checkbox => {
+  checkbox.closest('.filter-chip').classList.add('active');
+});
+
+// Export functionality
+function exportResults(format) {
+  const query = '{{ query|e }}';
+  const filters = Array.from(document.querySelectorAll('input[name="filter"]:checked')).map(cb => cb.value);
+  const sortBy = document.querySelector('select[name="sort"]').value;
+
+  let data = {
+    query: query,
+    filters: filters,
+    timestamp: new Date().toISOString(),
+    results: {
+      hosts: [],
+      services: [],
+      scripts: []
+    }
+  };
+
+  // Collect hosts
+  document.querySelectorAll('[data-type="host"]').forEach(el => {
+    data.results.hosts.push({
+      ip: el.dataset.ip,
+      hostname: el.dataset.hostname || null
+    });
+  });
+
+  // Collect services
+  document.querySelectorAll('[data-type="service"]').forEach(el => {
+    data.results.services.push({
+      ip: el.dataset.ip,
+      port: el.dataset.port,
+      service: el.dataset.service,
+      banner: el.dataset.banner || null
+    });
+  });
+
+  // Collect scripts
+  document.querySelectorAll('[data-type="script"]').forEach(el => {
+    data.results.scripts.push({
+      name: el.dataset.name,
+      output: el.dataset.output
+    });
+  });
+
+  if (format === 'json') {
+    downloadJSON(data);
+  } else if (format === 'csv') {
+    downloadCSV(data);
+  } else if (format === 'xml') {
+    downloadXML(data);
+  } else if (format === 'txt') {
+    downloadText(data);
+  }
+}
+
+function downloadJSON(data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cygor-search-results-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('JSON export downloaded successfully!', 'success');
+}
+
+function downloadCSV(data) {
+  let csv = '';
+
+  // Hosts CSV
+  if (data.results.hosts.length > 0) {
+    csv += 'HOSTS\nIP Address,Hostname\n';
+    data.results.hosts.forEach(h => {
+      csv += `${h.ip},"${h.hostname || ''}"\n`;
+    });
+    csv += '\n';
+  }
+
+  // Services CSV
+  if (data.results.services.length > 0) {
+    csv += 'SERVICES\nIP Address,Port,Service,Banner\n';
+    data.results.services.forEach(s => {
+      csv += `${s.ip},${s.port},"${s.service}","${(s.banner || '').replace(/"/g, '""')}"\n`;
+    });
+    csv += '\n';
+  }
+
+  // Scripts CSV
+  if (data.results.scripts.length > 0) {
+    csv += 'SCRIPTS\nScript Name,Output\n';
+    data.results.scripts.forEach(s => {
+      csv += `"${s.name}","${s.output.replace(/"/g, '""')}"\n`;
+    });
+  }
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cygor-search-results-${Date.now()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV export downloaded successfully!', 'success');
+}
+
+function downloadXML(data) {
+  function escapeXML(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  xml += '<cygor_search_results>\n';
+  xml += `  <query>${escapeXML(data.query)}</query>\n`;
+  xml += `  <timestamp>${data.timestamp}</timestamp>\n`;
+  xml += '  <filters>\n';
+  data.filters.forEach(f => {
+    xml += `    <filter>${escapeXML(f)}</filter>\n`;
+  });
+  xml += '  </filters>\n';
+
+  // Hosts
+  if (data.results.hosts.length > 0) {
+    xml += '  <hosts>\n';
+    data.results.hosts.forEach(h => {
+      xml += '    <host>\n';
+      xml += `      <ip>${escapeXML(h.ip)}</ip>\n`;
+      if (h.hostname) xml += `      <hostname>${escapeXML(h.hostname)}</hostname>\n`;
+      xml += '    </host>\n';
+    });
+    xml += '  </hosts>\n';
+  }
+
+  // Services
+  if (data.results.services.length > 0) {
+    xml += '  <services>\n';
+    data.results.services.forEach(s => {
+      xml += '    <service>\n';
+      xml += `      <ip>${escapeXML(s.ip)}</ip>\n`;
+      xml += `      <port>${escapeXML(s.port)}</port>\n`;
+      xml += `      <service_name>${escapeXML(s.service)}</service_name>\n`;
+      if (s.banner) xml += `      <banner>${escapeXML(s.banner)}</banner>\n`;
+      xml += '    </service>\n';
+    });
+    xml += '  </services>\n';
+  }
+
+  // Scripts
+  if (data.results.scripts.length > 0) {
+    xml += '  <scripts>\n';
+    data.results.scripts.forEach(s => {
+      xml += '    <script>\n';
+      xml += `      <name>${escapeXML(s.name)}</name>\n`;
+      xml += `      <output><![CDATA[${s.output}]]></output>\n`;
+      xml += '    </' + 'script>\n';
+    });
+    xml += '  </scripts>\n';
+  }
+
+  xml += '</cygor_search_results>';
+
+  const blob = new Blob([xml], { type: 'application/xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cygor-search-results-${Date.now()}.xml`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('XML export downloaded successfully!', 'success');
+}
+
+function downloadText(data) {
+  let text = `Cygor Search Results\n`;
+  text += `Query: "${data.query}"\n`;
+  text += `Generated: ${new Date(data.timestamp).toLocaleString()}\n`;
+  text += `${'='.repeat(60)}\n\n`;
+
+  if (data.results.hosts.length > 0) {
+    text += `HOSTS (${data.results.hosts.length})\n${'-'.repeat(60)}\n`;
+    data.results.hosts.forEach(h => {
+      text += `IP: ${h.ip}\n`;
+      if (h.hostname) text += `Hostname: ${h.hostname}\n`;
+      text += '\n';
+    });
+    text += '\n';
+  }
+
+  if (data.results.services.length > 0) {
+    text += `SERVICES (${data.results.services.length})\n${'-'.repeat(60)}\n`;
+    data.results.services.forEach(s => {
+      text += `${s.ip}:${s.port} - ${s.service}\n`;
+      if (s.banner) text += `Banner: ${s.banner}\n`;
+      text += '\n';
+    });
+    text += '\n';
+  }
+
+  if (data.results.scripts.length > 0) {
+    text += `SCRIPTS (${data.results.scripts.length})\n${'-'.repeat(60)}\n`;
+    data.results.scripts.forEach(s => {
+      text += `Script: ${s.name}\n`;
+      text += `Output: ${s.output}\n`;
+      text += '\n';
+    });
+  }
+
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cygor-search-results-${Date.now()}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Text export downloaded successfully!', 'success');
+}
+
+function copyToClipboard() {
+  const query = '{{ query|e }}';
+  let text = `Search Results for: "${query}"\n\n`;
+
+  // Copy hosts
+  const hosts = Array.from(document.querySelectorAll('[data-type="host"]'));
+  if (hosts.length > 0) {
+    text += `HOSTS (${hosts.length}):\n`;
+    hosts.forEach(el => {
+      text += `  ${el.dataset.ip}`;
+      if (el.dataset.hostname) text += ` (${el.dataset.hostname})`;
+      text += '\n';
+    });
+    text += '\n';
+  }
+
+  // Copy services
+  const services = Array.from(document.querySelectorAll('[data-type="service"]'));
+  if (services.length > 0) {
+    text += `SERVICES (${services.length}):\n`;
+    services.forEach(el => {
+      text += `  ${el.dataset.ip}:${el.dataset.port} - ${el.dataset.service}\n`;
+    });
+    text += '\n';
+  }
+
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Results copied to clipboard!', 'success');
+  }).catch(err => {
+    console.error('Failed to copy:', err);
+    showToast('Failed to copy to clipboard', 'error');
+  });
+}
+
+function showToast(message, type) {
+  const toast = document.createElement('div');
+  toast.className = `alert alert-${type === 'success' ? 'success' : 'danger'} position-fixed top-0 start-50 translate-middle-x mt-3`;
+  toast.style.zIndex = '9999';
+  toast.innerHTML = `<i class="bi bi-${type === 'success' ? 'check-circle' : 'x-circle'}-fill me-2"></i>${message}`;
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.remove();
+  }, 3000);
+}
+</script>
 
 {% endblock %}

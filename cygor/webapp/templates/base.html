@@ -331,6 +331,65 @@
     body.light-theme .fs-2 {
       color: inherit !important;
     }
+    /* Modal dialogs in light theme */
+    body.light-theme .modal-content.bg-dark,
+    body.light-theme .modal-header.bg-dark,
+    body.light-theme .modal-body.bg-dark,
+    body.light-theme .modal-footer.bg-dark {
+      background: #ffffff !important;
+      color: #212529 !important;
+    }
+    body.light-theme .modal-title {
+      color: #212529 !important;
+    }
+    /* Accordion in light theme */
+    body.light-theme .accordion-item,
+    body.light-theme .accordion-item.bg-dark {
+      background: #ffffff !important;
+      color: #212529 !important;
+      border-color: rgba(0,0,0,0.1) !important;
+    }
+    body.light-theme .accordion-button,
+    body.light-theme .accordion-button.bg-dark {
+      background: #f8f9fa !important;
+      color: #212529 !important;
+    }
+    body.light-theme .accordion-button:not(.collapsed) {
+      background: #e9ecef !important;
+      color: #212529 !important;
+    }
+    body.light-theme .accordion-body {
+      background: #ffffff !important;
+      color: #212529 !important;
+    }
+    /* List groups in light theme */
+    body.light-theme .list-group-item,
+    body.light-theme .list-group-item.bg-dark {
+      background: #ffffff !important;
+      color: #212529 !important;
+      border-color: rgba(0,0,0,0.1) !important;
+    }
+    body.light-theme .list-group-item:hover {
+      background: #f8f9fa !important;
+    }
+    /* Text background utilities */
+    body.light-theme .text-bg-dark {
+      background: #e9ecef !important;
+      color: #212529 !important;
+    }
+    /* Ensure all paragraphs and spans are readable */
+    body.light-theme p,
+    body.light-theme span,
+    body.light-theme div {
+      color: inherit !important;
+    }
+    /* Links within cards */
+    body.light-theme .card a {
+      color: #0d6efd !important;
+    }
+    body.light-theme .card a:hover {
+      color: #0a58ca !important;
+    }
 
     /* ===== Top Header Bar ===== */
     .top-header {
@@ -377,6 +436,37 @@
     }
     .top-header .brand:hover {
       color: #3b82f6;
+    }
+
+    /* Sync icon animation */
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .syncing {
+      animation: spin 1s linear infinite;
+    }
+
+    /* Toast styling for dark theme */
+    .toast {
+      background: #0a0a0a !important;
+      border: 1px solid #18181b !important;
+      color: #e4e4e7 !important;
+    }
+    .toast-header {
+      background: #0f0f0f !important;
+      border-bottom: 1px solid #18181b !important;
+      color: #e4e4e7 !important;
+    }
+    body.light-theme .toast {
+      background: #ffffff !important;
+      border: 1px solid rgba(0,0,0,0.1) !important;
+      color: #212529 !important;
+    }
+    body.light-theme .toast-header {
+      background: #f8f9fa !important;
+      border-bottom: 1px solid rgba(0,0,0,0.1) !important;
+      color: #212529 !important;
     }
 
     /* ===== Floating Material Sidebar ===== */
@@ -1096,7 +1186,7 @@
       <hr class="sidebar-divider">
 
       <!-- Scanning Section -->
-      <div class="sidebar-section-title">Scanning</div>
+      <div class="sidebar-section-title">On-Demand Scanner</div>
       <li>
         <a href="/tasks" class="nav-link text-white">
           <div class="nav-icon"><i class="bi bi-play-circle"></i></div>
@@ -1124,7 +1214,7 @@
       <hr class="sidebar-divider">
 
       <!-- Enumeration Section -->
-      <div class="sidebar-section-title">Enumeration</div>
+      <div class="sidebar-section-title">Enumeration Results</div>
       <li>
         <a class="nav-link text-white" data-bs-toggle="collapse" href="#enumMenu" role="button" aria-expanded="false" aria-controls="enumMenu">
           <div class="nav-icon"><i class="bi bi-grid-3x3-gap"></i></div>
@@ -1155,6 +1245,18 @@
       <!-- Settings Section -->
       <div class="sidebar-section-title">Settings</div>
       <li>
+        <a href="#" class="nav-link text-white" id="syncDatabaseBtn">
+          <div class="nav-icon"><i class="bi bi-arrow-repeat" id="syncIcon"></i></div>
+          <div class="nav-label">Sync Database</div>
+        </a>
+      </li>
+      <li>
+        <a href="/sync-status" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-clock-history"></i></div>
+          <div class="nav-label">Sync History</div>
+        </a>
+      </li>
+      <li>
         <a href="#" class="nav-link text-white" id="themeToggle">
           <div class="nav-icon"><i class="bi bi-moon-stars" id="themeIcon"></i></div>
           <div class="nav-label">
@@ -1165,6 +1267,20 @@
       </ul>
     </div>
   </nav>
+
+  <!-- Toast Container -->
+  <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+    <div id="syncToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="toast-header">
+        <i class="bi bi-arrow-repeat me-2" id="toastIcon"></i>
+        <strong class="me-auto" id="toastTitle">Database Sync</strong>
+        <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+      <div class="toast-body" id="toastBody">
+        Syncing database...
+      </div>
+    </div>
+  </div>
 
   <!-- Main Content -->
   <main id="mainContent" class="content">
@@ -1263,6 +1379,86 @@
         themeLabel.textContent = 'Dark Mode';
       }
     }
+
+    // Database sync functionality with toast notifications
+    const syncDatabaseBtn = document.getElementById('syncDatabaseBtn');
+    const syncIcon = document.getElementById('syncIcon');
+    const syncToast = document.getElementById('syncToast');
+    const toastIcon = document.getElementById('toastIcon');
+    const toastTitle = document.getElementById('toastTitle');
+    const toastBody = document.getElementById('toastBody');
+
+    function showToast(title, body, iconClass = 'bi-arrow-repeat', autoHide = true) {
+      toastTitle.textContent = title;
+      toastBody.innerHTML = body;
+      toastIcon.className = `${iconClass} me-2`;
+
+      const toast = new bootstrap.Toast(syncToast, {
+        autohide: autoHide,
+        delay: autoHide ? 5000 : 999999
+      });
+      toast.show();
+    }
+
+    syncDatabaseBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+
+      // Start spinning icon
+      syncIcon.classList.add('syncing');
+
+      // Show syncing toast
+      showToast('Database Sync', 'Syncing database with scan results...', 'bi-arrow-repeat syncing', false);
+
+      try {
+        const response = await fetch('/api/sync-database', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+
+        const result = await response.json();
+
+        // Stop spinning
+        syncIcon.classList.remove('syncing');
+
+        if (response.ok && result.status === 'success') {
+          // Hide current toast
+          bootstrap.Toast.getInstance(syncToast)?.hide();
+
+          // Show success toast with details
+          const details = `
+            <div class="mb-2">
+              <strong>✓ Sync completed successfully!</strong>
+            </div>
+            <div class="small">
+              <div><strong>Files ingested:</strong> ${result.ingested_files}</div>
+              <div><strong>Hosts:</strong> ${result.hosts_before} → ${result.hosts_after} (+${result.hosts_added})</div>
+              <div><strong>Ports:</strong> ${result.ports_before} → ${result.ports_after} (+${result.ports_added})</div>
+            </div>
+          `;
+          showToast('Sync Complete', details, 'bi-check-circle-fill text-success', true);
+
+          // Reload page after toast is shown
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
+        } else {
+          throw new Error(result.error || 'Sync failed');
+        }
+      } catch (error) {
+        console.error('Database sync error:', error);
+
+        // Stop spinning
+        syncIcon.classList.remove('syncing');
+
+        // Hide current toast
+        bootstrap.Toast.getInstance(syncToast)?.hide();
+
+        // Show error toast
+        showToast('Sync Failed', `Error: ${error.message}`, 'bi-x-circle-fill text-danger', true);
+      }
+    });
   </script>
 
   {% block scripts %}{% endblock %}

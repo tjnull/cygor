@@ -16,6 +16,38 @@
         </h2>
       </div>
 
+      <!-- About Cygor (Collapsible) -->
+      <div class="card bg-dark mb-4">
+        <div class="card-header" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#cygorGuide">
+          <h5 class="mb-0 d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-info-circle me-2"></i>About Cygor & Quick Guide</span>
+            <i class="bi bi-chevron-down"></i>
+          </h5>
+        </div>
+        <div id="cygorGuide" class="collapse">
+          <div class="card-body">
+            <p class="text-light mb-3">
+              Cygor is an automated network reconnaissance and enumeration framework that streamlines the process of discovering and analyzing network services. It combines powerful scanning tools with intelligent automation to help security professionals efficiently assess network infrastructure.
+            </p>
+            <h6 class="text-secondary mb-2">Key Features:</h6>
+            <ul class="mb-3 text-light small">
+              <li><strong>Automated Discovery:</strong> Leverages Masscan and Naabu for rapid port discovery across large network ranges</li>
+              <li><strong>Intelligent Enumeration:</strong> Automatically runs targeted enumeration tools based on discovered services</li>
+              <li><strong>Organized Output:</strong> Maintains structured workspace with categorized results for easy analysis</li>
+              <li><strong>Web Dashboard:</strong> Real-time monitoring and management of scan tasks and results</li>
+            </ul>
+            <h6 class="text-secondary mb-2">Scan Configuration Guide:</h6>
+            <ul class="mb-0 small text-light">
+              <li><strong>Top 1000 Ports:</strong> Scans the most common ports (faster, recommended for initial discovery)</li>
+              <li><strong>Full Port Scan:</strong> Scans all 65535 ports (comprehensive but slower)</li>
+              <li><strong>Masscan:</strong> Ultra-fast discovery recommended for large networks (can scan Internet-scale ranges)</li>
+              <li><strong>Naabu:</strong> Fast TCP port scanner that can be combined with Masscan for verification</li>
+              <li><strong>Network Interface:</strong> Required on multi-homed systems or when scanning from a specific network adapter</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       <!-- Scan Form -->
       <div class="card bg-dark">
         <div class="card-body">
@@ -23,18 +55,18 @@
 
             <!-- Targets Section -->
             <div class="mb-4">
-              <label class="form-label fw-bold">
+              <label class="form-label fw-bold fs-5">
                 <i class="bi bi-bullseye me-2"></i>Scan Targets
               </label>
               <div class="mb-3">
                 <div class="btn-group w-100" role="group">
                   <input type="radio" class="btn-check" name="targetMode" id="targetModeManual" value="manual" checked>
-                  <label class="btn btn-outline-secondary" for="targetModeManual">
+                  <label class="btn btn-outline-secondary btn-lg" for="targetModeManual" style="font-size: 1rem;">
                     <i class="bi bi-keyboard me-2"></i>Manual Input
                   </label>
 
                   <input type="radio" class="btn-check" name="targetMode" id="targetModeFile" value="file">
-                  <label class="btn btn-outline-secondary" for="targetModeFile">
+                  <label class="btn btn-outline-secondary btn-lg" for="targetModeFile" style="font-size: 1rem;">
                     <i class="bi bi-file-earmark-text me-2"></i>From File
                   </label>
                 </div>
@@ -42,65 +74,251 @@
 
               <div id="manualTargetsDiv">
                 <textarea
-                  class="form-control bg-dark text-light border-secondary"
+                  class="form-control form-control-lg"
                   id="targetsManual"
-                  rows="5"
+                  rows="6"
                   placeholder="Enter targets (one per line):&#10;192.168.1.0/24&#10;10.0.0.1&#10;scanme.nmap.org"
+                  style="font-size: 1rem;"
                 ></textarea>
-                <div class="form-text">Supports IPs, CIDR ranges, and hostnames</div>
+                <div class="form-text" style="font-size: 0.925rem;">Supports IPs, CIDR ranges, and hostnames</div>
               </div>
 
               <div id="fileTargetsDiv" style="display:none;">
-                <input type="text" class="form-control bg-dark text-light border-secondary"
-                       id="targetsFile" placeholder="/path/to/targets.txt">
-                <div class="form-text">Path to file containing targets (one per line)</div>
+                <div id="fileDropZone" class="border border-secondary rounded p-4 text-center" style="border-style: dashed !important; cursor: pointer; background: rgba(255,255,255,0.02);">
+                  <i class="bi bi-cloud-upload fs-1 text-secondary mb-2"></i>
+                  <p class="text-light mb-2">Drag and drop a file here, or click to browse</p>
+                  <p class="text-secondary small mb-0">Accepts .txt, .list, or any text file with targets (one per line)</p>
+                  <input type="file" id="targetsFileInput" accept=".txt,.list" style="display: none;">
+                </div>
+                <div id="fileNameDisplay" class="mt-2" style="display:none;">
+                  <div class="alert alert-info d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-file-earmark-text me-2"></i><span id="selectedFileName"></span></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="clearFileBtn">
+                      <i class="bi bi-x"></i>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- Discovery Tools -->
+            <!-- Exclusions Section -->
             <div class="mb-4">
-              <label class="form-label fw-bold">
-                <i class="bi bi-search me-2"></i>Discovery Tools
+              <label class="form-label fw-bold fs-5">
+                <i class="bi bi-shield-x me-2"></i>Exclusions (Optional)
               </label>
-              <div class="row g-3">
-                <div class="col-md-6">
-                  <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="discoverMasscan" value="masscan" checked>
-                    <label class="form-check-label" for="discoverMasscan">
-                      <strong>Masscan</strong>
-                      <div class="text-light small">High-speed port scanner</div>
-                    </label>
-                  </div>
+              <div class="mb-3">
+                <div class="btn-group w-100" role="group">
+                  <input type="radio" class="btn-check" name="exclusionMode" id="exclusionModeNone" value="none" checked>
+                  <label class="btn btn-outline-secondary btn-lg" for="exclusionModeNone" style="font-size: 1rem;">
+                    <i class="bi bi-dash-circle me-2"></i>No Exclusions
+                  </label>
+
+                  <input type="radio" class="btn-check" name="exclusionMode" id="exclusionModeManual" value="manual">
+                  <label class="btn btn-outline-secondary btn-lg" for="exclusionModeManual" style="font-size: 1rem;">
+                    <i class="bi bi-keyboard me-2"></i>Manual Input
+                  </label>
+
+                  <input type="radio" class="btn-check" name="exclusionMode" id="exclusionModeFile" value="file">
+                  <label class="btn btn-outline-secondary btn-lg" for="exclusionModeFile" style="font-size: 1rem;">
+                    <i class="bi bi-file-earmark-text me-2"></i>From File
+                  </label>
                 </div>
-                <div class="col-md-6">
-                  <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="discoverNaabu" value="naabu">
-                    <label class="form-check-label" for="discoverNaabu">
-                      <strong>Naabu</strong>
-                      <div class="text-light small">Fast TCP port scanner</div>
-                    </label>
+              </div>
+
+              <div id="manualExclusionsDiv" style="display:none;">
+                <textarea
+                  class="form-control form-control-lg"
+                  id="exclusionsManual"
+                  rows="5"
+                  placeholder="Enter IPs/domains to exclude (one per line):&#10;192.168.1.1&#10;10.0.0.0/8&#10;example.com"
+                  style="font-size: 1rem;"
+                ></textarea>
+                <div class="form-text" style="font-size: 0.925rem;">Exclude specific IPs, CIDR ranges, or domains from scanning</div>
+              </div>
+
+              <div id="fileExclusionsDiv" style="display:none;">
+                <div id="exclusionFileDropZone" class="border border-secondary rounded p-4 text-center" style="border-style: dashed !important; cursor: pointer; background: rgba(255,255,255,0.02);">
+                  <i class="bi bi-cloud-upload fs-1 text-secondary mb-2"></i>
+                  <p class="text-light mb-2">Drag and drop an exclusion file here, or click to browse</p>
+                  <p class="text-secondary small mb-0">Accepts .txt, .list, or any text file with exclusions (one per line)</p>
+                  <input type="file" id="exclusionsFileInput" accept=".txt,.list" style="display: none;">
+                </div>
+                <div id="exclusionFileNameDisplay" class="mt-2" style="display:none;">
+                  <div class="alert alert-info d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-file-earmark-text me-2"></i><span id="selectedExclusionFileName"></span></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="clearExclusionFileBtn">
+                      <i class="bi bi-x"></i>
+                    </button>
                   </div>
                 </div>
               </div>
+            </div>
+
+            <!-- Discovery Tools Section -->
+            <div class="mb-4">
+              <label class="form-label fw-bold fs-5 mb-3">
+                <i class="bi bi-search me-2"></i>Host Discovery & Port Scanning
+              </label>
+
+              <!-- Discovery Explanation -->
+              <div class="alert alert-info mb-4" role="alert">
+                <div class="d-flex align-items-start">
+                  <i class="bi bi-info-circle-fill fs-4 me-3 mt-1"></i>
+                  <div>
+                    <h6 class="alert-heading mb-2">Identify your Assets, Targets, Unidentified hosts.</h6>
+                    <p class="mb-2">
+                      <strong>These tools</strong> identify live hosts and open ports across your target network.
+                      These scanners perform initial reconnaissance to find which systems are online and what ports are accessible.
+                    </p>
+                    <p class="mb-0">
+                      After discovery completes, Cygor automatically runs detailed <strong>Nmap enumeration</strong> on discovered hosts
+                      to identify services, versions, and gather comprehensive information for further analysis.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Discovery Tool Selection Cards -->
+              <div class="row g-4">
+                <div class="col-md-6">
+                  <div class="card bg-dark border-secondary h-100">
+                    <div class="card-body">
+                      <div class="d-flex align-items-center justify-content-between mb-3">
+                        <h5 class="card-title mb-0 d-flex align-items-center">
+                          <i class="bi bi-lightning-charge-fill text-warning me-2 fs-4"></i>
+                          Masscan
+                        </h5>
+                        <div class="form-check form-switch mb-0">
+                          <input class="form-check-input discovery-switch" type="checkbox" id="discoverMasscan" value="masscan" checked>
+                          <label class="form-check-label visually-hidden" for="discoverMasscan">Enable Masscan</label>
+                        </div>
+                      </div>
+                      <h6 class="text-secondary mb-2">Ultra-Fast Internet-Scale Scanner</h6>
+                      <ul class="mb-0 text-light" style="font-size: 0.95rem;">
+                        <li><strong>Speed:</strong> Can scan entire Internet in under 6 minutes</li>
+                        <li><strong>Performance:</strong> Transmits 10 million packets/second</li>
+                        <li><strong>Method:</strong> Asynchronous TCP SYN scanning</li>
+                        <li><strong>Best For:</strong> Large networks (Class B/C ranges)</li>
+                        <li><strong>Use Case:</strong> Initial discovery on extensive target lists</li>
+                        <li>
+                          <ul>
+                          <a href="https://github.com/robertdavidgraham/masscan" target="_blank" rel="noopener noreferrer">
+                            <i class="bi bi-github me-1"></i> GitHub: robertdavidgraham/masscan
+                          </a>
+                          </ul>
+                        </li>
+
+                      </ul>
+                      <div class="mt-3 p-2 bg-black rounded">
+                        <small class="text-success font-monospace">
+                          <i class="bi bi-check-circle me-1"></i>
+                          Recommended for networks larger than /24
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-md-6">
+                  <div class="card bg-dark border-secondary h-100">
+                    <div class="card-body">
+                      <div class="d-flex align-items-center justify-content-between mb-3">
+                        <h5 class="card-title mb-0 d-flex align-items-center">
+                          <i class="bi bi-hdd-network-fill text-info me-2 fs-4"></i>
+                          Naabu
+                        </h5>
+                        <div class="form-check form-switch mb-0">
+                          <input class="form-check-input discovery-switch" type="checkbox" id="discoverNaabu" value="naabu">
+                          <label class="form-check-label visually-hidden" for="discoverNaabu">Enable Naabu</label>
+                        </div>
+                      </div>
+                      <h6 class="text-secondary mb-2">Fast Go-Based Port Scanner</h6>
+                      <ul class="mb-0 text-light" style="font-size: 0.95rem;">
+                        <li><strong>Speed:</strong> Written in Go for high concurrency</li>
+                        <li><strong>Performance:</strong> Fast parallel port scanning</li>
+                        <li><strong>Method:</strong> TCP connect and SYN scanning</li>
+                        <li><strong>Best For:</strong> Small to medium networks</li>
+                        <li><strong>Use Case:</strong> Verification scans, focused targets</li>
+                        <li>
+                          <ul>
+                          <a href="https://github.com/projectdiscovery/naabu" target="_blank" rel="noopener noreferrer">
+                            <i class="bi bi-github me-1"></i> GitHub: projectdiscovery/naabu
+                          </a>
+                          </ul>
+                        </li>
+                        
+                      </ul>
+                      <div class="mt-3 p-2 bg-black rounded">
+                        <small class="text-info font-monospace">
+                          <i class="bi bi-info-circle me-1"></i>
+                          Can combine with Masscan for verification
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Discovery Workflow Info -->
+              <div class="alert alert-dark border-secondary mt-4 mb-0" role="alert">
+                <div class="d-flex align-items-start">
+                  <i class="bi bi-diagram-3-fill fs-4 me-3 mt-1 text-primary"></i>
+                  <div style="font-size: 0.95rem;">
+                    <h6 class="mb-2">Discovery Workflow</h6>
+                    <ol class="mb-0 ps-3">
+                      <li class="mb-2">
+                        <strong>Discovery Phase:</strong> Selected tools (Masscan/Naabu) rapidly scan target ranges
+                        to identify live hosts and open ports based on your port configuration below
+                      </li>
+                      <li class="mb-2">
+                        <strong>Enumeration Phase:</strong> Cygor automatically runs Nmap with service detection
+                        (-sV), OS detection, and NSE scripts against discovered hosts
+                      </li>
+                      <li class="mb-0">
+                        <strong>Module Phase:</strong> Based on detected services, appropriate enumeration modules
+                        (HTTP, SMB, FTP, etc.) run automatically for deeper analysis
+                      </li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
             </div>
 
             <!-- Scan Options -->
             <div class="mb-4">
-              <label class="form-label fw-bold">
-                <i class="bi bi-sliders me-2"></i>Scan Configuration
+              <label class="form-label fw-bold fs-5 mb-3">
+                <i class="bi bi-sliders me-2"></i>Nmap Scan Configuration
               </label>
               <div class="row g-3">
                 <div class="col-md-6">
-                  <label for="scanType" class="form-label">Scan Type</label>
-                  <select class="form-select bg-dark text-light border-secondary" id="scanType">
-                    <option value="top-ports" selected>Top 1000 Ports</option>
-                    <option value="fullscan">Full Port Scan (1-65535)</option>
+                  <label for="scanType" class="form-label fw-semibold" style="font-size: 1rem;">Scan Type</label>
+                  <select class="form-select form-select-lg bg-dark text-light border-secondary" id="scanType" style="font-size: 1rem;">
+                    <option value="quick">Quick Scan (Top 100 Ports)</option>
+                    <option value="top-ports" selected>Standard Scan (Top 1000 Ports)</option>
+                    <option value="top-10000">Comprehensive Scan (Top 10000 Ports)</option>
+                    <option value="fullscan">Full Scan (All 65535 Ports)</option>
+                    <option value="custom">Custom Ports</option>
                   </select>
                 </div>
                 <div class="col-md-6">
-                  <label for="interface" class="form-label">Network Interface (optional)</label>
-                  <input type="text" class="form-control bg-dark text-light border-secondary"
-                         id="interface" placeholder="e.g., eth0, wlan0">
+                  <label for="customPorts" class="form-label fw-semibold" style="font-size: 1rem;">Custom Ports</label>
+                  <input type="text" class="form-control form-control-lg bg-dark text-light border-secondary"
+                         id="customPorts" placeholder="e.g., 80,443,8080-8090" disabled style="font-size: 1rem;">
+                  <div class="form-text" style="font-size: 0.925rem;">Required when scan type is "Custom Ports"</div>
+                </div>
+              </div>
+              <div class="row g-3 mt-2">
+                <div class="col-md-6">
+                  <label for="nmapOptions" class="form-label fw-semibold" style="font-size: 1rem;">Custom Nmap Options (optional)</label>
+                  <input type="text" class="form-control form-control-lg bg-dark text-light border-secondary"
+                         id="nmapOptions" placeholder="e.g., -sS -T5 --max-retries 2" style="font-size: 1rem;">
+                  <div class="form-text" style="font-size: 0.925rem;">Additional Nmap switches to customize the scan</div>
+                </div>
+                <div class="col-md-6">
+                  <label for="interface" class="form-label fw-semibold" style="font-size: 1rem;">Network Interface (optional)</label>
+                  <input type="text" class="form-control form-control-lg bg-dark text-light border-secondary"
+                         id="interface" placeholder="e.g., eth0, wlan0" style="font-size: 1rem;">
                 </div>
               </div>
             </div>
@@ -115,9 +333,18 @@
                   <div class="card-body">
                     <div class="mb-3">
                       <label for="outputDir" class="form-label">Output Directory</label>
-                      <input type="text" class="form-control bg-dark text-light border-secondary"
-                             id="outputDir" placeholder="Leave empty to use workspace/default">
+                      <div class="input-group">
+                        <input type="text" class="form-control bg-dark text-light border-secondary"
+                               id="outputDir" placeholder="Leave empty to use workspace/default" readonly>
+                        <button class="btn btn-outline-secondary" type="button" id="browseDirBtn">
+                          <i class="bi bi-folder2-open me-1"></i>Browse
+                        </button>
+                        <button class="btn btn-outline-secondary" type="button" id="clearDirBtn" title="Clear selection">
+                          <i class="bi bi-x"></i>
+                        </button>
+                      </div>
                       <div class="form-text">Custom output directory (defaults to configured workspace)</div>
+                      <input type="file" id="dirInput" webkitdirectory directory style="display: none;">
                     </div>
                   </div>
                 </div>
@@ -126,9 +353,11 @@
 
             <!-- Submit Buttons -->
             <div class="d-flex justify-content-between align-items-center">
-              <a href="/tasks" class="btn btn-outline-secondary">Cancel</a>
-              <button type="submit" class="btn btn-primary px-4">
-                <i class="bi bi-play-circle me-2"></i>Start Scan
+              <a href="/tasks" class="btn btn-outline-secondary btn-lg px-4">
+                <i class="bi bi-x-circle me-2"></i>Cancel
+              </a>
+              <button type="submit" class="btn btn-primary btn-lg px-5">
+                <i class="bi bi-play-circle-fill me-2"></i>Start Scan
               </button>
             </div>
 
@@ -136,28 +365,133 @@
         </div>
       </div>
 
-      <!-- Help Card -->
-      <div class="card bg-dark mt-4">
-        <div class="card-body">
-          <h6 class="card-title">
-            <i class="bi bi-info-circle me-2"></i>Quick Guide
-          </h6>
-          <ul class="mb-0 small text-light">
-            <li><strong>Top Ports:</strong> Scans the 1000 most common ports (faster, recommended for initial discovery)</li>
-            <li><strong>Full Scan:</strong> Scans all 65535 ports (comprehensive but slower)</li>
-            <li><strong>Masscan:</strong> Very fast discovery, recommended for large networks</li>
-            <li><strong>Naabu:</strong> Alternative fast scanner, can be combined with Masscan</li>
-            <li><strong>Interface:</strong> Required on multi-homed systems or when scanning from specific network adapter</li>
-          </ul>
-        </div>
-      </div>
-
     </div>
   </div>
 </div>
 
+<style>
+/* Enhanced input field styling for better readability */
+#targetsManual,
+#exclusionsManual,
+#interface,
+#customPorts,
+#nmapOptions {
+  background-color: #1a1d23 !important;
+  color: #ffffff !important;
+  border-color: #495057 !important;
+  font-family: 'Courier New', monospace !important;
+  font-size: 1rem !important;
+  font-weight: 500 !important;
+  caret-color: #0d6efd !important;
+  line-height: 1.6 !important;
+}
+
+#targetsManual::placeholder,
+#exclusionsManual::placeholder,
+#interface::placeholder,
+#customPorts::placeholder,
+#nmapOptions::placeholder {
+  color: #adb5bd !important;
+  opacity: 0.9 !important;
+}
+
+#targetsManual:focus,
+#exclusionsManual:focus,
+#interface:focus,
+#customPorts:focus,
+#nmapOptions:focus {
+  background-color: #1a1d23 !important;
+  color: #ffffff !important;
+  border-color: #0d6efd !important;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+  outline: none !important;
+}
+
+/* Disabled state */
+#customPorts:disabled {
+  background-color: #0d1117 !important;
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Ensure text remains bright */
+#targetsManual::-webkit-input-placeholder,
+#exclusionsManual::-webkit-input-placeholder,
+#interface::-webkit-input-placeholder,
+#customPorts::-webkit-input-placeholder,
+#nmapOptions::-webkit-input-placeholder {
+  color: #adb5bd !important;
+}
+
+#targetsManual:-ms-input-placeholder,
+#exclusionsManual:-ms-input-placeholder,
+#interface:-ms-input-placeholder,
+#customPorts:-ms-input-placeholder,
+#nmapOptions:-ms-input-placeholder {
+  color: #adb5bd !important;
+}
+
+#targetsManual::placeholder,
+#exclusionsManual::placeholder,
+#interface::placeholder,
+#customPorts::placeholder,
+#nmapOptions::placeholder {
+  color: #adb5bd !important;
+}
+
+/* Make form helper text more visible */
+.form-text {
+  color: #adb5bd !important;
+  font-size: 0.925rem !important;
+  font-weight: 400 !important;
+  margin-top: 0.5rem !important;
+}
+
+/* Enhanced discovery switch styling */
+.discovery-switch {
+  width: 3.5rem !important;
+  height: 1.75rem !important;
+  cursor: pointer;
+}
+
+.discovery-switch:checked {
+  background-color: #0d6efd !important;
+  border-color: #0d6efd !important;
+}
+
+/* Card improvements for discovery tools */
+.card-title {
+  font-size: 1.25rem !important;
+}
+
+.alert-heading {
+  font-size: 1.1rem !important;
+}
+
+/* Improve spacing for better readability */
+.mb-4 {
+  margin-bottom: 2rem !important;
+}
+</style>
+
 <script>
-// Toggle between manual and file input
+// Global variables to store uploaded file content
+let uploadedFileContent = null;
+let uploadedExclusionFileContent = null;
+
+// Enable/disable custom ports field based on scan type
+document.getElementById('scanType').addEventListener('change', (e) => {
+  const customPortsField = document.getElementById('customPorts');
+  if (e.target.value === 'custom') {
+    customPortsField.disabled = false;
+    customPortsField.focus();
+  } else {
+    customPortsField.disabled = true;
+    customPortsField.value = '';
+  }
+});
+
+// Toggle between manual and file input for targets
 document.querySelectorAll('[name="targetMode"]').forEach(radio => {
   radio.addEventListener('change', (e) => {
     document.getElementById('manualTargetsDiv').style.display =
@@ -165,6 +499,172 @@ document.querySelectorAll('[name="targetMode"]').forEach(radio => {
     document.getElementById('fileTargetsDiv').style.display =
       e.target.value === 'file' ? 'block' : 'none';
   });
+});
+
+// Toggle between none/manual/file input for exclusions
+document.querySelectorAll('[name="exclusionMode"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    document.getElementById('manualExclusionsDiv').style.display =
+      e.target.value === 'manual' ? 'block' : 'none';
+    document.getElementById('fileExclusionsDiv').style.display =
+      e.target.value === 'file' ? 'block' : 'none';
+  });
+});
+
+// File upload functionality
+const fileDropZone = document.getElementById('fileDropZone');
+const fileInput = document.getElementById('targetsFileInput');
+const fileNameDisplay = document.getElementById('fileNameDisplay');
+const selectedFileName = document.getElementById('selectedFileName');
+const clearFileBtn = document.getElementById('clearFileBtn');
+
+// Click to browse
+fileDropZone.addEventListener('click', () => {
+  fileInput.click();
+});
+
+// File input change
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files.length > 0) {
+    handleFileUpload(e.target.files[0]);
+  }
+});
+
+// Drag and drop handlers
+fileDropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  fileDropZone.style.background = 'rgba(13, 110, 253, 0.1)';
+  fileDropZone.style.borderColor = '#0d6efd';
+});
+
+fileDropZone.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  fileDropZone.style.background = 'rgba(255,255,255,0.02)';
+  fileDropZone.style.borderColor = '';
+});
+
+fileDropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  fileDropZone.style.background = 'rgba(255,255,255,0.02)';
+  fileDropZone.style.borderColor = '';
+
+  if (e.dataTransfer.files.length > 0) {
+    handleFileUpload(e.dataTransfer.files[0]);
+  }
+});
+
+// Handle file upload
+function handleFileUpload(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    uploadedFileContent = e.target.result;
+    selectedFileName.textContent = file.name;
+    fileNameDisplay.style.display = 'block';
+    fileDropZone.style.display = 'none';
+  };
+  reader.readAsText(file);
+}
+
+// Clear file selection
+clearFileBtn.addEventListener('click', () => {
+  uploadedFileContent = null;
+  fileInput.value = '';
+  fileNameDisplay.style.display = 'none';
+  fileDropZone.style.display = 'block';
+});
+
+// ========== Exclusions File Upload Functionality ==========
+const exclusionFileDropZone = document.getElementById('exclusionFileDropZone');
+const exclusionFileInput = document.getElementById('exclusionsFileInput');
+const exclusionFileNameDisplay = document.getElementById('exclusionFileNameDisplay');
+const selectedExclusionFileName = document.getElementById('selectedExclusionFileName');
+const clearExclusionFileBtn = document.getElementById('clearExclusionFileBtn');
+
+// Click to browse
+exclusionFileDropZone.addEventListener('click', () => {
+  exclusionFileInput.click();
+});
+
+// File input change
+exclusionFileInput.addEventListener('change', (e) => {
+  if (e.target.files.length > 0) {
+    handleExclusionFileUpload(e.target.files[0]);
+  }
+});
+
+// Drag and drop handlers
+exclusionFileDropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  exclusionFileDropZone.style.background = 'rgba(13, 110, 253, 0.1)';
+  exclusionFileDropZone.style.borderColor = '#0d6efd';
+});
+
+exclusionFileDropZone.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  exclusionFileDropZone.style.background = 'rgba(255,255,255,0.02)';
+  exclusionFileDropZone.style.borderColor = '';
+});
+
+exclusionFileDropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  exclusionFileDropZone.style.background = 'rgba(255,255,255,0.02)';
+  exclusionFileDropZone.style.borderColor = '';
+
+  if (e.dataTransfer.files.length > 0) {
+    handleExclusionFileUpload(e.dataTransfer.files[0]);
+  }
+});
+
+// Handle exclusion file upload
+function handleExclusionFileUpload(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    uploadedExclusionFileContent = e.target.result;
+    selectedExclusionFileName.textContent = file.name;
+    exclusionFileNameDisplay.style.display = 'block';
+    exclusionFileDropZone.style.display = 'none';
+  };
+  reader.readAsText(file);
+}
+
+// Clear exclusion file selection
+clearExclusionFileBtn.addEventListener('click', () => {
+  uploadedExclusionFileContent = null;
+  exclusionFileInput.value = '';
+  exclusionFileNameDisplay.style.display = 'none';
+  exclusionFileDropZone.style.display = 'block';
+});
+
+// Directory browser functionality
+const browseDirBtn = document.getElementById('browseDirBtn');
+const dirInput = document.getElementById('dirInput');
+const outputDirField = document.getElementById('outputDir');
+const clearDirBtn = document.getElementById('clearDirBtn');
+
+browseDirBtn.addEventListener('click', () => {
+  dirInput.click();
+});
+
+dirInput.addEventListener('change', (e) => {
+  if (e.target.files.length > 0) {
+    // Get the directory path from the first file
+    const file = e.target.files[0];
+    const path = file.webkitRelativePath || file.path || '';
+    // Extract directory path (remove filename)
+    const dirPath = path.substring(0, path.lastIndexOf('/'));
+    outputDirField.value = dirPath || file.name;
+  }
+});
+
+clearDirBtn.addEventListener('click', () => {
+  dirInput.value = '';
+  outputDirField.value = '';
 });
 
 // Handle form submission
@@ -184,12 +684,19 @@ document.getElementById('scanForm').addEventListener('submit', async (e) => {
       .map(line => line.trim())
       .filter(line => line && !line.startsWith('#'));
   } else {
-    const filePath = document.getElementById('targetsFile').value.trim();
-    if (!filePath) {
-      alert('Please specify a target file path');
+    // Use uploaded file content
+    if (!uploadedFileContent) {
+      alert('Please upload a target file');
       return;
     }
-    targets = [filePath];
+    targets = uploadedFileContent.split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#'));
+
+    if (targets.length === 0) {
+      alert('The uploaded file contains no valid targets');
+      return;
+    }
   }
 
   // Get discovery tools
@@ -198,16 +705,47 @@ document.getElementById('scanForm').addEventListener('submit', async (e) => {
   if (document.getElementById('discoverNaabu').checked) discover.push('naabu');
 
   if (discover.length === 0) {
-    alert('Please select at least one discovery tool');
+    alert('Please enable at least one discovery tool (Masscan or Naabu) to proceed with the scan.');
+    return;
+  }
+
+  // Get exclusions
+  const exclusionMode = document.querySelector('[name="exclusionMode"]:checked').value;
+  let exclusions = [];
+
+  if (exclusionMode === 'manual') {
+    const manualExclusions = document.getElementById('exclusionsManual').value.trim();
+    if (manualExclusions) {
+      exclusions = manualExclusions.split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('#'));
+    }
+  } else if (exclusionMode === 'file') {
+    if (uploadedExclusionFileContent) {
+      exclusions = uploadedExclusionFileContent.split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('#'));
+    }
+  }
+
+  // Validate custom ports if scan type is custom
+  const scanType = document.getElementById('scanType').value;
+  const customPorts = document.getElementById('customPorts').value.trim();
+
+  if (scanType === 'custom' && !customPorts) {
+    alert('Please specify custom ports when using "Custom Ports" scan type');
     return;
   }
 
   const scanData = {
     targets: targets,
     discover: discover,
-    scan_type: document.getElementById('scanType').value,
+    scan_type: scanType,
+    ports: customPorts || null,
+    nmap_options: document.getElementById('nmapOptions').value.trim() || null,
     interface: document.getElementById('interface').value.trim() || null,
-    output_dir: document.getElementById('outputDir').value.trim() || null
+    output_dir: document.getElementById('outputDir').value.trim() || null,
+    exclusions: exclusions.length > 0 ? exclusions : null
   };
 
   const btn = e.target.querySelector('button[type="submit"]');

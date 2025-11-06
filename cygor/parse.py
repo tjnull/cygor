@@ -186,7 +186,19 @@ def parse_nmap_xml(file_path):
                         hosts["https"].add(target_entry)
 
     except NmapParserException as e:
-        print(f"{Fore.RED}[!] Error parsing {file_path}: {e}")
+        # Check if this is actually a non-Nmap XML file (like from enumeration modules)
+        if "Unpexpected data structure" in str(e) or "unexpected" in str(e).lower():
+            # Silently skip enumeration module XML files
+            pass
+        else:
+            print(f"{Fore.RED}[!] Error parsing {file_path}: {e}")
+    except Exception as e:
+        # Catch any other parsing errors
+        if "enumeration-modules" in file_path:
+            # Silently skip enumeration module files
+            pass
+        else:
+            print(f"{Fore.RED}[!] Unexpected error parsing {file_path}: {e}")
     return hosts
 
 def parse_nmap_text(file_path):
@@ -298,11 +310,20 @@ def save_results(hosts, output_dir=None, fmt="txt"):
         if fmt in ("csv", "all"): save_as_csv(hosts, base)
         if fmt in ("xml", "all"): save_as_xml(hosts, base)
     else:
+        # No output directory specified - just print to stdout
+        print(f"{Fore.BLUE}\n[i] Displaying results (no files saved - use -o to save){Style.RESET_ALL}")
         if fmt == "txt":
-            for service, ips in hosts.items():
+            for service, ips in sorted(hosts.items()):
                 if ips:
-                    print(f"\n{Fore.CYAN}[{service.upper()} HOSTS]")
-                    for ip in sorted(ips): print(f"{Fore.GREEN}{ip}")
+                    print(f"\n{Fore.CYAN}[{service.upper()} HOSTS]{Style.RESET_ALL}")
+                    for ip in sorted(ips):
+                        print(f"  {Fore.GREEN}{ip}{Style.RESET_ALL}")
+            # Also show combined http+https
+            combined = sorted(hosts.get("http", set()).union(hosts.get("https", set())))
+            if combined:
+                print(f"\n{Fore.CYAN}[HTTP+HTTPS HOSTS]{Style.RESET_ALL}")
+                for ip in combined:
+                    print(f"  {Fore.GREEN}{ip}{Style.RESET_ALL}")
         elif fmt == "json": save_as_json(hosts)
         elif fmt == "csv": save_as_csv(hosts)
         elif fmt == "xml": save_as_xml(hosts)
@@ -354,8 +375,13 @@ def main(argv=None):
     files_to_parse = []
     if os.path.isdir(input_path):
         for f in Path(input_path).rglob("*"):
-            if f.suffix.lower() in (".xml",".nmap",".gnmap"): files_to_parse.append(str(f))
-    else: files_to_parse.append(input_path)
+            # Skip enumeration module directories (they have non-Nmap XML)
+            if "enumeration-modules" in str(f) or "cygor-enumeration-modules" in str(f):
+                continue
+            if f.suffix.lower() in (".xml",".nmap",".gnmap"):
+                files_to_parse.append(str(f))
+    else:
+        files_to_parse.append(input_path)
 
     for file_path in files_to_parse:
         file_hosts = parse_nmap_xml(file_path) if file_path.endswith(".xml") else parse_nmap_text(file_path)
