@@ -1270,13 +1270,13 @@
 
   <!-- Toast Container -->
   <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
-    <div id="syncToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-      <div class="toast-header">
-        <i class="bi bi-arrow-repeat me-2" id="toastIcon"></i>
-        <strong class="me-auto" id="toastTitle">Database Sync</strong>
-        <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+    <div id="syncToast" class="toast border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true" style="min-width: 450px; max-width: 500px;">
+      <div class="toast-header border-0 pb-2" id="toastHeader" style="background: transparent;">
+        <i class="me-2" id="toastIcon" style="font-size: 1.4rem;"></i>
+        <strong class="me-auto" id="toastTitle" style="font-size: 1.15rem;">Database Sync</strong>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
       </div>
-      <div class="toast-body" id="toastBody">
+      <div class="toast-body pt-0" id="toastBody" style="font-size: 1rem; line-height: 1.6; padding-left: 3rem;">
         Syncing database...
       </div>
     </div>
@@ -1384,18 +1384,23 @@
     const syncDatabaseBtn = document.getElementById('syncDatabaseBtn');
     const syncIcon = document.getElementById('syncIcon');
     const syncToast = document.getElementById('syncToast');
+    const toastHeader = document.getElementById('toastHeader');
     const toastIcon = document.getElementById('toastIcon');
     const toastTitle = document.getElementById('toastTitle');
     const toastBody = document.getElementById('toastBody');
 
-    function showToast(title, body, iconClass = 'bi-arrow-repeat', autoHide = true) {
+    function showToast(title, body, iconClass = 'bi-arrow-repeat', autoHide = true, bgColor = 'bg-primary') {
       toastTitle.textContent = title;
       toastBody.innerHTML = body;
-      toastIcon.className = `${iconClass} me-2`;
+      toastIcon.className = `${iconClass}`;
+
+      // Update toast background color
+      syncToast.className = `toast border-0 shadow-lg ${bgColor} text-white`;
+      toastHeader.style.background = 'transparent';
 
       const toast = new bootstrap.Toast(syncToast, {
         autohide: autoHide,
-        delay: autoHide ? 5000 : 999999
+        delay: autoHide ? 6000 : 999999
       });
       toast.show();
     }
@@ -1406,8 +1411,14 @@
       // Start spinning icon
       syncIcon.classList.add('syncing');
 
-      // Show syncing toast
-      showToast('Database Sync', 'Syncing database with scan results...', 'bi-arrow-repeat syncing', false);
+      // Show syncing toast with info color
+      showToast(
+        'Database Sync Started',
+        '<div style="line-height: 1.6;">Reading scan results and ingesting into database...<br><small class="opacity-75">This may take a few moments</small></div>',
+        'bi-arrow-repeat syncing',
+        false,
+        'bg-info'
+      );
 
       try {
         const response = await fetch('/api/sync-database', {
@@ -1423,26 +1434,32 @@
         syncIcon.classList.remove('syncing');
 
         if (response.ok && result.status === 'success') {
+          // Wait 1 second to ensure user sees the "Started" notification
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
           // Hide current toast
           bootstrap.Toast.getInstance(syncToast)?.hide();
 
+          // Wait a moment before showing success
+          await new Promise(resolve => setTimeout(resolve, 300));
+
           // Show success toast with details
           const details = `
-            <div class="mb-2">
-              <strong>✓ Sync completed successfully!</strong>
-            </div>
-            <div class="small">
-              <div><strong>Files ingested:</strong> ${result.ingested_files}</div>
-              <div><strong>Hosts:</strong> ${result.hosts_before} → ${result.hosts_after} (+${result.hosts_added})</div>
-              <div><strong>Ports:</strong> ${result.ports_before} → ${result.ports_after} (+${result.ports_added})</div>
+            <div style="line-height: 1.8;">
+              <div class="mb-2"><strong style="font-size: 1.05rem;">Sync completed successfully!</strong></div>
+              <div class="opacity-90">
+                <div><i class="bi bi-file-earmark-plus me-2"></i><strong>${result.ingested_files}</strong> files ingested</div>
+                <div><i class="bi bi-hdd me-2"></i><strong>Hosts:</strong> ${result.hosts_before} → ${result.hosts_after} <span class="text-success-emphasis">(+${result.hosts_added})</span></div>
+                <div><i class="bi bi-diagram-3 me-2"></i><strong>Ports:</strong> ${result.ports_before} → ${result.ports_after} <span class="text-success-emphasis">(+${result.ports_added})</span></div>
+              </div>
             </div>
           `;
-          showToast('Sync Complete', details, 'bi-check-circle-fill text-success', true);
+          showToast('Sync Complete', details, 'bi-check-circle-fill', true, 'bg-success');
 
-          // Reload page after toast is shown
+          // Reload page after user has time to read the success message
           setTimeout(() => {
             window.location.reload();
-          }, 2000);
+          }, 3500);
         } else {
           throw new Error(result.error || 'Sync failed');
         }
@@ -1452,11 +1469,17 @@
         // Stop spinning
         syncIcon.classList.remove('syncing');
 
+        // Wait 1 second to ensure user sees something happened
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
         // Hide current toast
         bootstrap.Toast.getInstance(syncToast)?.hide();
 
+        // Wait a moment before showing error
+        await new Promise(resolve => setTimeout(resolve, 300));
+
         // Show error toast
-        showToast('Sync Failed', `Error: ${error.message}`, 'bi-x-circle-fill text-danger', true);
+        showToast('Sync Failed', `<div style="line-height: 1.6;">${error.message}<br><small class="opacity-75">Please check the console for details</small></div>`, 'bi-x-circle-fill', true, 'bg-danger');
       }
     });
   </script>

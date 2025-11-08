@@ -167,7 +167,12 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
         try:
             root = ET.parse(file).getroot()
         except Exception as e:
-            log(f"[!] Failed to read XML {file}: {e}", level=0, verbose=verbose)
+            # Incomplete/malformed XML files are common from cancelled or interrupted scans
+            error_msg = str(e).lower()
+            if any(phrase in error_msg for phrase in ["no element found", "unclosed token", "not well-formed"]):
+                log(f"[i] Skipping incomplete XML {file.name} (likely from cancelled/interrupted scan)", level=1, verbose=verbose)
+            else:
+                log(f"[!] Failed to read XML {file}: {e}", level=0, verbose=verbose)
             return
 
         if root.tag != "nmaprun":

@@ -28,6 +28,7 @@ from .tasks import task_manager, TaskStatus
 
 templates = None  # will be initialized in lifespan
 DISCOVERED_MODULES = []  # filled during startup
+SYNC_HISTORY = []  # List of sync events: {timestamp, ingested_files, hosts_added, ports_added, ...}
 
 # -------- Service normalization --------
 SERVICE_NAME_MAP = {
@@ -595,6 +596,17 @@ async def lifespan(app: FastAPI):
         print(f"[✓] Registered {len(DISCOVERED_MODULES)} dynamic module routes: {[m.slug for m in DISCOVERED_MODULES]}")
     except Exception as e:
         print(f"[!] Error during module discovery: {e}")
+
+    # -------------------------
+    # Restore Historical Tasks
+    # -------------------------
+    try:
+        await task_manager.restore_historical_tasks(settings.RESULTS_DIR)
+        task_count = len(task_manager.tasks)
+        if task_count > 0:
+            print(f"[✓] Restored {task_count} historical task(s) from ondemand-scans directory")
+    except Exception as e:
+        print(f"[!] Error restoring historical tasks: {e}")
     
     # -------------------------
     # Ingestion (DO IT NOW, before yield)
@@ -1488,6 +1500,14 @@ async def sync_status_page(request: Request):
         "results_dir": results_dir
     })
 
+@app.get("/api/sync-history")
+async def get_sync_history():
+    """Get sync history."""
+    return JSONResponse({
+        "status": "success",
+        "history": SYNC_HISTORY
+    })
+
 def scan_available_hostlists() -> dict:
     """Scan workspace for available parsed hostlists and discovery results."""
     available_hostlists = {}
@@ -1756,7 +1776,8 @@ async def sync_database(req: Optional[SyncRequest] = None):
 
         print(f"[✓] Database state after sync: {hosts_after} hosts (+{hosts_added}), {ports_after} ports (+{ports_added})")
 
-        return JSONResponse({
+        # Create sync result object
+        sync_result = {
             "status": "success",
             "ingested_files": count,
             "directory": str(load_dir),
@@ -1767,7 +1788,14 @@ async def sync_database(req: Optional[SyncRequest] = None):
             "ports_after": ports_after,
             "ports_added": ports_added,
             "timestamp": datetime.now(timezone.utc).isoformat()
-        })
+        }
+
+        # Add to sync history (keep last 50 syncs)
+        SYNC_HISTORY.insert(0, sync_result)
+        if len(SYNC_HISTORY) > 50:
+            SYNC_HISTORY.pop()
+
+        return JSONResponse(sync_result)
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
@@ -1828,6 +1856,7 @@ def exec_argv(argv):
         port=args.port,
         reload=False,
         log_level="debug" if args.verbose > 1 else "info",
+        access_log=args.verbose > 1,  # Only show access logs in debug mode
     )
 
 

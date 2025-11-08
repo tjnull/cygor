@@ -432,21 +432,20 @@ body.light-theme hr {
             <div class="small text-secondary mb-2">Shows cumulative completed scans over time</div>
             <!-- Timeline Filter Dropdown -->
             <div class="d-flex align-items-center mt-1 flex-wrap">
-              <label for="timelineFilter" class="me-2 small text-secondary mb-0">View:</label>
+              <label for="scanSourceFilter" class="me-2 small text-secondary mb-0">Source:</label>
+              <select id="scanSourceFilter" class="form-select form-select-sm bg-dark text-light border-secondary" style="width:auto; min-width:200px;">
+                <option value="all" selected>All Scans</option>
+                <option value="cli">CLI Scans Only</option>
+                <option value="ondemand">On-Demand Scans Only</option>
+              </select>
+
+              <label for="timelineFilter" class="ms-3 me-2 small text-secondary mb-0">View:</label>
               <select id="timelineFilter" class="form-select form-select-sm bg-dark text-light border-secondary" style="width:auto; min-width:180px;">
                 <option value="all" selected>All scans (100%)</option>
                 <option value="first">First 25% of scans</option>
                 <option value="latest">Latest 25% of scans</option>
                 <option value="middle">Middle 50% of scans</option>
               </select>
-
-              <!-- On-Demand Scans Toggle -->
-              <div class="form-check form-switch ms-3 mb-0">
-                <input class="form-check-input" type="checkbox" id="showOnDemandScans" style="cursor: pointer;">
-                <label class="form-check-label small text-secondary" for="showOnDemandScans" style="cursor: pointer;">
-                  Show On-Demand Scans
-                </label>
-              </div>
             </div>
           </div>
 
@@ -795,13 +794,25 @@ function _getScanTimesFromPage() {
     } catch (e) { console.warn("failed parsing data-scantimes:", e); }
   }
 
-  // Check if on-demand scans should be included
-  const showOnDemand = document.getElementById('showOnDemandScans')?.checked || false;
-  if (showOnDemand && typeof window.onDemandScans !== 'undefined' && Array.isArray(window.onDemandScans) && window.onDemandScans.length > 0) {
-    return [...baseScanTimes, ...window.onDemandScans];
-  }
+  // Check scan source filter
+  const scanSourceFilter = document.getElementById('scanSourceFilter')?.value || 'all';
 
-  return baseScanTimes;
+  // Ensure on-demand scans are available
+  const onDemandScans = (typeof window.onDemandScans !== 'undefined' && Array.isArray(window.onDemandScans))
+    ? window.onDemandScans
+    : [];
+
+  // Filter based on source selection
+  if (scanSourceFilter === 'cli') {
+    // Only CLI scans (baseScanTimes)
+    return baseScanTimes;
+  } else if (scanSourceFilter === 'ondemand') {
+    // Only on-demand scans
+    return onDemandScans;
+  } else {
+    // All scans (both CLI and on-demand)
+    return [...baseScanTimes, ...onDemandScans];
+  }
 }
 
 /* Extract host key (IPv4 preferred, otherwise base filename w/o extensions) */
@@ -963,23 +974,23 @@ document.addEventListener('DOMContentLoaded', () => {
     return popupModal;
   }
 
-  // ---- Timeline dropdown auto-refresh ----
-  const filterSel = document.getElementById("timelineFilter");
-  if (filterSel) {
-    filterSel.addEventListener("change", () => {
+  // ---- Timeline filter dropdowns ----
+  const timelineFilterSel = document.getElementById("timelineFilter");
+  if (timelineFilterSel) {
+    timelineFilterSel.addEventListener("change", () => {
       try { renderScanTimelineD3(); } catch (e) { console.error(e); }
     });
   }
 
-  // ---- On-Demand Scans Toggle ----
-  const onDemandToggle = document.getElementById("showOnDemandScans");
-  if (onDemandToggle) {
-    onDemandToggle.addEventListener("change", async () => {
-      if (onDemandToggle.checked && window.onDemandScans.length === 0) {
-        // Fetch on-demand scans if not already loaded
+  const scanSourceFilterSel = document.getElementById("scanSourceFilter");
+  if (scanSourceFilterSel) {
+    scanSourceFilterSel.addEventListener("change", async () => {
+      // Fetch on-demand scans if selecting on-demand or all, and not already loaded
+      const selectedValue = scanSourceFilterSel.value;
+      if ((selectedValue === 'ondemand' || selectedValue === 'all') && window.onDemandScans.length === 0) {
         await fetchOnDemandScans();
       }
-      // Re-render timeline with or without on-demand scans
+      // Re-render timeline with filtered scans
       try { renderScanTimelineD3(); } catch (e) { console.error(e); }
       // Also update tile counts
       try { adjustTilesToUniqueHosts(); } catch (e) { console.warn(e); }

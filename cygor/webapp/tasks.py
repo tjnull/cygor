@@ -171,13 +171,24 @@ class TaskManager:
             # --- Enhanced stream readers ---
             async def read_stream(stream, lines_list, redirect_to_output=False):
                 """Read and filter process output in real time."""
+                last_line = ""
                 while True:
                     line = await stream.readline()
                     if not line:
                         break
                     decoded = line.decode("utf-8", errors="ignore").strip()
 
-                    # Skip empty or redundant progress rate lines
+                    # Skip empty lines
+                    if not decoded:
+                        continue
+
+                    # Skip redundant carriage-return progress lines (nmap/masscan in-place updates)
+                    # These lines typically repeat with small changes and clutter the output
+                    if decoded == last_line:
+                        continue
+                    last_line = decoded
+
+                    # Skip rate-only lines (masscan progress)
                     if decoded.startswith("rate:"):
                         continue
 
@@ -267,6 +278,157 @@ class TaskManager:
                 del self.tasks[task_id]
                 return True
             return False
+
+    async def restore_historical_tasks(self, results_dir: str):
+        """
+        Restore completed tasks from the ondemand-scans directory.
+        This is called on startup to populate the task list with historical on-demand scans.
+        """
+        ondemand_base = Path(results_dir) / "ondemand-scans"
+        if not ondemand_base.exists():
+            return
+
+        async with self._lock:
+            # Iterate through timestamped directories
+            for scan_dir in sorted(ondemand_base.iterdir(), reverse=True):
+                if not scan_dir.is_dir():
+                    continue
+
+                # Generate a task ID based on the directory name for consistency
+                task_id = f"historical-{scan_dir.name}"
+
+                # Skip if already loaded
+                if task_id in self.tasks:
+                    continue
+
+                # Try to determine the scan command and timing from the directory
+                nmap_dir = scan_dir / "nmap"
+                if not nmap_dir.exists():
+                    continue
+
+                # Create a historical task entry
+                # We'll mark it as completed and extract timing info from scan files if possible
+                task = Task(
+                    task_id=task_id,
+                    task_type="scan",
+                    command=["cygor", "scan", "-o", str(scan_dir)],  # Simplified command
+                    output_dir=scan_dir,
+                    is_ondemand=True
+                )
+
+                # Set status as completed (these are historical scans)
+                task.status = TaskStatus.COMPLETED
+
+                # Try to extract timing information from nmap files
+                try:
+                    # Parse directory name for created_at (format: YYYY-MM-DD_HH-MM-SS)
+                    dir_name = scan_dir.name
+                    if "_" in dir_name:
+                        date_part, time_part = dir_name.split("_", 1)
+                        time_part = time_part.replace("-", ":")
+                        timestamp_str = f"{date_part} {time_part}"
+                        from datetime import datetime
+                        task.created_at = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+                        task.started_at = task.created_at
+                except Exception:
+                    # If we can't parse the directory name, use current time as fallback
+                    pass
+
+                # Try to find completion time from nmap files
+                try:
+                    import xml.etree.ElementTree as ET
+                    for xml_file in nmap_dir.rglob("*.xml"):
+                        try:
+                            tree = ET.parse(xml_file)
+                            root = tree.getroot()
+
+                            # Get start time
+                            if root.get('start'):
+                                task.started_at = datetime.fromtimestamp(int(root.get('start')))
+
+                            # Look for runstats to get end time
+                            runstats = root.find('.//runstats/finished')
+                            if runstats is not None and runstats.get('time'):
+                                task.completed_at = datetime.fromtimestamp(int(runstats.get('time')))
+                                task.exit_code = 0  # Assume success if we have a complete XML file
+                                break
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+
+                # If we didn't find completion time, use the directory's modification time
+                if not task.completed_at:
+                    try:
+                        task.completed_at = datetime.fromtimestamp(scan_dir.stat().st_mtime)
+                        task.exit_code = 0
+                    except Exception:
+                        task.completed_at = task.started_at
+
+                # Read actual nmap output files to populate task output
+                try:
+                    # Look for .nmap files (nmap normal output format)
+                    nmap_files = list(nmap_dir.rglob("*.nmap"))
+                    if nmap_files:
+                        # Sort by modification time to get the most recent
+                        nmap_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+
+                        for nmap_file in nmap_files:
+                            try:
+                                content = nmap_file.read_text(errors='ignore')
+                                lines = content.splitlines()
+
+                                # Add header for this file
+                                task.output_lines.append(f"=== Output from {nmap_file.name} ===")
+
+                                # Add all non-empty lines
+                                for line in lines:
+                                    stripped = line.strip()
+                                    if stripped:
+                                        task.output_lines.append(stripped)
+
+                                task.output_lines.append("")  # Blank line separator
+                            except Exception as e:
+                                task.output_lines.append(f"[!] Could not read {nmap_file.name}: {str(e)}")
+
+                    # Also check for any .gnmap files if no .nmap files found
+                    if not nmap_files:
+                        gnmap_files = list(nmap_dir.rglob("*.gnmap"))
+                        if gnmap_files:
+                            gnmap_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+
+                            for gnmap_file in gnmap_files:
+                                try:
+                                    content = gnmap_file.read_text(errors='ignore')
+                                    lines = content.splitlines()
+
+                                    task.output_lines.append(f"=== Output from {gnmap_file.name} ===")
+
+                                    for line in lines:
+                                        stripped = line.strip()
+                                        if stripped:
+                                            task.output_lines.append(stripped)
+
+                                    task.output_lines.append("")
+                                except Exception as e:
+                                    task.output_lines.append(f"[!] Could not read {gnmap_file.name}: {str(e)}")
+
+                    # If still no output found, add a notice
+                    if not task.output_lines:
+                        task.output_lines.append("[i] No nmap output files found in scan directory")
+
+                except Exception as e:
+                    task.output_lines.append(f"[!] Error reading scan output: {str(e)}")
+
+                # Add a summary line at the end
+                if task.started_at and task.completed_at:
+                    elapsed = (task.completed_at - task.started_at).total_seconds()
+                    hours, remainder = divmod(int(elapsed), 3600)
+                    minutes, seconds = divmod(remainder, 60)
+                    summary = f"Scan completed in {hours} hours, {minutes} minutes, and {seconds} seconds."
+                    task.output_lines.append(summary)
+
+                self.tasks[task_id] = task
 
 # Global task manager instance
 task_manager = TaskManager()

@@ -365,7 +365,13 @@ async function fetchTasks() {
 function formatTime(isoString) {
   if (!isoString) return '-';
   try {
-    const date = new Date(isoString);
+    // Parse as UTC by appending 'Z' if not present
+    let iso = isoString;
+    if (!iso.endsWith('Z') && !iso.includes('+') && !iso.includes('-', 10)) {
+      iso = iso + 'Z';
+    }
+    const date = new Date(iso);
+
     if (isNaN(date.getTime())) {
       console.error('Invalid date:', isoString);
       return '-';
@@ -388,8 +394,23 @@ function calculateDuration(task) {
   if (!task.started_at) return '-';
 
   try {
-    const start = new Date(task.started_at);
-    const end = task.completed_at ? new Date(task.completed_at) : new Date();
+    // Parse timestamps as UTC by appending 'Z' if not present
+    let startIso = task.started_at;
+    if (!startIso.endsWith('Z') && !startIso.includes('+') && !startIso.includes('-', 10)) {
+      startIso = startIso + 'Z';
+    }
+    const start = new Date(startIso);
+
+    let end;
+    if (task.completed_at) {
+      let endIso = task.completed_at;
+      if (!endIso.endsWith('Z') && !endIso.includes('+') && !endIso.includes('-', 10)) {
+        endIso = endIso + 'Z';
+      }
+      end = new Date(endIso);
+    } else {
+      end = new Date();
+    }
 
     // Validate dates
     if (isNaN(start.getTime())) {
@@ -403,7 +424,7 @@ function calculateDuration(task) {
 
     let diff = end - start;
 
-    // Handle negative durations (clock skew or future timestamps)
+    // Handle negative durations (should not happen with UTC fix)
     if (diff < 0) {
       console.warn('Negative duration for task', task.task_id, ':', diff, 'ms');
       diff = 0;

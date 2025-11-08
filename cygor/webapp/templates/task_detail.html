@@ -47,20 +47,35 @@
     </div>
   </div>
 
-  <!-- Task Info Card -->
-  <div class="row g-4 mb-4">
-    <div class="col-md-8">
-      <div class="card bg-dark shadow">
-        <div class="card-header py-3">
-          <h4 class="mb-0 fw-bold"><i class="bi bi-info-circle-fill me-2"></i>Task Information</h4>
+  <!-- Task Info Card (Collapsible) -->
+  <div class="mb-4">
+    <div class="card bg-dark shadow">
+      <div class="card-header py-3" style="cursor: pointer;" onclick="toggleTaskInfo()" id="taskInfoHeader">
+        <div class="d-flex justify-content-between align-items-center">
+          <h4 class="mb-0 fw-bold">
+            <i class="bi bi-info-circle-fill me-2"></i>Task Information
+          </h4>
+          <div class="d-flex align-items-center gap-3">
+            <!-- Running Timer (inline) -->
+            <div id="runningTimerInline" style="display:none;">
+              <div class="d-flex align-items-center gap-2 px-3 py-1 bg-warning bg-opacity-10 rounded">
+                <span class="text-secondary text-uppercase fw-semibold" style="font-size: 0.75rem; letter-spacing: 0.5px;">Running</span>
+                <span class="fw-bold text-warning" id="elapsedTimeInline" style="font-size: 1rem;">00:00</span>
+              </div>
+            </div>
+            <!-- Collapse icon -->
+            <i class="bi bi-chevron-down" id="taskInfoChevron" style="font-size: 1.2rem; transition: transform 0.3s;"></i>
+          </div>
         </div>
-        <div class="card-body">
+      </div>
+      <div class="collapse show" id="taskInfoCollapse">
+        <div class="card-body py-4">
           <dl class="row mb-0 task-info-list">
             <dt class="col-sm-3">Task ID</dt>
-            <dd class="col-sm-9"><code class="text-info fw-bold" id="taskId" style="font-size: 0.95rem;">-</code></dd>
+            <dd class="col-sm-9"><code class="text-info fw-bold" id="taskId" style="font-size: 1.1rem;">-</code></dd>
 
             <dt class="col-sm-3">Type</dt>
-            <dd class="col-sm-9"><span id="taskType" class="badge bg-secondary" style="font-size: 0.9rem; padding: 0.5rem 0.75rem;">-</span></dd>
+            <dd class="col-sm-9"><span id="taskType" class="badge bg-secondary" style="font-size: 1rem; padding: 0.6rem 1rem;">-</span></dd>
 
             <dt class="col-sm-3">Status</dt>
             <dd class="col-sm-9"><span id="taskStatus">-</span></dd>
@@ -68,66 +83,28 @@
             <dt class="col-sm-3">Command</dt>
             <dd class="col-sm-9">
               <div class="d-flex align-items-start gap-2">
-                <code class="text-light flex-grow-1" id="taskCommand" style="font-size: 0.9rem; background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: 0.25rem; display: block; word-break: break-all;">-</code>
-                <button class="btn btn-sm btn-outline-secondary flex-shrink-0" onclick="copyCommand()" title="Copy command">
+                <code class="text-light flex-grow-1" id="taskCommand" style="font-size: 1.05rem; background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 0.375rem; display: block; word-break: break-all; line-height: 1.6;">-</code>
+                <button class="btn btn-sm btn-outline-secondary flex-shrink-0" onclick="copyCommand(event)" title="Copy command">
                   <i class="bi bi-clipboard"></i>
                 </button>
               </div>
             </dd>
 
             <dt class="col-sm-3">Created At</dt>
-            <dd class="col-sm-9 text-light" id="taskCreated" style="font-size: 1rem;">-</dd>
+            <dd class="col-sm-9 text-light" id="taskCreated" style="font-size: 1.1rem;">-</dd>
 
             <dt class="col-sm-3">Started At</dt>
-            <dd class="col-sm-9 text-light" id="taskStarted" style="font-size: 1rem;">-</dd>
+            <dd class="col-sm-9 text-light" id="taskStarted" style="font-size: 1.1rem;">-</dd>
 
             <dt class="col-sm-3">Completed At</dt>
-            <dd class="col-sm-9 text-light" id="taskCompleted" style="font-size: 1rem;">-</dd>
+            <dd class="col-sm-9 text-light" id="taskCompleted" style="font-size: 1.1rem;">-</dd>
 
             <dt class="col-sm-3">Duration</dt>
-            <dd class="col-sm-9 text-light fw-bold" id="taskDuration" style="font-size: 1.1rem;">-</dd>
+            <dd class="col-sm-9 text-light fw-bold" id="taskDuration" style="font-size: 1.3rem;">-</dd>
 
             <dt class="col-sm-3">Exit Code</dt>
-            <dd class="col-sm-9"><span id="taskExitCode" style="font-size: 1rem;">-</span></dd>
+            <dd class="col-sm-9"><span id="taskExitCode" style="font-size: 1.1rem;">-</span></dd>
           </dl>
-        </div>
-      </div>
-    </div>
-
-    <!-- Stats Card -->
-    <div class="col-md-4">
-      <div class="card bg-dark h-100 shadow">
-        <div class="card-header py-3">
-          <h4 class="mb-0 fw-bold"><i class="bi bi-bar-chart-fill me-2"></i>Statistics</h4>
-        </div>
-        <div class="card-body">
-          <div class="mb-4">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="text-light fw-semibold" style="font-size: 0.95rem;">Output Lines</span>
-              <span class="badge bg-primary fs-6" id="statOutputLines" style="padding: 0.5rem 0.75rem;">0</span>
-            </div>
-            <div class="progress" style="height: 6px;">
-              <div id="outputProgress" class="progress-bar" role="progressbar" style="width: 0%"></div>
-            </div>
-          </div>
-
-          <div class="mb-4">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="text-light fw-semibold" style="font-size: 0.95rem;">Error Lines</span>
-              <span class="badge bg-danger fs-6" id="statErrorLines" style="padding: 0.5rem 0.75rem;">0</span>
-            </div>
-            <div class="progress" style="height: 6px;">
-              <div id="errorProgress" class="progress-bar bg-danger" role="progressbar" style="width: 0%"></div>
-            </div>
-          </div>
-
-          <div id="runningTimer" style="display:none;">
-            <hr class="my-3">
-            <div class="text-center p-3 bg-warning bg-opacity-10 rounded">
-              <div class="text-secondary text-uppercase fw-semibold mb-2" style="font-size: 0.85rem; letter-spacing: 0.5px;">Running For</div>
-              <div class="display-5 fw-bold text-warning" id="elapsedTime">00:00</div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -207,12 +184,13 @@
 /* Task info layout */
 .task-info-list dt {
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   color: #adb5bd;
-  padding: 0.75rem 0;
+  padding: 1rem 0;
+  letter-spacing: 0.3px;
 }
 .task-info-list dd {
-  padding: 0.75rem 0;
+  padding: 1rem 0;
   margin-bottom: 0;
 }
 .task-info-list dt:not(:first-child),
@@ -291,6 +269,24 @@ const taskId = window.location.pathname.split('/').pop();
 let refreshInterval = null;
 let startTime = null;
 let timerInterval = null;
+let taskInfoCollapsed = false;
+
+// Toggle task info collapse
+function toggleTaskInfo() {
+  const collapse = document.getElementById('taskInfoCollapse');
+  const chevron = document.getElementById('taskInfoChevron');
+  const bsCollapse = new bootstrap.Collapse(collapse, { toggle: false });
+
+  if (collapse.classList.contains('show')) {
+    bsCollapse.hide();
+    chevron.style.transform = 'rotate(-90deg)';
+    taskInfoCollapsed = true;
+  } else {
+    bsCollapse.show();
+    chevron.style.transform = 'rotate(0deg)';
+    taskInfoCollapsed = false;
+  }
+}
 
 async function fetchTaskDetails() {
   try {
@@ -372,6 +368,19 @@ function updateTaskInfo(task) {
   if (task.status === 'completed' && task.task_type === 'scan' && task.exit_code === 0) {
     successBanner.classList.remove('d-none');
 
+    // Auto-collapse task info when scan completes (only once)
+    if (!taskInfoCollapsed && !window.taskCompleted) {
+      window.taskCompleted = true;
+      const collapse = document.getElementById('taskInfoCollapse');
+      const chevron = document.getElementById('taskInfoChevron');
+      if (collapse.classList.contains('show')) {
+        const bsCollapse = new bootstrap.Collapse(collapse, { toggle: false });
+        bsCollapse.hide();
+        chevron.style.transform = 'rotate(-90deg)';
+        taskInfoCollapsed = true;
+      }
+    }
+
     // Auto-sync database if this is the first time we're seeing this completed status
     if (!window.taskSynced) {
       window.taskSynced = true;
@@ -381,22 +390,37 @@ function updateTaskInfo(task) {
     successBanner.classList.add('d-none');
   }
 
-  // Running timer
+  // Running timer (inline in header)
   if (task.status === 'running') {
-    if (!startTime && task.started_at) {
-      const parsedStart = new Date(task.started_at);
+    // Set or update startTime from task data
+    if (task.started_at) {
+      // Parse as UTC by appending 'Z' if not present
+      let isoString = task.started_at;
+      if (!isoString.endsWith('Z') && !isoString.includes('+') && !isoString.includes('-', 10)) {
+        isoString = isoString + 'Z';
+      }
+      const parsedStart = new Date(isoString);
+
       // Validate the parsed date
       if (!isNaN(parsedStart.getTime())) {
-        startTime = parsedStart;
-        startTimer();
+        // Set startTime if not already set
+        if (!startTime) {
+          startTime = parsedStart;
+        }
+        // Start timer if not already running
+        if (!timerInterval) {
+          startTimer();
+        }
       } else {
         console.error('Invalid started_at timestamp:', task.started_at);
       }
     }
-    document.getElementById('runningTimer').style.display = 'block';
+    document.getElementById('runningTimerInline').style.display = 'block';
   } else {
-    document.getElementById('runningTimer').style.display = 'none';
+    document.getElementById('runningTimerInline').style.display = 'none';
     stopTimer();
+    // Reset startTime when task is no longer running
+    startTime = null;
   }
 
   // Auto-refresh logic
@@ -447,17 +471,9 @@ function updateOutput(data) {
     errEl.scrollTop = errEl.scrollHeight;
   }
 
-  // Update stats
+  // Update badge counts in tabs
   document.getElementById("outputBadge").textContent = outputBuffer.length;
   document.getElementById("errorsBadge").textContent = errorBuffer.length;
-  document.getElementById("statOutputLines").textContent = outputBuffer.length;
-  document.getElementById("statErrorLines").textContent = errorBuffer.length;
-
-  const total = outputBuffer.length + errorBuffer.length;
-  if (total > 0) {
-    document.getElementById("outputProgress").style.width = `${(outputBuffer.length / total) * 100}%`;
-    document.getElementById("errorProgress").style.width = `${(errorBuffer.length / total) * 100}%`;
-  }
 
   // If there are still no errors, clear placeholder
   if (errorBuffer.length === 0) {
@@ -470,13 +486,19 @@ function updateOutput(data) {
 function formatTime(isoString) {
   if (!isoString) return '-';
   try {
-    const date = new Date(isoString);
+    // Parse as UTC by appending 'Z' if not present
+    let iso = isoString;
+    if (!iso.endsWith('Z') && !iso.includes('+') && !iso.includes('-', 10)) {
+      iso = iso + 'Z';
+    }
+    const date = new Date(iso);
+
     if (isNaN(date.getTime())) {
       console.error('Invalid date:', isoString);
       return '-';
     }
 
-    // Format: Nov 6, 2025 4:40:11 AM (better than relative time for task details)
+    // Format: Nov 6, 2025 4:40:11 AM (in local time, but parsed from UTC)
     const options = {
       year: 'numeric',
       month: 'short',
@@ -498,8 +520,23 @@ function calculateDuration(task) {
   if (!task.started_at) return '-';
 
   try {
-    const start = new Date(task.started_at);
-    const end = task.completed_at ? new Date(task.completed_at) : new Date();
+    // Parse timestamps as UTC by appending 'Z' if not present
+    let startIso = task.started_at;
+    if (!startIso.endsWith('Z') && !startIso.includes('+') && !startIso.includes('-', 10)) {
+      startIso = startIso + 'Z';
+    }
+    const start = new Date(startIso);
+
+    let end;
+    if (task.completed_at) {
+      let endIso = task.completed_at;
+      if (!endIso.endsWith('Z') && !endIso.includes('+') && !endIso.includes('-', 10)) {
+        endIso = endIso + 'Z';
+      }
+      end = new Date(endIso);
+    } else {
+      end = new Date();
+    }
 
     // Validate dates
     if (isNaN(start.getTime())) {
@@ -515,7 +552,7 @@ function calculateDuration(task) {
 
     // Handle negative durations (clock skew or future timestamps)
     if (diff < 0) {
-      console.warn('Negative duration detected:', diff, 'ms. Start:', task.started_at, 'End:', end);
+      console.warn('Negative duration detected:', diff, 'ms. Start:', startIso, 'End:', end);
       diff = 0;
     }
 
@@ -537,19 +574,20 @@ function startTimer() {
 
   // Validate startTime before starting the interval
   if (!startTime || isNaN(startTime.getTime())) {
-    console.error('Cannot start timer: invalid startTime', startTime);
+    console.error('[Timer] Cannot start timer: invalid startTime', startTime);
     return;
   }
 
-  timerInterval = setInterval(() => {
+  // Function to update timer display
+  function updateTimer() {
     if (!startTime) return;
 
     const now = new Date();
     let diff = now - startTime;
 
-    // Handle negative durations (clock skew or future timestamps)
+    // Handle negative durations (should not happen now with UTC fix)
     if (diff < 0) {
-      console.warn('Timer: negative duration detected, setting to 0');
+      console.warn('[Timer] Negative duration detected:', diff, 'ms');
       diff = 0;
     }
 
@@ -558,14 +596,23 @@ function startTimer() {
     const seconds = Math.floor((diff % 60000) / 1000);
 
     // Format with hours if > 0
+    let timeString;
     if (hours > 0) {
-      document.getElementById('elapsedTime').textContent =
-        `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      timeString = `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     } else {
-      document.getElementById('elapsedTime').textContent =
-        `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      timeString = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     }
-  }, 1000);
+
+    // Update inline timer in header
+    const timerEl = document.getElementById('elapsedTimeInline');
+    if (timerEl) {
+      timerEl.textContent = timeString;
+    }
+  }
+
+  // Update immediately, then every second
+  updateTimer();
+  timerInterval = setInterval(updateTimer, 1000);
 }
 
 function stopTimer() {
@@ -573,7 +620,8 @@ function stopTimer() {
     clearInterval(timerInterval);
     timerInterval = null;
   }
-  startTime = null;
+  // Don't reset startTime here - we may need it if timer restarts
+  // Only reset it when task is actually completed/failed/cancelled
 }
 
 async function autoSyncDatabase(task) {
@@ -692,24 +740,27 @@ function copyErrors() {
   });
 }
 
-function copyCommand() {
-  const text = document.getElementById('taskCommand').textContent;
-  navigator.clipboard.writeText(text).then(() => {
+async function copyCommand(event) {
+  try {
+    const text = document.getElementById('taskCommand').textContent;
+    await navigator.clipboard.writeText(text);
+
     // Show success feedback with icon change
     const btn = event.target.closest('button');
     const originalHTML = btn.innerHTML;
     btn.innerHTML = '<i class="bi bi-check-lg"></i>';
     btn.classList.remove('btn-outline-secondary');
     btn.classList.add('btn-success');
+
     setTimeout(() => {
       btn.innerHTML = originalHTML;
       btn.classList.remove('btn-success');
       btn.classList.add('btn-outline-secondary');
     }, 2000);
-  }).catch(err => {
+  } catch (err) {
     console.error('Failed to copy command:', err);
-    alert('Failed to copy command to clipboard');
-  });
+    alert('Failed to copy command to clipboard: ' + err.message);
+  }
 }
 
 // Initialize
