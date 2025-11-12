@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from psycopg.rows import dict_row
 from sqlalchemy import select, func, exists
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,7 @@ from ..module_loader import discover_modules, resolve_legacy_context
 from .ingest import ingest_directory
 from .config import settings
 from .tasks import task_manager, TaskStatus
+from .credrecon_tasks import credrecon_manager
 
 
 templates = None  # will be initialized in lifespan
@@ -1581,10 +1582,350 @@ async def get_available_hostlists():
     """API endpoint to get available hostlists (for dynamic reloading)."""
     return JSONResponse(scan_available_hostlists())
 
+@app.get("/api/module-configs")
+async def get_module_configs():
+    """API endpoint to get module configuration options."""
+    # Module configuration with all available options
+    module_configs = {
+        "lockon": {
+            "name": "Lockon - Web Screenshots",
+            "description": "Captures screenshots of HTTP/HTTPS services using Playwright browser automation",
+            "options": [
+                {
+                    "name": "scheme",
+                    "label": "URL Scheme",
+                    "type": "select",
+                    "choices": [
+                        {"value": "both", "label": "Both HTTP & HTTPS (default)"},
+                        {"value": "http", "label": "HTTP only"},
+                        {"value": "https", "label": "HTTPS only"}
+                    ],
+                    "default": "both",
+                    "help": "Scheme(s) to test for bare host entries"
+                },
+                {
+                    "name": "workers",
+                    "label": "Worker Threads",
+                    "type": "number",
+                    "default": "32",
+                    "min": 1,
+                    "max": 256,
+                    "help": "Number of concurrent worker threads (default: min(32, cpu_count * 4))"
+                },
+                {
+                    "name": "scan_workers",
+                    "label": "HTTP Scan Workers",
+                    "type": "number",
+                    "min": 1,
+                    "max": 256,
+                    "help": "Separate worker count for HTTP scanning (defaults to --workers value)"
+                },
+                {
+                    "name": "shot_workers",
+                    "label": "Screenshot Workers",
+                    "type": "number",
+                    "min": 1,
+                    "max": 256,
+                    "help": "Separate worker count for screenshots (defaults to --workers value)"
+                },
+                {
+                    "name": "http_timeout",
+                    "label": "HTTP Timeout (seconds)",
+                    "type": "number",
+                    "default": "5.0",
+                    "step": 0.1,
+                    "min": 0.1,
+                    "help": "HTTP connect/read timeout in seconds"
+                },
+                {
+                    "name": "nav_timeout",
+                    "label": "Navigation Timeout (ms)",
+                    "type": "number",
+                    "default": "45000",
+                    "min": 1000,
+                    "help": "Playwright page.goto timeout in milliseconds"
+                },
+                {
+                    "name": "viewport",
+                    "label": "Viewport Size",
+                    "type": "text",
+                    "default": "1366x768",
+                    "pattern": "\\d+x\\d+",
+                    "help": "Browser viewport size (WIDTHxHEIGHT)"
+                },
+                {
+                    "name": "extra_wait",
+                    "label": "Extra Wait Time (ms)",
+                    "type": "number",
+                    "default": "2000",
+                    "min": 0,
+                    "help": "Wait time after page load before screenshot in milliseconds"
+                },
+                {
+                    "name": "status_filter",
+                    "label": "HTTP Status Filter",
+                    "type": "text",
+                    "default": "200,301,302,307,308",
+                    "help": "Comma-separated list of HTTP status codes to capture (0 = all)"
+                },
+                {
+                    "name": "output_format",
+                    "label": "Output Format",
+                    "type": "select",
+                    "choices": [
+                        {"value": "json", "label": "JSON (default)"},
+                        {"value": "xml", "label": "XML"},
+                        {"value": "csv", "label": "CSV"},
+                        {"value": "txt", "label": "Text"},
+                        {"value": "all", "label": "All formats"}
+                    ],
+                    "default": "json",
+                    "help": "Output file format"
+                }
+            ]
+        },
+        "smbexplorer": {
+            "name": "SMB Explorer",
+            "description": "Enumerates SMB shares, permissions, and accessible files on Windows/Samba hosts",
+            "options": [
+                {
+                    "name": "username",
+                    "label": "Username",
+                    "type": "text",
+                    "default": "guest",
+                    "help": "Authentication username (default: guest)"
+                },
+                {
+                    "name": "password",
+                    "label": "Password",
+                    "type": "password",
+                    "help": "Authentication password"
+                },
+                {
+                    "name": "domain",
+                    "label": "Domain",
+                    "type": "text",
+                    "help": "Domain name for authentication"
+                },
+                {
+                    "name": "ntlm_hash",
+                    "label": "NTLM Hash",
+                    "type": "text",
+                    "help": "NTLM hash for pass-the-hash (LMHASH:NTHASH format)"
+                },
+                {
+                    "name": "use_kerberos",
+                    "label": "Use Kerberos",
+                    "type": "checkbox",
+                    "default": False,
+                    "help": "Enable Kerberos authentication (requires one of the Kerberos options below)"
+                },
+                {
+                    "name": "kerberos_keytab",
+                    "label": "Kerberos Keytab File",
+                    "type": "text",
+                    "help": "Path to Kerberos keytab file (most common for service accounts)"
+                },
+                {
+                    "name": "kerberos_aeskey",
+                    "label": "Kerberos AES Key",
+                    "type": "text",
+                    "help": "AES key (128/256-bit hex) for pass-the-key attack"
+                },
+                {
+                    "name": "kerberos_principal",
+                    "label": "Kerberos Principal",
+                    "type": "text",
+                    "help": "Kerberos principal (e.g., user@DOMAIN.COM). If not specified, uses username@DOMAIN"
+                },
+                {
+                    "name": "kerberos_ccache",
+                    "label": "Kerberos Ccache File",
+                    "type": "text",
+                    "help": "Path to Kerberos ccache file (overrides KRB5CCNAME environment variable)"
+                },
+                {
+                    "name": "list_files",
+                    "label": "List Files",
+                    "type": "checkbox",
+                    "default": False,
+                    "help": "List accessible files in each share"
+                },
+                {
+                    "name": "max_files",
+                    "label": "Max Files Per Share",
+                    "type": "number",
+                    "default": "50",
+                    "min": 1,
+                    "help": "Maximum number of files to list per share"
+                },
+                {
+                    "name": "smb_output_format",
+                    "label": "Output Format",
+                    "type": "select",
+                    "choices": [
+                        {"value": "txt,csv,json,xml", "label": "Multiple formats (default)"},
+                        {"value": "txt", "label": "Text"},
+                        {"value": "csv", "label": "CSV"},
+                        {"value": "json", "label": "JSON"},
+                        {"value": "xml", "label": "XML"},
+                        {"value": "all", "label": "All formats"}
+                    ],
+                    "default": "txt,csv,json,xml",
+                    "help": "Output file format(s)"
+                }
+            ]
+        },
+        "nfsexplorer": {
+            "name": "NFS Explorer",
+            "description": "Interacts with NFS exports to analyze access levels and test UID/GID mappings",
+            "options": [
+                {
+                    "name": "uid",
+                    "label": "User ID (UID)",
+                    "type": "number",
+                    "default": "0",
+                    "min": 0,
+                    "help": "Fake UID to use for NFS requests (default: 0/root)"
+                },
+                {
+                    "name": "gid",
+                    "label": "Group ID (GID)",
+                    "type": "number",
+                    "default": "0",
+                    "min": 0,
+                    "help": "Fake GID to use for NFS requests (default: 0/root)"
+                },
+                {
+                    "name": "aux_gids",
+                    "label": "Auxiliary GIDs",
+                    "type": "text",
+                    "help": "Comma-separated auxiliary GIDs (e.g., 100,1000)"
+                },
+                {
+                    "name": "timeout",
+                    "label": "RPC Timeout (seconds)",
+                    "type": "number",
+                    "default": "10",
+                    "min": 1,
+                    "help": "RPC timeout in seconds"
+                },
+                {
+                    "name": "recurse",
+                    "label": "Recursion Depth",
+                    "type": "number",
+                    "default": "1",
+                    "min": 0,
+                    "max": 10,
+                    "help": "Directory recursion depth (default: 1)"
+                },
+                {
+                    "name": "list_files",
+                    "label": "List Files",
+                    "type": "checkbox",
+                    "default": False,
+                    "help": "List files/directories inside each share"
+                },
+                {
+                    "name": "info",
+                    "label": "Info Only",
+                    "type": "checkbox",
+                    "default": False,
+                    "help": "Only show supported NFS versions/exports"
+                },
+                {
+                    "name": "check_root",
+                    "label": "Check no_root_squash",
+                    "type": "checkbox",
+                    "default": False,
+                    "help": "Attempt to detect no_root_squash misconfigurations"
+                },
+                {
+                    "name": "version",
+                    "label": "NFS Version",
+                    "type": "select",
+                    "choices": [
+                        {"value": "", "label": "Auto-detect (default)"},
+                        {"value": "2", "label": "NFSv2"},
+                        {"value": "3", "label": "NFSv3"},
+                        {"value": "4", "label": "NFSv4"}
+                    ],
+                    "help": "Force specific NFS protocol version"
+                },
+                {
+                    "name": "nfs_output_format",
+                    "label": "Output Format",
+                    "type": "select",
+                    "choices": [
+                        {"value": "text,csv,json,xml", "label": "Multiple formats (default)"},
+                        {"value": "text", "label": "Text"},
+                        {"value": "csv", "label": "CSV"},
+                        {"value": "json", "label": "JSON"},
+                        {"value": "xml", "label": "XML"},
+                        {"value": "all", "label": "All formats"}
+                    ],
+                    "default": "text,csv,json,xml",
+                    "help": "Output file format(s)"
+                }
+            ]
+        }
+    }
+
+    return JSONResponse(module_configs)
+
 @app.get("/tasks/{task_id}", response_class=HTMLResponse)
 async def task_detail_page(request: Request, task_id: str):
     """Task detail page with live output."""
     return templates.TemplateResponse("task_detail.html", {"request": request, "task_id": task_id})
+
+# -------- Credential Scanner (On-Demand Scanner) --------
+@app.get("/credrecon", response_class=HTMLResponse)
+async def credrecon_dashboard(request: Request):
+    """Credential reconnaissance dashboard."""
+    return templates.TemplateResponse("credrecon_dashboard.html", {"request": request})
+
+@app.get("/credrecon/new", response_class=HTMLResponse)
+async def credrecon_new_scan(request: Request):
+    """Credential reconnaissance new scan page."""
+    return templates.TemplateResponse("credrecon.html", {"request": request})
+
+@app.get("/credrecon/scans/{scan_id}", response_class=HTMLResponse)
+async def credrecon_scan_detail(request: Request, scan_id: str):
+    """Credential reconnaissance scan details page."""
+    return templates.TemplateResponse("credrecon_scan_detail.html", {
+        "request": request,
+        "scan_id": scan_id
+    })
+
+@app.get("/credrecon/results", response_class=HTMLResponse)
+async def credrecon_results_page(request: Request):
+    """Credential reconnaissance results page."""
+    from cygor import credrecon
+    results_dir = Path(settings.RESULTS_DIR) / "credrecon"
+
+    # Load all credential scanner results
+    all_results = []
+    if results_dir.exists():
+        for json_file in sorted(results_dir.rglob("credrecon_results.json")):
+            try:
+                data = json.loads(json_file.read_text())
+                if isinstance(data, list):
+                    all_results.extend(data)
+            except Exception as e:
+                print(f"Error loading {json_file}: {e}", file=sys.stderr)
+
+    # Separate successful from failed
+    successful = [r for r in all_results if r.get("status") == "success"]
+    failed = [r for r in all_results if r.get("status") == "failed"]
+    errors = [r for r in all_results if r.get("status") == "error"]
+
+    return templates.TemplateResponse("credrecon_results.html", {
+        "request": request,
+        "successful": successful,
+        "failed": failed,
+        "errors": errors,
+        "total": len(all_results)
+    })
 
 # -------- Task Management API --------
 class ScanRequest(BaseModel):
@@ -1603,6 +1944,7 @@ class ModuleRequest(BaseModel):
     targets_file: str
     output_dir: Optional[str] = None
     uploaded_content: Optional[str] = None  # For file uploads from web UI
+    module_options: Optional[Dict[str, Any]] = {}  # Module-specific options as key-value pairs
 
 @app.post("/api/scans")
 async def create_scan(req: ScanRequest):
@@ -1664,10 +2006,361 @@ async def create_module_task(req: ModuleRequest):
     task_id = await task_manager.create_module_task(
         module_name=req.module_name,
         targets_file=targets_file_path,
-        output_dir=output_dir
+        output_dir=output_dir,
+        module_options=req.module_options or {}
     )
 
     return JSONResponse({"task_id": task_id, "status": "created"})
+
+@app.post("/api/credrecon")
+async def create_credrecon_task(request: Request, db_session: AsyncSession = Depends(get_session)):
+    """Create a new credential scanner task."""
+    try:
+        data = await request.json()
+
+        targets = data.get("targets", [])
+        protocol = data.get("protocol", "auto")
+        threads = data.get("threads", 10)
+        max_attempts = data.get("max_attempts", 3)
+        timeout = data.get("timeout", 5)
+        rate_limit = data.get("rate_limit", 0.1)
+        creds_file = data.get("creds_file", "")
+        uploaded_targets = data.get("uploaded_targets", "")
+        uploaded_usernames = data.get("uploaded_usernames", "")
+        uploaded_passwords = data.get("uploaded_passwords", "")
+
+        if not targets and not uploaded_targets:
+            raise HTTPException(status_code=400, detail="No targets provided")
+
+        # Create temporary targets file
+        import tempfile
+        if uploaded_targets:
+            targets_content = uploaded_targets
+        else:
+            targets_content = "\n".join(targets)
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write(targets_content)
+            targets_file = f.name
+
+        # Build command
+        cmd = ["cygor", "credrecon", "-i", targets_file]
+
+        if protocol and protocol != "auto":
+            cmd.extend(["--protocol", protocol])
+
+        if threads:
+            cmd.extend(["--threads", str(threads)])
+
+        if max_attempts:
+            cmd.extend(["--max-attempts", str(max_attempts)])
+
+        if timeout:
+            cmd.extend(["--timeout", str(timeout)])
+
+        if rate_limit:
+            cmd.extend(["--rate-limit", str(rate_limit)])
+
+        if creds_file:
+            cmd.extend(["--creds-file", creds_file])
+
+        # Handle username/password file uploads
+        if uploaded_usernames and uploaded_passwords:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='_usernames.txt', delete=False) as f:
+                f.write(uploaded_usernames)
+                usernames_file = f.name
+
+            with tempfile.NamedTemporaryFile(mode='w', suffix='_passwords.txt', delete=False) as f:
+                f.write(uploaded_passwords)
+                passwords_file = f.name
+
+            cmd.extend(["--usernames-file", usernames_file])
+            cmd.extend(["--passwords-file", passwords_file])
+
+        # Generate scan ID first
+        import uuid
+        scan_id = str(uuid.uuid4())
+
+        # Create output directory with timestamp in separate credrecon folder
+        from datetime import datetime
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
+        output_dir = Path("credrecon") / timestamp
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Add output directory and scan-id to command
+        cmd.extend(["-o", str(output_dir)])
+        cmd.extend(["--scan-id", scan_id])
+
+        # Create scan record in database
+        from cygor.webapp.models import CredReconScan
+
+        try:
+            db_scan = CredReconScan(
+                scan_id=scan_id,
+                created_at=datetime.utcnow().isoformat(),
+                status="pending",
+                command=" ".join(cmd),
+                num_targets=len(targets_content.splitlines()),
+                output_dir=str(output_dir)
+            )
+            db_session.add(db_scan)
+            await db_session.commit()
+        except Exception as e:
+            print(f"Error creating scan record in database: {e}", file=sys.stderr)
+
+        # Create credential scanner task using dedicated manager
+        await credrecon_manager.create_scan(
+            command=cmd,
+            num_targets=len(targets_content.splitlines()),
+            scan_id=scan_id
+        )
+
+        return JSONResponse({"scan_id": scan_id, "status": "created", "redirect": f"/credrecon/scans/{scan_id}"})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error creating credrecon task: {str(e)}")
+
+@app.get("/api/credrecon/stats")
+async def get_credrecon_stats(session: AsyncSession = Depends(get_session)):
+    """Get credential scanner statistics for dashboard."""
+    results_dir = Path("credrecon")
+
+    # Load all credential scanner results from disk (completed scans)
+    all_results = []
+    if results_dir.exists():
+        for json_file in sorted(results_dir.rglob("credrecon_results.json")):
+            try:
+                data = json.loads(json_file.read_text())
+                if isinstance(data, list):
+                    all_results.extend(data)
+            except Exception as e:
+                print(f"Error loading {json_file}: {e}", file=sys.stderr)
+
+    # Calculate stats
+    successful = [r for r in all_results if r.get("status") == "success"]
+    failed = [r for r in all_results if r.get("status") == "failed"]
+    errors = [r for r in all_results if r.get("status") == "error"]
+
+    # Get recent scans (last 20 results for dashboard, prioritize successful)
+    recent = sorted(successful, key=lambda x: x.get("timestamp", ""), reverse=True)[:20]
+
+    # Get ONLY active (pending/running) scan tasks from credrecon_manager
+    # Completed/failed scans should come from database (historical)
+    all_task_scans = await credrecon_manager.get_all_scans()
+    active_scan_info = []
+
+    # Only include pending/running scans (current active tasks)
+    active_scans = [s for s in all_task_scans if s.status.value in ['pending', 'running']]
+
+    # Sort: running first, then pending
+    def scan_sort_key(scan):
+        status_priority = {'running': 0, 'pending': 1}
+        return (status_priority.get(scan.status.value, 99), -scan.created_at.timestamp())
+
+    for scan in sorted(active_scans, key=scan_sort_key):
+        active_scan_info.append({
+            "scan_id": scan.scan_id,
+            "status": scan.status.value,
+            "num_targets": scan.num_targets,
+            "created_at": scan.created_at.isoformat() if scan.created_at else None,
+            "started_at": scan.started_at.isoformat() if scan.started_at else None,
+            "completed_at": scan.completed_at.isoformat() if scan.completed_at else None,
+        })
+
+    # Get historical scans (completed/failed) from database ONLY
+    # This ensures historical scans are truly past events or from page reloads
+    from sqlalchemy import select
+    from cygor.webapp.models import CredReconScan
+
+    historical_scan_info = []
+    try:
+        # Get completed/failed scans from database, ordered by most recent
+        statement = (
+            select(CredReconScan)
+            .where(CredReconScan.status.in_(['completed', 'failed']))
+            .order_by(CredReconScan.created_at.desc())
+            .limit(20)
+        )
+        result = await session.execute(statement)
+        db_scans = result.scalars().all()
+
+        for scan in db_scans:
+            historical_scan_info.append({
+                "scan_id": scan.scan_id,
+                "status": scan.status,
+                "num_targets": scan.num_targets,
+                "created_at": scan.created_at,
+                "started_at": scan.started_at,
+                "completed_at": scan.completed_at,
+            })
+    except Exception as e:
+        print(f"Error fetching historical scans from database: {e}", file=sys.stderr)
+
+    return JSONResponse({
+        "successful": len(successful),
+        "failed": len(failed),
+        "errors": len(errors),
+        "total": len(all_results),
+        "recent": recent,
+        "active_scans": active_scan_info,
+        "historical_scans": historical_scan_info
+    })
+
+@app.get("/api/credrecon/scans")
+async def list_credrecon_scans():
+    """List all credential scanner scans."""
+    scans = await credrecon_manager.get_all_scans()
+    return JSONResponse([scan.to_dict() for scan in scans])
+
+@app.get("/api/credrecon/scans/{scan_id}")
+async def get_credrecon_scan(scan_id: str):
+    """Get details of a specific credential scanner scan."""
+    scan = await credrecon_manager.get_scan(scan_id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return JSONResponse(scan.to_dict())
+
+@app.get("/api/credrecon/scans/{scan_id}/output")
+async def get_credrecon_scan_output(scan_id: str):
+    """Get the output of a specific credential scanner scan."""
+    output = await credrecon_manager.get_scan_output(scan_id)
+    if "error" in output:
+        raise HTTPException(status_code=404, detail=output["error"])
+    return JSONResponse(output)
+
+@app.get("/api/credrecon/scans/{scan_id}/results")
+async def get_credrecon_scan_results(scan_id: str, session: AsyncSession = Depends(get_session)):
+    """Get parsed credential test results from database or local JSON file."""
+    from sqlalchemy import select
+    from cygor.webapp.models import CredReconScan, CredReconResult
+
+    try:
+        # Get the scan
+        statement = select(CredReconScan).where(CredReconScan.scan_id == scan_id)
+        result = await session.execute(statement)
+        scan = result.scalars().first()
+
+        if not scan:
+            raise HTTPException(status_code=404, detail="Scan not found")
+
+        # Get all results for this scan from database
+        statement = select(CredReconResult).where(CredReconResult.scan_id == scan.id)
+        result = await session.execute(statement)
+        db_results = result.scalars().all()
+
+        # If no database results but scan has output_dir, try reading from JSON file
+        results = []
+        if not db_results and scan.output_dir:
+            json_file = Path(scan.output_dir) / "credrecon_results.json"
+            if json_file.exists():
+                try:
+                    import json
+                    file_results = json.loads(json_file.read_text())
+                    # Convert file results to match database format
+                    for r in file_results:
+                        # Create a simple object to hold the result data
+                        class FileResult:
+                            def __init__(self, data):
+                                self.target = data.get('ip', data.get('target', ''))
+                                self.port = data.get('port', 0)
+                                self.protocol = data.get('protocol', '')
+                                self.service = data.get('service')
+                                self.username = data.get('username', '')
+                                self.password = data.get('password')
+                                self.status = data.get('status', '')
+                                self.reason = data.get('details', data.get('reason'))
+                                self.tested_at = data.get('timestamp')
+                        results.append(FileResult(r))
+                except Exception as e:
+                    print(f"Error reading JSON results: {e}", file=sys.stderr)
+                    results = db_results
+            else:
+                results = db_results
+        else:
+            results = db_results
+
+        # Group results by status
+        successful = [r for r in results if r.status == "success"]
+        failed = [r for r in results if r.status == "failed"]
+        errors = [r for r in results if r.status == "error"]
+        skipped = [r for r in results if r.status == "skipped"]
+
+        # Convert to dicts
+        return JSONResponse({
+            "scan_id": scan_id,
+            "total": len(results),
+            "successful": len(successful),
+            "failed": len(failed),
+            "errors": len(errors),
+            "skipped": len(skipped),
+            "results": {
+                "successful": [
+                    {
+                        "target": r.target,
+                        "port": r.port,
+                        "protocol": r.protocol,
+                        "service": r.service,
+                        "username": r.username,
+                        "password": r.password,
+                        "reason": r.reason,
+                        "tested_at": r.tested_at
+                    }
+                    for r in successful
+                ],
+                "failed": [
+                    {
+                        "target": r.target,
+                        "port": r.port,
+                        "protocol": r.protocol,
+                        "service": r.service,
+                        "username": r.username,
+                        "password": r.password,
+                        "reason": r.reason,
+                        "tested_at": r.tested_at
+                    }
+                    for r in failed
+                ],
+                "errors": [
+                    {
+                        "target": r.target,
+                        "port": r.port,
+                        "protocol": r.protocol,
+                        "service": r.service,
+                        "username": r.username,
+                        "password": r.password,
+                        "reason": r.reason,
+                        "tested_at": r.tested_at
+                    }
+                    for r in errors
+                ],
+                "skipped": [
+                    {
+                        "target": r.target,
+                        "port": r.port,
+                        "protocol": r.protocol,
+                        "service": r.service,
+                        "username": r.username,
+                        "password": r.password,
+                        "reason": r.reason,
+                        "tested_at": r.tested_at
+                    }
+                    for r in skipped
+                ]
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error fetching results: {str(e)}")
+
+@app.delete("/api/credrecon/scans/{scan_id}")
+async def cancel_credrecon_scan(scan_id: str):
+    """Cancel a running credential scanner scan."""
+    success = await credrecon_manager.cancel_scan(scan_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Scan not found or cannot be cancelled")
+    return JSONResponse({"status": "cancelled"})
 
 @app.get("/api/tasks")
 async def list_tasks():
@@ -1828,6 +2521,7 @@ def exec_argv(argv):
     # Persist into env so the FastAPI lifespan can read them
     settings.RESULTS_DIR = str(load_path)
     os.environ["CYGOR_LOAD_DIR"] = settings.RESULTS_DIR
+    os.environ["CYGOR_RESULTS_DIR"] = settings.RESULTS_DIR  # For credrecon and other modules
     os.environ["CYGOR_VERBOSE"] = str(args.verbose)
     if args.reset_db:
         os.environ["CYGOR_RESET_DB"] = "1"

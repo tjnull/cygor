@@ -177,6 +177,18 @@
               </div>
             </div>
 
+            <!-- Module Options (Dynamic) -->
+            <div class="mb-4" id="moduleOptionsSection" style="display:none;">
+              <label class="form-label fw-bold fs-5 mb-3">
+                <i class="bi bi-sliders me-2"></i>Module Options
+              </label>
+              <div class="card bg-dark border-secondary">
+                <div class="card-body" id="moduleOptionsContainer">
+                  <!-- Options will be dynamically inserted here -->
+                </div>
+              </div>
+            </div>
+
             <!-- Advanced Options (Collapsible) -->
             <div class="mb-4">
               <a class="text-decoration-none" data-bs-toggle="collapse" href="#advancedOptions">
@@ -282,12 +294,76 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* ===== Light Theme Overrides ===== */
+body.light-theme #moduleOptionsContainer .form-control,
+body.light-theme #moduleOptionsContainer .form-select {
+  background-color: #ffffff !important;
+  color: #212529 !important;
+  border-color: rgba(0,0,0,0.2) !important;
+}
+
+body.light-theme #moduleOptionsContainer .form-control:focus,
+body.light-theme #moduleOptionsContainer .form-select:focus {
+  background-color: #ffffff !important;
+  color: #212529 !important;
+  border-color: #0d6efd !important;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+}
+
+body.light-theme #moduleOptionsContainer .form-control::placeholder {
+  color: #6c757d !important;
+}
+
+body.light-theme #moduleOptionsContainer .form-text {
+  color: #6c757d !important;
+}
+
+body.light-theme #moduleOptionsContainer .form-check-label {
+  color: #212529 !important;
+}
+
+body.light-theme #moduleOptionsSection .card {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,0.15) !important;
+}
+
+body.light-theme #moduleOptionsSection .form-label {
+  color: #212529 !important;
+}
+
+body.light-theme .module-desc .alert {
+  background: #e7f3ff !important;
+  border-color: rgba(13,110,253,0.2) !important;
+  color: #084298 !important;
+}
+
+body.light-theme .module-desc .alert-heading {
+  color: #052c65 !important;
+}
 </style>
 
 <script>
-// Global variable to store uploaded file content and path
+// Global variables to store uploaded file content, path, and module configs
 let uploadedFileContent = null;
 let selectedFilePath = null;
+let moduleConfigs = {};
+
+// ========== Fetch Module Configurations ==========
+async function loadModuleConfigs() {
+  try {
+    const response = await fetch('/api/module-configs');
+    if (!response.ok) throw new Error('Failed to fetch module configs');
+    moduleConfigs = await response.json();
+  } catch (error) {
+    console.error('Error loading module configs:', error);
+  }
+}
+
+// Load module configs on page load
+document.addEventListener('DOMContentLoaded', () => {
+  loadModuleConfigs();
+});
 
 // ========== Refresh Hostlists Functionality ==========
 async function refreshHostlists() {
@@ -433,11 +509,114 @@ document.addEventListener('DOMContentLoaded', () => {
   // setInterval(refreshHostlists, 30000);
 });
 
-// Show module description based on selection
-document.getElementById('moduleName').addEventListener('change', (e) => {
-  document.querySelectorAll('.module-desc').forEach(desc => {
-    desc.style.display = desc.dataset.module === e.target.value ? 'block' : 'none';
+// ========== Dynamic Module Options Rendering ==========
+function renderModuleOptions(moduleName) {
+  const container = document.getElementById('moduleOptionsContainer');
+  const section = document.getElementById('moduleOptionsSection');
+
+  // Clear existing options
+  container.innerHTML = '';
+
+  // Hide section if no module selected
+  if (!moduleName || !moduleConfigs[moduleName]) {
+    section.style.display = 'none';
+    return;
+  }
+
+  // Show section
+  section.style.display = 'block';
+
+  const config = moduleConfigs[moduleName];
+
+  // Render each option
+  config.options.forEach(option => {
+    const optionDiv = document.createElement('div');
+    optionDiv.className = 'mb-3';
+
+    let inputHTML = '';
+
+    switch (option.type) {
+      case 'text':
+      case 'password':
+        inputHTML = `
+          <label for="opt_${option.name}" class="form-label fw-semibold">${option.label}</label>
+          <input type="${option.type}"
+                 class="form-control bg-dark text-light border-secondary"
+                 id="opt_${option.name}"
+                 name="${option.name}"
+                 placeholder="${option.default || ''}"
+                 ${option.pattern ? `pattern="${option.pattern}"` : ''}
+                 ${option.default ? `value="${option.default}"` : ''}>
+          <div class="form-text">${option.help}</div>
+        `;
+        break;
+
+      case 'number':
+        inputHTML = `
+          <label for="opt_${option.name}" class="form-label fw-semibold">${option.label}</label>
+          <input type="number"
+                 class="form-control bg-dark text-light border-secondary"
+                 id="opt_${option.name}"
+                 name="${option.name}"
+                 ${option.min !== undefined ? `min="${option.min}"` : ''}
+                 ${option.max !== undefined ? `max="${option.max}"` : ''}
+                 ${option.step !== undefined ? `step="${option.step}"` : ''}
+                 placeholder="${option.default || ''}">
+          <div class="form-text">${option.help}</div>
+        `;
+        break;
+
+      case 'checkbox':
+        inputHTML = `
+          <div class="form-check form-switch">
+            <input class="form-check-input"
+                   type="checkbox"
+                   id="opt_${option.name}"
+                   name="${option.name}"
+                   ${option.default ? 'checked' : ''}>
+            <label class="form-check-label fw-semibold" for="opt_${option.name}">
+              ${option.label}
+            </label>
+          </div>
+          <div class="form-text">${option.help}</div>
+        `;
+        break;
+
+      case 'select':
+        const choices = option.choices.map(choice =>
+          `<option value="${choice.value}" ${choice.value === option.default ? 'selected' : ''}>
+            ${choice.label}
+          </option>`
+        ).join('');
+
+        inputHTML = `
+          <label for="opt_${option.name}" class="form-label fw-semibold">${option.label}</label>
+          <select class="form-select bg-dark text-light border-secondary"
+                  id="opt_${option.name}"
+                  name="${option.name}">
+            ${choices}
+          </select>
+          <div class="form-text">${option.help}</div>
+        `;
+        break;
+    }
+
+    optionDiv.innerHTML = inputHTML;
+    container.appendChild(optionDiv);
   });
+}
+
+// Show module description and render options based on selection
+document.getElementById('moduleName').addEventListener('change', (e) => {
+  const moduleName = e.target.value;
+
+  // Update description display
+  document.querySelectorAll('.module-desc').forEach(desc => {
+    desc.style.display = desc.dataset.module === moduleName ? 'block' : 'none';
+  });
+
+  // Render module options
+  renderModuleOptions(moduleName);
 });
 
 // Toggle between existing, upload, and browse file input
@@ -613,10 +792,45 @@ document.getElementById('moduleForm').addEventListener('submit', async (e) => {
     targetsFile = 'browsed-targets.txt'; // Placeholder, backend will handle
   }
 
+  // Collect module-specific options
+  const moduleOptions = {};
+  const optionsContainer = document.getElementById('moduleOptionsContainer');
+
+  if (optionsContainer && moduleConfigs[moduleName]) {
+    const config = moduleConfigs[moduleName];
+
+    config.options.forEach(option => {
+      const input = document.getElementById(`opt_${option.name}`);
+      if (!input) return;
+
+      let value;
+
+      if (option.type === 'checkbox') {
+        value = input.checked;
+      } else if (option.type === 'number') {
+        // Only include if value is provided
+        if (input.value !== '') {
+          value = parseFloat(input.value);
+        }
+      } else if (option.type === 'text' || option.type === 'password' || option.type === 'select') {
+        // Only include if value is provided and different from default
+        if (input.value !== '' && input.value !== option.default) {
+          value = input.value;
+        }
+      }
+
+      // Only add to options if value is meaningful
+      if (value !== undefined && value !== null && value !== '') {
+        moduleOptions[option.name] = value;
+      }
+    });
+  }
+
   const moduleData = {
     module_name: moduleName,
     targets_file: targetsFile,
-    output_dir: document.getElementById('outputDir').value.trim() || null
+    output_dir: document.getElementById('outputDir').value.trim() || null,
+    module_options: moduleOptions
   };
 
   // If file was uploaded or browsed, include the content

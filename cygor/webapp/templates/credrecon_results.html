@@ -1,0 +1,403 @@
+{% extends "base.html" %}
+
+{% block title %}Credential Reconnaissance Results{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="row">
+    <div class="col-12">
+      <!-- Page Header -->
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0 display-6">
+          <i class="bi bi-key-fill text-warning me-3"></i>Credential Reconnaissance Results
+        </h1>
+        <div class="btn-group">
+          <a href="/credrecon" class="btn btn-outline-secondary me-2">
+            <i class="bi bi-arrow-left me-2"></i>Dashboard
+          </a>
+          <a href="/credrecon/new" class="btn btn-primary">
+            <i class="bi bi-play-circle me-2"></i>New Scan
+          </a>
+        </div>
+      </div>
+
+      <!-- Summary Cards -->
+      <div class="row g-4 mb-5">
+        <div class="col-md-3">
+          <div class="card bg-dark border-success shadow-sm h-100">
+            <div class="card-body p-4 text-center">
+              <div class="stat-icon-container bg-success bg-opacity-10 rounded-3 p-3 mb-3">
+                <i class="bi bi-check-circle-fill fs-1 text-success"></i>
+              </div>
+              <div class="display-6 fw-bold text-white mb-1">{{ successful|length }}</div>
+              <div class="text-secondary text-uppercase fw-semibold" style="font-size: 0.85rem; letter-spacing: 0.5px;">Successful Logins</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-dark border-warning shadow-sm h-100">
+            <div class="card-body p-4 text-center">
+              <div class="stat-icon-container bg-warning bg-opacity-10 rounded-3 p-3 mb-3">
+                <i class="bi bi-x-circle fs-1 text-warning"></i>
+              </div>
+              <div class="display-6 fw-bold text-white mb-1">{{ failed|length }}</div>
+              <div class="text-secondary text-uppercase fw-semibold" style="font-size: 0.85rem; letter-spacing: 0.5px;">Failed Attempts</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-dark border-danger shadow-sm h-100">
+            <div class="card-body p-4 text-center">
+              <div class="stat-icon-container bg-danger bg-opacity-10 rounded-3 p-3 mb-3">
+                <i class="bi bi-exclamation-circle fs-1 text-danger"></i>
+              </div>
+              <div class="display-6 fw-bold text-white mb-1">{{ errors|length }}</div>
+              <div class="text-secondary text-uppercase fw-semibold" style="font-size: 0.85rem; letter-spacing: 0.5px;">Errors</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card bg-dark border-info shadow-sm h-100">
+            <div class="card-body p-4 text-center">
+              <div class="stat-icon-container bg-info bg-opacity-10 rounded-3 p-3 mb-3">
+                <i class="bi bi-shield-check fs-1 text-info"></i>
+              </div>
+              <div class="display-6 fw-bold text-white mb-1">{{ total }}</div>
+              <div class="text-secondary text-uppercase fw-semibold" style="font-size: 0.85rem; letter-spacing: 0.5px;">Total Tests</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Successful Logins (Critical Findings) -->
+      {% if successful %}
+      <div class="card bg-dark mb-4 shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">
+            <i class="bi bi-check-circle-fill text-success me-2"></i>
+            Successful Logins <span class="badge bg-success">{{ successful|length }}</span>
+          </h5>
+          <div class="btn-group">
+            <button type="button" class="btn btn-sm btn-success dropdown-toggle" data-bs-toggle="dropdown">
+              <i class="bi bi-download me-2"></i>Export Results
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="#" onclick="exportResults('csv'); return false;">
+                <i class="bi bi-filetype-csv me-2"></i>Export as CSV
+              </a></li>
+              <li><a class="dropdown-item" href="#" onclick="exportResults('json'); return false;">
+                <i class="bi bi-filetype-json me-2"></i>Export as JSON
+              </a></li>
+              <li><a class="dropdown-item" href="#" onclick="exportResults('txt'); return false;">
+                <i class="bi bi-filetype-txt me-2"></i>Export as TXT
+              </a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-danger" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>Security Risk!</strong> The following services accept default credentials and should be secured immediately.
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-dark table-hover mb-0" id="successTable">
+              <thead class="table-dark">
+                <tr>
+                  <th class="py-3 px-4" style="font-size: 1rem;">Target</th>
+                  <th class="py-3 px-4" style="font-size: 1rem;">Port</th>
+                  <th class="py-3 px-4" style="font-size: 1rem;">Protocol</th>
+                  <th class="py-3 px-4" style="font-size: 1rem;">Service</th>
+                  <th class="py-3 px-4" style="font-size: 1rem;">Username</th>
+                  <th class="py-3 px-4" style="font-size: 1rem;">Password</th>
+                  <th class="py-3 px-4" style="font-size: 1rem;">Details</th>
+                  <th class="py-3 px-4" style="font-size: 1rem;">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for result in successful %}
+                <tr>
+                  <td class="py-3 px-4" style="font-size: 0.95rem;">
+                    {% if result.ip.startswith('http://') or result.ip.startswith('https://') %}
+                      <a href="{{ result.ip }}" target="_blank" rel="noopener noreferrer" class="target-url" title="{{ result.ip }}">
+                        {{ result.ip }}
+                        <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.8rem;"></i>
+                      </a>
+                    {% elif result.protocol|lower == 'http' or result.protocol|lower == 'https' %}
+                      <a href="{{ result.protocol|lower }}://{{ result.ip }}" target="_blank" rel="noopener noreferrer" class="target-url" title="{{ result.protocol|lower }}://{{ result.ip }}">
+                        {{ result.ip }}
+                        <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.8rem;"></i>
+                      </a>
+                    {% else %}
+                      <span class="target-url" title="{{ result.ip }}">{{ result.ip }}</span>
+                    {% endif %}
+                  </td>
+                  <td class="py-3 px-4"><span class="badge bg-primary fs-6">{{ result.port }}</span></td>
+                  <td class="py-3 px-4" style="font-size: 0.95rem;">{{ result.protocol|upper }}</td>
+                  <td class="py-3 px-4" style="font-size: 0.95rem;">{{ result.service }}</td>
+                  <td class="py-3 px-4"><code class="text-warning fs-6">{{ result.username or '(empty)' }}</code></td>
+                  <td class="py-3 px-4"><code class="text-danger fs-6">{{ result.password or '(empty)' }}</code></td>
+                  <td class="py-3 px-4" style="font-size: 0.95rem;">{{ result.details }}</td>
+                  <td class="py-3 px-4" style="font-size: 0.9rem;">{{ result.timestamp }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Failed Attempts (Collapsed by default) -->
+      {% if failed %}
+      <div class="card bg-dark mb-4 shadow-sm">
+        <div class="card-header">
+          <a class="text-decoration-none d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#failedSection">
+            <h6 class="mb-0">
+              <i class="bi bi-x-circle text-warning me-2"></i>
+              Failed Attempts <span class="badge bg-warning">{{ failed|length }}</span>
+            </h6>
+            <i class="bi bi-chevron-down"></i>
+          </a>
+        </div>
+        <div class="collapse" id="failedSection">
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-dark table-hover mb-0 table-sm">
+                <thead class="table-dark">
+                  <tr>
+                    <th class="py-2 px-3">Target</th>
+                    <th class="py-2 px-3">Port</th>
+                    <th class="py-2 px-3">Protocol</th>
+                    <th class="py-2 px-3">Username</th>
+                    <th class="py-2 px-3">Password</th>
+                    <th class="py-2 px-3">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for result in failed[:100] %}
+                  <tr>
+                    <td class="py-2 px-3"><code class="text-muted">{{ result.ip }}</code></td>
+                    <td class="py-2 px-3">{{ result.port }}</td>
+                    <td class="py-2 px-3">{{ result.protocol }}</td>
+                    <td class="py-2 px-3"><code>{{ result.username }}</code></td>
+                    <td class="py-2 px-3"><code>{{ result.password }}</code></td>
+                    <td class="py-2 px-3"><small class="text-muted">{{ result.details }}</small></td>
+                  </tr>
+                  {% endfor %}
+                  {% if failed|length > 100 %}
+                  <tr>
+                    <td colspan="6" class="text-center text-muted py-3">
+                      <em>Showing first 100 of {{ failed|length }} failed attempts</em>
+                    </td>
+                  </tr>
+                  {% endif %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Errors (Collapsed by default) -->
+      {% if errors %}
+      <div class="card bg-dark mb-4 shadow-sm">
+        <div class="card-header">
+          <a class="text-decoration-none d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#errorsSection">
+            <h6 class="mb-0">
+              <i class="bi bi-exclamation-circle text-danger me-2"></i>
+              Errors <span class="badge bg-danger">{{ errors|length }}</span>
+            </h6>
+            <i class="bi bi-chevron-down"></i>
+          </a>
+        </div>
+        <div class="collapse" id="errorsSection">
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-dark table-hover mb-0 table-sm">
+                <thead class="table-dark">
+                  <tr>
+                    <th class="py-2 px-3">Target</th>
+                    <th class="py-2 px-3">Port</th>
+                    <th class="py-2 px-3">Protocol</th>
+                    <th class="py-2 px-3">Error Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for result in errors[:100] %}
+                  <tr>
+                    <td class="py-2 px-3"><code class="text-muted">{{ result.ip }}</code></td>
+                    <td class="py-2 px-3">{{ result.port }}</td>
+                    <td class="py-2 px-3">{{ result.protocol }}</td>
+                    <td class="py-2 px-3"><small class="text-danger">{{ result.details }}</small></td>
+                  </tr>
+                  {% endfor %}
+                  {% if errors|length > 100 %}
+                  <tr>
+                    <td colspan="4" class="text-center text-muted py-3">
+                      <em>Showing first 100 of {{ errors|length }} errors</em>
+                    </td>
+                  </tr>
+                  {% endif %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Empty State -->
+      {% if not successful and not failed and not errors %}
+      <div class="card bg-dark shadow-sm">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-inbox display-1 text-muted mb-3"></i>
+          <h4 class="text-white">No Results Yet</h4>
+          <p class="text-muted">Start a credential scan to see results here.</p>
+          <a href="/credrecon/new" class="btn btn-primary mt-3">
+            <i class="bi bi-play-circle me-2"></i>Start Scan
+          </a>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<style>
+/* Stats card styling */
+.stat-icon-container {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Improved URL readability */
+.target-url {
+  color: #6ea8fe !important;
+  word-break: break-all;
+  font-family: 'Courier New', monospace;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  text-decoration: none;
+}
+
+.target-url:hover {
+  color: #9ec5fe !important;
+  text-decoration: underline;
+}
+
+/* Larger font for better readability */
+.table tbody td {
+  font-size: 0.95rem !important;
+  line-height: 1.6;
+}
+
+.table thead th {
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+</style>
+
+<script>
+function exportResults(format) {
+  const table = document.getElementById('successTable');
+  const rows = Array.from(table.querySelectorAll('tbody tr'));
+
+  if (format === 'csv') {
+    exportCSV(rows);
+  } else if (format === 'json') {
+    exportJSON(rows);
+  } else if (format === 'txt') {
+    exportTXT(rows);
+  }
+}
+
+function exportCSV(rows) {
+  let csv = 'Target,Port,Protocol,Service,Username,Password,Details,Timestamp\n';
+
+  for (let row of rows) {
+    const cells = row.querySelectorAll('td');
+    const rowData = Array.from(cells).map(cell => {
+      return '"' + cell.textContent.trim().replace(/"/g, '""') + '"';
+    });
+    csv += rowData.join(',') + '\n';
+  }
+
+  // Download CSV
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'credrecon_successful_logins_' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+  window.URL.revokeObjectURL(url);
+}
+
+function exportJSON(rows) {
+  const results = [];
+
+  for (let row of rows) {
+    const cells = row.querySelectorAll('td');
+    if (cells.length >= 8) {
+      results.push({
+        target: cells[0].textContent.trim(),
+        port: cells[1].textContent.trim(),
+        protocol: cells[2].textContent.trim(),
+        service: cells[3].textContent.trim(),
+        username: cells[4].textContent.trim(),
+        password: cells[5].textContent.trim(),
+        details: cells[6].textContent.trim(),
+        timestamp: cells[7].textContent.trim()
+      });
+    }
+  }
+
+  // Download JSON
+  const jsonStr = JSON.stringify(results, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'credrecon_successful_logins_' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
+  window.URL.revokeObjectURL(url);
+}
+
+function exportTXT(rows) {
+  let txt = '=' .repeat(100) + '\n';
+  txt += 'CREDENTIAL SCANNER - SUCCESSFUL LOGINS REPORT\n';
+  txt += 'Generated: ' + new Date().toLocaleString() + '\n';
+  txt += '=' .repeat(100) + '\n\n';
+
+  for (let i = 0; i < rows.length; i++) {
+    const cells = rows[i].querySelectorAll('td');
+    if (cells.length >= 8) {
+      txt += `[${i + 1}] TARGET: ${cells[0].textContent.trim()}\n`;
+      txt += `    Port:      ${cells[1].textContent.trim()}\n`;
+      txt += `    Protocol:  ${cells[2].textContent.trim()}\n`;
+      txt += `    Service:   ${cells[3].textContent.trim()}\n`;
+      txt += `    Username:  ${cells[4].textContent.trim()}\n`;
+      txt += `    Password:  ${cells[5].textContent.trim()}\n`;
+      txt += `    Details:   ${cells[6].textContent.trim()}\n`;
+      txt += `    Timestamp: ${cells[7].textContent.trim()}\n`;
+      txt += '\n' + '-'.repeat(100) + '\n\n';
+    }
+  }
+
+  txt += '=' .repeat(100) + '\n';
+  txt += `Total Successful Logins: ${rows.length}\n`;
+  txt += '=' .repeat(100) + '\n';
+
+  // Download TXT
+  const blob = new Blob([txt], { type: 'text/plain;charset=utf-8;' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'credrecon_successful_logins_' + new Date().toISOString().split('T')[0] + '.txt';
+  a.click();
+  window.URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %}

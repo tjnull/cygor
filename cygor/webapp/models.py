@@ -64,3 +64,47 @@ class OSGuess(SQLModel, table=True):
 
     host: "Host" = Relationship(back_populates="os_guesses")
 
+
+class CredReconScan(SQLModel, table=True):
+    """Credential reconnaissance scan session."""
+    __tablename__ = "credrecon_scan"
+
+    id: int = Field(primary_key=True, index=True)
+    scan_id: str = Field(unique=True, index=True)  # UUID from task manager
+    created_at: str = Field(index=True)  # ISO timestamp
+    started_at: Optional[str] = Field(default=None)  # ISO timestamp
+    completed_at: Optional[str] = Field(default=None)  # ISO timestamp
+    status: str = Field(index=True)  # pending, running, completed, failed
+    command: str  # Full command executed
+    num_targets: int = Field(default=0)
+    output_dir: Optional[str] = Field(default=None)  # Local directory where results are saved
+
+    # Relationships
+    results: List["CredReconResult"] = Relationship(back_populates="scan")
+
+
+class CredReconResult(SQLModel, table=True):
+    """Individual credential test result."""
+    __tablename__ = "credrecon_result"
+
+    id: int = Field(primary_key=True, index=True)
+    scan_id: int = Field(foreign_key="credrecon_scan.id", index=True)
+
+    # Target information
+    target: str = Field(index=True)  # IP or URL
+    port: int = Field(index=True)
+    protocol: str = Field(index=True)  # http, ssh, ftp, etc.
+    service: Optional[str] = Field(default=None)  # http-basic, ssh, etc.
+
+    # Credential information
+    username: str = Field(index=True)
+    password: Optional[str] = Field(default=None)
+
+    # Result information
+    status: str = Field(index=True)  # success, failed, error, skipped
+    reason: Optional[str] = Field(default=None)  # Details about the result
+    tested_at: Optional[str] = Field(default=None)  # ISO timestamp when test was performed
+
+    # Relationships
+    scan: "CredReconScan" = Relationship(back_populates="results")
+

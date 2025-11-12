@@ -75,3 +75,7 @@ exclude = ["build", "dist", "*.egg-info"]
   "static/*",
   "static/**/*"
 ]
+"cygor.credrecon" = [
+  "*.yaml",
+  "*.yml"
+]

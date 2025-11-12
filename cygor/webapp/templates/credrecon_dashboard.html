@@ -1,0 +1,420 @@
+{% extends "base.html" %}
+
+{% block title %}Credential Reconnaissance - Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="mb-0 display-6">
+      <i class="bi bi-key-fill text-warning me-3"></i>Credential Reconnaissance
+    </h1>
+    <div class="btn-group">
+      <a href="/credrecon/new" class="btn btn-primary btn-lg px-4">
+        <i class="bi bi-play-circle me-2 fs-5"></i>New Scan
+      </a>
+      <a href="/credrecon/results" class="btn btn-success btn-lg px-4">
+        <i class="bi bi-list-check me-2 fs-5"></i>View Results
+      </a>
+    </div>
+  </div>
+
+  <!-- Quick Stats -->
+  <div class="row g-4 mb-5">
+    <div class="col-md-3">
+      <div class="card bg-dark border-success shadow-sm h-100">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center">
+            <div class="flex-shrink-0">
+              <div class="stat-icon-container bg-success bg-opacity-10 rounded-3 p-3">
+                <i class="bi bi-check-circle-fill fs-1 text-success"></i>
+              </div>
+            </div>
+            <div class="flex-grow-1 ms-4">
+              <div class="text-secondary text-uppercase fw-semibold mb-1" style="font-size: 0.85rem; letter-spacing: 0.5px;">Successful Logins</div>
+              <div class="display-5 fw-bold text-white" id="stat-successful">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-dark border-warning shadow-sm h-100">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center">
+            <div class="flex-shrink-0">
+              <div class="stat-icon-container bg-warning bg-opacity-10 rounded-3 p-3">
+                <i class="bi bi-x-circle fs-1 text-warning"></i>
+              </div>
+            </div>
+            <div class="flex-grow-1 ms-4">
+              <div class="text-secondary text-uppercase fw-semibold mb-1" style="font-size: 0.85rem; letter-spacing: 0.5px;">Failed Attempts</div>
+              <div class="display-5 fw-bold text-white" id="stat-failed">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-dark border-danger shadow-sm h-100">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center">
+            <div class="flex-shrink-0">
+              <div class="stat-icon-container bg-danger bg-opacity-10 rounded-3 p-3">
+                <i class="bi bi-exclamation-circle fs-1 text-danger"></i>
+              </div>
+            </div>
+            <div class="flex-grow-1 ms-4">
+              <div class="text-secondary text-uppercase fw-semibold mb-1" style="font-size: 0.85rem; letter-spacing: 0.5px;">Errors</div>
+              <div class="display-5 fw-bold text-white" id="stat-errors">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-dark border-info shadow-sm h-100">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center">
+            <div class="flex-shrink-0">
+              <div class="stat-icon-container bg-info bg-opacity-10 rounded-3 p-3">
+                <i class="bi bi-shield-check fs-1 text-info"></i>
+              </div>
+            </div>
+            <div class="flex-grow-1 ms-4">
+              <div class="text-secondary text-uppercase fw-semibold mb-1" style="font-size: 0.85rem; letter-spacing: 0.5px;">Total Tests</div>
+              <div class="display-5 fw-bold text-white" id="stat-total">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active Scans -->
+  <div id="active-scans-card" class="card bg-dark shadow mb-4" style="display: none;">
+    <div class="card-header d-flex justify-content-between align-items-center py-3">
+      <h4 class="mb-0 fw-bold">
+        <i class="bi bi-activity me-2"></i>Active & Recent Scans
+      </h4>
+      <button class="btn btn-outline-secondary" onclick="refreshStats()">
+        <i class="bi bi-arrow-clockwise me-2"></i>Refresh
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th class="py-3 px-4" style="font-size: 0.95rem; width: 35%;">Scan ID</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Status</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Targets</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Started</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Completed</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="active-scans-tbody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Historical Scans -->
+  <div id="historical-scans-card" class="card bg-dark shadow mb-4" style="display: none;">
+    <div class="card-header py-3" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#historicalScansCollapse">
+      <h4 class="mb-0 fw-bold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clock-history me-2"></i>Historical Scans</span>
+        <i class="bi bi-chevron-down"></i>
+      </h4>
+    </div>
+    <div id="historicalScansCollapse" class="collapse">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-dark table-hover mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th class="py-3 px-4" style="font-size: 0.95rem; width: 35%;">Scan ID</th>
+                <th class="py-3 px-4" style="font-size: 0.95rem;">Status</th>
+                <th class="py-3 px-4" style="font-size: 0.95rem;">Targets</th>
+                <th class="py-3 px-4" style="font-size: 0.95rem;">Started</th>
+                <th class="py-3 px-4" style="font-size: 0.95rem;">Completed</th>
+                <th class="py-3 px-4" style="font-size: 0.95rem;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="historical-scans-tbody">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Successful Logins -->
+  <div class="card bg-dark shadow">
+    <div class="card-header d-flex justify-content-between align-items-center py-3">
+      <h4 class="mb-0 fw-bold">
+        <i class="bi bi-shield-exclamation me-2"></i>Recent Successful Logins
+      </h4>
+      <button class="btn btn-outline-secondary" onclick="refreshStats()">
+        <i class="bi bi-arrow-clockwise me-2"></i>Refresh
+      </button>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Target</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Port</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Protocol</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Status</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Username</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Details</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="scans-tbody">
+            <tr>
+              <td colspan="7" class="text-center text-muted py-5">
+                <i class="bi bi-hourglass-split me-2 fs-4"></i>
+                <div class="mt-2 fs-5">Loading results...</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Enhanced stats card styling */
+.stat-icon-container {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.table tbody td {
+  padding: 1.25rem 1rem !important;
+  font-size: 0.95rem !important;
+  vertical-align: middle !important;
+}
+
+.table tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Status badges */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.8rem;
+  border-radius: 0.25rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.status-success {
+  background-color: rgba(25, 135, 84, 0.15);
+  color: #198754;
+  border: 1px solid rgba(25, 135, 84, 0.3);
+}
+
+.status-failed {
+  background-color: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.3);
+}
+
+.status-error {
+  background-color: rgba(220, 53, 69, 0.15);
+  color: #dc3545;
+  border: 1px solid rgba(220, 53, 69, 0.3);
+}
+
+/* Scan ID styling */
+code.scan-id {
+  font-size: 0.85rem;
+  word-break: break-all;
+  display: block;
+  line-height: 1.4;
+}
+</style>
+
+<script>
+async function fetchStats() {
+  try {
+    const response = await fetch('/api/credrecon/stats');
+    if (!response.ok) throw new Error('Failed to fetch stats');
+    const data = await response.json();
+
+    // Update stats
+    document.getElementById('stat-successful').textContent = data.successful || 0;
+    document.getElementById('stat-failed').textContent = data.failed || 0;
+    document.getElementById('stat-errors').textContent = data.errors || 0;
+    document.getElementById('stat-total').textContent = data.total || 0;
+
+    // Update active scans table
+    const activeTbody = document.getElementById('active-scans-tbody');
+    const activeCard = document.getElementById('active-scans-card');
+    const historicalTbody = document.getElementById('historical-scans-tbody');
+    const historicalCard = document.getElementById('historical-scans-card');
+
+    // Function to render scan row
+    const renderScanRow = (scan) => {
+      const statusClass = {
+        'pending': 'bg-warning',
+        'running': 'bg-primary',
+        'completed': 'bg-success',
+        'failed': 'bg-danger'
+      }[scan.status] || 'bg-secondary';
+
+      const statusIcon = {
+        'pending': 'hourglass-split',
+        'running': 'arrow-repeat',
+        'completed': 'check-circle-fill',
+        'failed': 'x-circle-fill'
+      }[scan.status] || 'circle';
+
+      const startedTime = scan.started_at ? new Date(scan.started_at).toLocaleString() : '-';
+      const completedTime = scan.completed_at ? new Date(scan.completed_at).toLocaleString() : '-';
+
+      return `
+        <tr>
+          <td class="px-4">
+            <code class="text-info" style="font-size: 0.85rem; word-break: break-all;">${scan.scan_id}</code>
+          </td>
+          <td class="px-4">
+            <span class="badge ${statusClass}">
+              <i class="bi bi-${statusIcon} me-1"></i>${scan.status.toUpperCase()}
+            </span>
+          </td>
+          <td class="px-4">${scan.num_targets}</td>
+          <td class="px-4"><small>${startedTime}</small></td>
+          <td class="px-4"><small>${completedTime}</small></td>
+          <td class="px-4">
+            <a href="/credrecon/scans/${scan.scan_id}" class="btn btn-sm btn-outline-primary">
+              <i class="bi bi-eye me-1"></i>View
+            </a>
+          </td>
+        </tr>
+      `;
+    };
+
+    // Populate active scans table (pending/running from task manager)
+    if (data.active_scans && data.active_scans.length > 0) {
+      activeCard.style.display = 'block';
+      activeTbody.innerHTML = data.active_scans.map(renderScanRow).join('');
+    } else {
+      activeCard.style.display = 'none';
+    }
+
+    // Populate historical scans table (completed/failed from database)
+    if (data.historical_scans && data.historical_scans.length > 0) {
+      historicalCard.style.display = 'block';
+      historicalTbody.innerHTML = data.historical_scans.map(renderScanRow).join('');
+    } else {
+      historicalCard.style.display = 'none';
+    }
+
+    // Update recent successful logins table
+    const tbody = document.getElementById('scans-tbody');
+
+    if (!data.recent || data.recent.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5"><i class="bi bi-inbox me-2 fs-4"></i><div class="mt-2 fs-5">No successful logins found yet.</div></td></tr>';
+    } else {
+      tbody.innerHTML = data.recent.map(scan => {
+        const statusClass = `status-${scan.status}`;
+        const statusIcon = {
+          success: 'check-circle-fill',
+          failed: 'x-circle',
+          error: 'exclamation-circle'
+        }[scan.status] || 'question-circle';
+
+        // Create clickable link for HTTP/HTTPS targets
+        let targetCell = '';
+        if (scan.ip.startsWith('http://') || scan.ip.startsWith('https://')) {
+          targetCell = `<a href="${scan.ip}" target="_blank" rel="noopener noreferrer" style="color: #6ea8fe; text-decoration: none; font-family: 'Courier New', monospace;">${scan.ip} <i class="bi bi-box-arrow-up-right" style="font-size: 0.8rem;"></i></a>`;
+        } else if (scan.protocol.toLowerCase() === 'http' || scan.protocol.toLowerCase() === 'https') {
+          targetCell = `<a href="${scan.protocol.toLowerCase()}://${scan.ip}" target="_blank" rel="noopener noreferrer" style="color: #6ea8fe; text-decoration: none; font-family: 'Courier New', monospace;">${scan.ip} <i class="bi bi-box-arrow-up-right" style="font-size: 0.8rem;"></i></a>`;
+        } else {
+          targetCell = `<code>${scan.ip}</code>`;
+        }
+
+        return `
+          <tr>
+            <td class="px-4">${targetCell}</td>
+            <td class="px-4"><span class="badge bg-primary">${scan.port}</span></td>
+            <td class="px-4">${scan.protocol.toUpperCase()}</td>
+            <td class="px-4">
+              <span class="status-badge ${statusClass}">
+                <i class="bi bi-${statusIcon} me-1"></i>${scan.status}
+              </span>
+            </td>
+            <td class="px-4"><code class="text-warning">${scan.username || '(empty)'}</code></td>
+            <td class="px-4"><small class="text-muted">${scan.details || '-'}</small></td>
+            <td class="px-4"><small>${scan.timestamp || '-'}</small></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    document.getElementById('scans-tbody').innerHTML =
+      '<tr><td colspan="7" class="text-center text-danger py-5"><i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i><div class="mt-2 fs-5">Error loading data</div></td></tr>';
+  }
+}
+
+function refreshStats() {
+  fetchStats();
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  fetchStats();
+});
+
+// Auto-refresh every 5 seconds if there are active scans
+let autoRefreshInterval = null;
+function startAutoRefresh() {
+  if (!autoRefreshInterval) {
+    autoRefreshInterval = setInterval(() => {
+      fetchStats();
+    }, 5000);
+  }
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
+  }
+}
+
+// Start auto-refresh
+startAutoRefresh();
+
+// Auto-refresh when page gains focus
+window.addEventListener('focus', () => {
+  console.log('Dashboard focused - refreshing...');
+  fetchStats();
+});
+
+// Stop auto-refresh when page loses focus
+window.addEventListener('blur', () => {
+  stopAutoRefresh();
+});
+
+// Resume auto-refresh when page gains focus
+window.addEventListener('focus', () => {
+  startAutoRefresh();
+});
+</script>
+
+{% endblock %}

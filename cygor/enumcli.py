@@ -69,6 +69,7 @@ def discover_modules():
             # Only include modules that actually exist as .py files
             if (pkgpath / f"{name}.py").exists():
                 modules.append(name)
+
     return sorted(modules)
 
 def build_parser():

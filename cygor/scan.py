@@ -877,7 +877,8 @@ def main():
     )
     nmap_group.add_argument(
         "--nmap-options",
-        help="Custom Nmap switches/options (e.g., '-sS -T5 --max-retries 2'). "
+        metavar="'OPTIONS'",
+        help="Custom Nmap switches/options (must be quoted if multiple flags, e.g., --nmap-options '-sC -sV -T4'). "
              "These will be added to the base Nmap command. Use with caution."
     )
     nmap_group.add_argument(

@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 from datetime import datetime
 from time import time
+from binascii import unhexlify
 
 # impacket imports
 import smbmap
@@ -166,31 +167,106 @@ def list_files_in_share(smb, share_name, max_files=50):
 # SMB enumeration worker
 # ----------------------------------------------------------------------
 def smb_enumerate(ip, username, password, domain, ntlm_hash, use_kerberos,
-                  result_data, list_files=False, max_files=50, file_results=None):
+                  result_data, list_files=False, max_files=50, file_results=None,
+                  kerberos_keytab=None, kerberos_aeskey=None, kerberos_principal=None, kerberos_ccache=None):
     smb_versions = ["SMBv3", "SMBv2", "SMBv1"]
     for smb_version in smb_versions:
         try:
             logger.info(f"Connecting to {ip} with {smb_version}...")
             smb = SMBConnection(ip, ip)
 
-            user = f"{domain}\\{username}" if domain else username
+            user = username  # Don't prepend domain for Kerberos
             if use_kerberos:
-                ccache_path = os.getenv('KRB5CCNAME')
-                if not ccache_path:
-                    raise KerberosError("KRB5CCNAME not set")
-                ccache = CCache.loadFile(ccache_path)
-                tgt = ccache.getCredential(Principal(f'krbtgt/{domain.upper()}@{domain.upper()}', ccache.principal.realm))
-                if tgt is None:
-                    raise KerberosError("No TGT found in ccache")
-                smb.kerberosLogin(user, '', '', tgt, domain=domain)
-            elif ntlm_hash:
+                # Priority order: keytab > aeskey > ccache > KRB5CCNAME env
                 try:
-                    lm_hash, nt_hash = ntlm_hash.split(':', 1)
-                    smb.login(user, '', lmhash=lm_hash, nthash=nt_hash)
-                except Exception:
-                    smb.login(user, password)
+                    domain_upper = domain.upper() if domain else ''
+
+                    if kerberos_keytab:
+                        # Use keytab file authentication
+                        keytab_path = os.path.abspath(os.path.expanduser(kerberos_keytab))
+                        if not os.path.exists(keytab_path):
+                            raise KerberosError(f"Keytab file not found: {keytab_path}")
+
+                        logger.info(f"Using Kerberos keytab: {keytab_path}")
+
+                        # Set environment variable for keytab
+                        os.environ['KRB5_KTNAME'] = keytab_path
+
+                        # Determine principal
+                        if kerberos_principal:
+                            principal = kerberos_principal
+                        elif domain:
+                            principal = f"{username}@{domain_upper}"
+                        else:
+                            raise KerberosError("Domain or principal required for keytab authentication")
+
+                        logger.info(f"Authenticating as principal: {principal}")
+
+                        # Use kerberosLogin with keytab
+                        # impacket will read the keytab from KRB5_KTNAME
+                        smb.kerberosLogin(username, '', domain_upper, '', '', useCache=False)
+
+                    elif kerberos_aeskey:
+                        # Use AES key for pass-the-key attack
+                        logger.info("Using Kerberos AES key (pass-the-key)")
+
+                        # Validate hex key
+                        try:
+                            aes_key = unhexlify(kerberos_aeskey)
+                            if len(aes_key) not in (16, 32):  # AES-128 or AES-256
+                                raise ValueError(f"AES key must be 128 or 256 bits (got {len(aes_key)*8} bits)")
+                        except Exception as e:
+                            raise KerberosError(f"Invalid AES key format: {e}")
+
+                        if not domain:
+                            raise KerberosError("Domain required for AES key authentication")
+
+                        logger.info(f"Using {'AES-256' if len(aes_key) == 32 else 'AES-128'} key for user {username}@{domain_upper}")
+
+                        # Use kerberosLogin with AES key
+                        smb.kerberosLogin(username, '', domain_upper, '', '', aesKey=kerberos_aeskey)
+
+                    else:
+                        # Use ccache file
+                        ccache_path = kerberos_ccache or os.getenv('KRB5CCNAME')
+                        if not ccache_path:
+                            raise KerberosError("No Kerberos credentials provided. Use --kerberos-keytab, --kerberos-aeskey, --kerberos-ccache, or set KRB5CCNAME")
+
+                        # Handle KRB5CCNAME format (FILE:/path/to/ccache)
+                        if ccache_path.startswith('FILE:'):
+                            ccache_path = ccache_path[5:]
+
+                        ccache_path = os.path.abspath(os.path.expanduser(ccache_path))
+                        if not os.path.exists(ccache_path):
+                            raise KerberosError(f"Ccache file not found: {ccache_path}")
+
+                        logger.info(f"Using Kerberos ccache: {ccache_path}")
+
+                        # Set the environment variable so impacket can find it
+                        os.environ['KRB5CCNAME'] = ccache_path
+
+                        # Use kerberosLogin with cache
+                        smb.kerberosLogin(username, '', domain_upper, '', '', useCache=True)
+
+                except KerberosError as e:
+                    logger.error(f"Kerberos authentication failed: {e}")
+                    raise
+                except Exception as e:
+                    logger.error(f"Kerberos authentication error: {e}")
+                    raise KerberosError(f"Kerberos authentication failed: {e}")
+
             else:
-                smb.login(user, password)
+                # NTLM or password authentication
+                user = f"{domain}\\{username}" if domain else username
+
+                if ntlm_hash:
+                    try:
+                        lm_hash, nt_hash = ntlm_hash.split(':', 1)
+                        smb.login(user, '', lmhash=lm_hash, nthash=nt_hash)
+                    except Exception:
+                        smb.login(user, password)
+                else:
+                    smb.login(user, password)
 
             shares = smb.listShares()
             if not shares:
@@ -332,6 +408,12 @@ def smbexplorer(input_file, output_dir=None, target=None, smb_output_format="txt
     ntlm_hash = module_command.get('ntlm-hash') or module_command.get('ntlm_hash') or module_command.get('hash')
     use_kerberos = module_command.get('use_kerberos', False)
 
+    # New Kerberos options
+    kerberos_keytab = module_command.get('kerberos_keytab') or module_command.get('kerberos-keytab')
+    kerberos_aeskey = module_command.get('kerberos_aeskey') or module_command.get('kerberos-aeskey')
+    kerberos_principal = module_command.get('kerberos_principal') or module_command.get('kerberos-principal')
+    kerberos_ccache = module_command.get('kerberos_ccache') or module_command.get('kerberos-ccache')
+
     # Resolve output directory with workspace awareness
     env_ws = os.environ.get("CYGOR_RESULTS_DIR")
 
@@ -374,7 +456,8 @@ def smbexplorer(input_file, output_dir=None, target=None, smb_output_format="txt
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = [executor.submit(
             smb_enumerate, ip.strip(), username, password, domain, ntlm_hash,
-            use_kerberos, result_data, list_files, max_files, file_results
+            use_kerberos, result_data, list_files, max_files, file_results,
+            kerberos_keytab, kerberos_aeskey, kerberos_principal, kerberos_ccache
         ) for ip in ips]
         for fut in as_completed(futures):
             fut.result()
@@ -464,20 +547,45 @@ class ColorHelpFormatter(argparse.RawTextHelpFormatter, argparse.ArgumentDefault
 _examples = f"""
 {Fore.MAGENTA}Examples:{Style.RESET_ALL}
 
+{Fore.CYAN}Basic Authentication:{Style.RESET_ALL}
+
 {Fore.YELLOW}# Run SMB Explorer with guest login{Style.RESET_ALL}
 cygor enum smbexplorer -t 10.10.10.5
 
 {Fore.YELLOW}# Authenticate with username and password{Style.RESET_ALL}
 cygor enum smbexplorer -t 192.168.1.100 -u administrator -p Passw0rd!
 
-{Fore.YELLOW}# Use NTLM hash for login{Style.RESET_ALL}
-cygor enum smbexplorer -t 192.168.1.50 -H aad3...:5f4d...
+{Fore.YELLOW}# Use NTLM hash for login (pass-the-hash){Style.RESET_ALL}
+cygor enum smbexplorer -t 192.168.1.50 -u administrator -d CORP -H aad3b435b51404eeaad3b435b51404ee:5f4dcc3b5aa765d61d8327deb882cf99
+
+{Fore.CYAN}Kerberos Authentication:{Style.RESET_ALL}
+
+{Fore.YELLOW}# Use Kerberos with ccache file (from kinit or Rubeus){Style.RESET_ALL}
+cygor enum smbexplorer -t dc01.corp.local -u user01 -d CORP -k --kerberos-ccache /tmp/krb5cc_user01
+
+{Fore.YELLOW}# Use Kerberos with keytab file (common for service accounts){Style.RESET_ALL}
+cygor enum smbexplorer -t dc01.corp.local -u svc_scanner -d CORP -k --kerberos-keytab /opt/keytabs/svc_scanner.keytab
+
+{Fore.YELLOW}# Use Kerberos with AES key (pass-the-key attack){Style.RESET_ALL}
+cygor enum smbexplorer -t dc01.corp.local -u user01 -d CORP -k --kerberos-aeskey 5f4dcc3b5aa765d61d8327deb882cf99
+
+{Fore.YELLOW}# Specify custom Kerberos principal{Style.RESET_ALL}
+cygor enum smbexplorer -t dc01.corp.local -d CORP -k --kerberos-ccache /tmp/ccache --kerberos-principal user@CORP.LOCAL
+
+{Fore.CYAN}Output Options:{Style.RESET_ALL}
 
 {Fore.YELLOW}# Save results to JSON only{Style.RESET_ALL}
 cygor enum smbexplorer -t 10.10.10.5 -o results/smb --smb-output-format json
 
 {Fore.YELLOW}# List up to 20 files from each share{Style.RESET_ALL}
 cygor enum smbexplorer -t 10.10.10.5 --list-files --max-files 20
+
+{Fore.CYAN}Notes:{Style.RESET_ALL}
+- For Kerberos authentication, ensure the target is resolvable (use FQDN or add to /etc/hosts)
+- Keytab files are most commonly used for service account authentication
+- AES keys can be extracted from memory dumps or obtained during attacks
+- Ccache files can be created with 'kinit' on Linux or exported from Windows with tools like Rubeus
+- All Kerberos options work on both Windows and Linux
 """
 
 def parse_args(argv=None):
@@ -488,11 +596,17 @@ def parse_args(argv=None):
         epilog=_examples, formatter_class=ColorHelpFormatter
     )
     a = p.add_argument_group("Authentication")
-    a.add_argument("-u", "--username", type=str, default="guest")
-    a.add_argument("-p", "--password", type=str, default="")
-    a.add_argument("-d", "--domain", type=str, default="")
+    a.add_argument("-u", "--username", type=str, default="guest", help="Username (default: guest)")
+    a.add_argument("-p", "--password", type=str, default="", help="Password")
+    a.add_argument("-d", "--domain", type=str, default="", help="Domain name")
     a.add_argument("-H", "--hashes", type=str, help="NTLM hash (LMHASH:NTHASH)")
-    a.add_argument("-k", "--kerberos", action="store_true", help="Use Kerberos authentication from ccache")
+
+    k = p.add_argument_group("Kerberos Authentication")
+    k.add_argument("-k", "--kerberos", action="store_true", help="Use Kerberos authentication")
+    k.add_argument("--kerberos-keytab", type=str, help="Path to Kerberos keytab file (most common for service accounts)")
+    k.add_argument("--kerberos-aeskey", type=str, help="AES key (128/256-bit hex) for pass-the-key attack")
+    k.add_argument("--kerberos-principal", type=str, help="Kerberos principal (e.g., user@DOMAIN.COM). If not specified, uses username@DOMAIN")
+    k.add_argument("--kerberos-ccache", type=str, help="Path to Kerberos ccache file (overrides KRB5CCNAME env variable)")
 
     t = p.add_argument_group("Targets")
     t.add_argument("-t", "--targets", type=str, help="Target IP address or comma-separated list")
@@ -525,4 +639,8 @@ if __name__ == "__main__":
         domain=args.domain,
         ntlm_hash=args.hashes,
         use_kerberos=args.kerberos,
+        kerberos_keytab=args.kerberos_keytab,
+        kerberos_aeskey=args.kerberos_aeskey,
+        kerberos_principal=args.kerberos_principal,
+        kerberos_ccache=args.kerberos_ccache,
     )

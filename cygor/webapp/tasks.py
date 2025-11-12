@@ -6,7 +6,7 @@ import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from enum import Enum
 import json
 import uuid
@@ -128,14 +128,34 @@ class TaskManager:
         self,
         module_name: str,
         targets_file: str,
-        output_dir: str = "results"
+        output_dir: str = "results",
+        module_options: Dict[str, Any] = None
     ) -> str:
-        """Create a new enumeration module task."""
+        """Create a new enumeration module task with support for module-specific options."""
         task_id = str(uuid.uuid4())
 
         # Build cygor enum command
         module_output = os.path.join(output_dir, "cygor-enumeration-modules", module_name)
         cmd = ["cygor", "enum", module_name, "-f", targets_file, "-o", module_output]
+
+        # Add module-specific options to command
+        if module_options:
+            for key, value in module_options.items():
+                if value is not None and value != "" and value != False:
+                    # Convert key from camelCase/snake_case to CLI flag format
+                    flag = f"--{key.replace('_', '-')}"
+
+                    # Handle boolean flags (just add the flag without value)
+                    if isinstance(value, bool) and value is True:
+                        cmd.append(flag)
+                    # Handle list/array values (add flag multiple times or join with comma)
+                    elif isinstance(value, list):
+                        # For list values, join with comma (e.g., --status-filter 200,301,302)
+                        if value:  # Only add if list is not empty
+                            cmd.extend([flag, ",".join(map(str, value))])
+                    # Handle regular values
+                    else:
+                        cmd.extend([flag, str(value)])
 
         task = Task(
             task_id=task_id,
@@ -151,6 +171,36 @@ class TaskManager:
         asyncio.create_task(self._run_task(task))
 
         return task_id
+
+    async def create_generic_task(
+        self,
+        task_name: str,
+        command: List[str],
+        description: str = "",
+        output_dir: str = "results"
+    ) -> str:
+        """Create a generic task for running any command."""
+        task_id = str(uuid.uuid4())
+
+        # Use a generic output directory
+        task_output = Path(output_dir) / "credrecon"
+
+        task = Task(
+            task_id=task_id,
+            task_type="generic",
+            command=command,
+            output_dir=task_output,
+            is_ondemand=True
+        )
+
+        async with self._lock:
+            self.tasks[task_id] = task
+
+        # Start the task in the background
+        asyncio.create_task(self._run_task(task))
+
+        return task_id
+
     async def _run_task(self, task: Task):
         """Execute a task in the background."""
         try:

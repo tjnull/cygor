@@ -1,0 +1,922 @@
+{% extends "base.html" %}
+{% block content %}
+
+
+<div class="container-fluid py-4">
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex align-items-center">
+      <a href="/credrecon" class="btn btn-outline-secondary btn-lg me-3">
+        <i class="bi bi-arrow-left"></i>
+      </a>
+      <h1 class="mb-0 display-6">
+        <i class="bi bi-key-fill me-3"></i>Credential Scan Details
+      </h1>
+    </div>
+    <div class="btn-group">
+      <button id="refreshBtn" class="btn btn-outline-secondary btn-lg" onclick="refreshTask()">
+        <i class="bi bi-arrow-clockwise me-2"></i>Refresh
+      </button>
+      <button id="cancelBtn" class="btn btn-outline-warning btn-lg" onclick="cancelScan()" style="display:none;">
+        <i class="bi bi-stop-circle-fill me-2"></i>Cancel
+      </button>
+      <button id="deleteBtn" class="btn btn-outline-danger btn-lg" onclick="deleteScan()" style="display:none;">
+        <i class="bi bi-trash-fill me-2"></i>Delete
+      </button>
+    </div>
+  </div>
+
+  <!-- Success Banner (hidden by default) -->
+  <div class="alert alert-success d-flex align-items-center mb-4 d-none" id="successBanner">
+    <i class="bi bi-check-circle-fill me-3 fs-4"></i>
+    <div class="flex-grow-1">
+      <strong>Scan Complete!</strong>
+      <p class="mb-0 small" id="successBannerMessage">Your credential scan has finished successfully.</p>
+    </div>
+  </div>
+
+  <!-- Scan Info Card (Collapsible) -->
+  <div class="mb-4">
+    <div class="card bg-dark shadow">
+      <div class="card-header py-3" style="cursor: pointer;" onclick="toggleScanInfo()" id="scanInfoHeader">
+        <div class="d-flex justify-content-between align-items-center">
+          <h4 class="mb-0 fw-bold">
+            <i class="bi bi-info-circle-fill me-2"></i>Scan Information
+          </h4>
+          <div class="d-flex align-items-center gap-3">
+            <!-- Running Timer (inline) -->
+            <div id="runningTimerInline" style="display:none;">
+              <div class="d-flex align-items-center gap-2 px-3 py-1 bg-warning bg-opacity-10 rounded">
+                <span class="text-secondary text-uppercase fw-semibold" style="font-size: 0.75rem; letter-spacing: 0.5px;">Running</span>
+                <span class="fw-bold text-warning" id="elapsedTimeInline" style="font-size: 1rem;">00:00</span>
+              </div>
+            </div>
+            <!-- Collapse icon -->
+            <i class="bi bi-chevron-down" id="scanInfoChevron" style="font-size: 1.2rem; transition: transform 0.3s;"></i>
+          </div>
+        </div>
+      </div>
+      <div class="collapse show" id="scanInfoCollapse">
+        <div class="card-body py-4">
+          <dl class="row mb-0 scan-info-list">
+            <dt class="col-sm-3">Scan ID</dt>
+            <dd class="col-sm-9"><code class="text-info fw-bold" id="scan-id" style="font-size: 1.1rem;">{{ scan_id }}</code></dd>
+
+            <dt class="col-sm-3">Status</dt>
+            <dd class="col-sm-9"><span id="scan-status">-</span></dd>
+
+            <dt class="col-sm-3">Targets</dt>
+            <dd class="col-sm-9 text-light fw-bold" id="scan-targets" style="font-size: 1.1rem;">-</dd>
+
+            <dt class="col-sm-3">Protocol</dt>
+            <dd class="col-sm-9"><span id="scan-protocol" class="badge bg-secondary" style="font-size: 1rem; padding: 0.6rem 1rem;">-</span></dd>
+
+            <dt class="col-sm-3">Command</dt>
+            <dd class="col-sm-9">
+              <div class="d-flex align-items-start gap-2">
+                <code class="text-light flex-grow-1" id="scan-command" style="font-size: 1.05rem; background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 0.375rem; display: block; word-break: break-all; line-height: 1.6;">-</code>
+                <button class="btn btn-sm btn-outline-secondary flex-shrink-0" onclick="copyCommand(event)" title="Copy command">
+                  <i class="bi bi-clipboard"></i>
+                </button>
+              </div>
+            </dd>
+
+            <dt class="col-sm-3">Created At</dt>
+            <dd class="col-sm-9 text-light" id="scan-created" style="font-size: 1.1rem;">-</dd>
+
+            <dt class="col-sm-3">Started At</dt>
+            <dd class="col-sm-9 text-light" id="scan-started" style="font-size: 1.1rem;">-</dd>
+
+            <dt class="col-sm-3">Completed At</dt>
+            <dd class="col-sm-9 text-light" id="scan-completed" style="font-size: 1.1rem;">-</dd>
+
+            <dt class="col-sm-3">Duration</dt>
+            <dd class="col-sm-9 text-light fw-bold" id="scan-duration" style="font-size: 1.3rem;">-</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Output Tabs -->
+  <div class="card bg-dark shadow">
+    <div class="card-header py-0">
+      <ul class="nav nav-tabs card-header-tabs" role="tablist" style="border-bottom: none;">
+        <li class="nav-item">
+          <a class="nav-link active px-4 py-3" data-bs-toggle="tab" href="#resultsTab" style="font-size: 1rem;">
+            <i class="bi bi-clipboard-data-fill me-2"></i>Results
+            <span class="badge bg-info ms-2 fs-6" id="resultsBadge" style="padding: 0.35rem 0.6rem;">0</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link px-4 py-3" data-bs-toggle="tab" href="#outputTab" style="font-size: 1rem;">
+            <i class="bi bi-terminal-fill me-2"></i>Standard Output
+            <span class="badge bg-primary ms-2 fs-6" id="outputBadge" style="padding: 0.35rem 0.6rem;">0</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link px-4 py-3" data-bs-toggle="tab" href="#errorsTab" style="font-size: 1rem;">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>Standard Error
+            <span class="badge bg-danger ms-2 fs-6" id="errorsBadge" style="padding: 0.35rem 0.6rem;">0</span>
+          </a>
+        </li>
+      </ul>
+    </div>
+    <div class="card-body p-0">
+      <div class="tab-content">
+        <!-- Results Tab -->
+        <div class="tab-pane fade show active" id="resultsTab">
+          <div class="p-4" style="max-height: 650px; overflow-y: auto;">
+            <!-- Loading State -->
+            <div id="resultsLoading" class="text-center py-5">
+              <div class="spinner-border text-info" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-3 text-secondary">Loading results...</p>
+            </div>
+
+            <!-- Results Content -->
+            <div id="resultsContent" style="display: none;">
+              <!-- Summary Cards -->
+              <div class="row mb-4">
+                <div class="col-md-3">
+                  <div class="card bg-success bg-opacity-10 border-success">
+                    <div class="card-body text-center">
+                      <i class="bi bi-check-circle-fill text-success fs-2"></i>
+                      <h3 class="mt-2 mb-0 text-success" id="successCount">0</h3>
+                      <p class="mb-0 text-secondary">Successful</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="card bg-danger bg-opacity-10 border-danger">
+                    <div class="card-body text-center">
+                      <i class="bi bi-x-circle-fill text-danger fs-2"></i>
+                      <h3 class="mt-2 mb-0 text-danger" id="failedCount">0</h3>
+                      <p class="mb-0 text-secondary">Failed</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="card bg-warning bg-opacity-10 border-warning">
+                    <div class="card-body text-center">
+                      <i class="bi bi-exclamation-triangle-fill text-warning fs-2"></i>
+                      <h3 class="mt-2 mb-0 text-warning" id="errorCount">0</h3>
+                      <p class="mb-0 text-secondary">Errors</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="card bg-secondary bg-opacity-10 border-secondary">
+                    <div class="card-body text-center">
+                      <i class="bi bi-skip-forward-fill text-secondary fs-2"></i>
+                      <h3 class="mt-2 mb-0 text-light" id="skippedCount">0</h3>
+                      <p class="mb-0 text-secondary">Skipped</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Successful Credentials -->
+              <div id="successfulSection" style="display: none;">
+                <h5 class="text-success mb-3"><i class="bi bi-check-circle-fill me-2"></i>Successful Credentials</h5>
+                <div class="table-responsive mb-4">
+                  <table class="table table-dark table-hover">
+                    <thead>
+                      <tr>
+                        <th>Target</th>
+                        <th>Port</th>
+                        <th>Protocol</th>
+                        <th>Username</th>
+                        <th>Password</th>
+                        <th>Details</th>
+                      </tr>
+                    </thead>
+                    <tbody id="successfulTable"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Failed Credentials -->
+              <div id="failedSection" style="display: none;">
+                <h5 class="text-danger mb-3"><i class="bi bi-x-circle-fill me-2"></i>Failed Credentials</h5>
+                <div class="table-responsive mb-4">
+                  <table class="table table-dark table-hover">
+                    <thead>
+                      <tr>
+                        <th>Target</th>
+                        <th>Port</th>
+                        <th>Protocol</th>
+                        <th>Username</th>
+                        <th>Password</th>
+                        <th>Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody id="failedTable"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Error Credentials -->
+              <div id="errorSection" style="display: none;">
+                <h5 class="text-warning mb-3"><i class="bi bi-exclamation-triangle-fill me-2"></i>Errors</h5>
+                <div class="table-responsive mb-4">
+                  <table class="table table-dark table-hover">
+                    <thead>
+                      <tr>
+                        <th>Target</th>
+                        <th>Port</th>
+                        <th>Protocol</th>
+                        <th>Username</th>
+                        <th>Password</th>
+                        <th>Error</th>
+                      </tr>
+                    </thead>
+                    <tbody id="errorTable"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Skipped Credentials -->
+              <div id="skippedSection" style="display: none;">
+                <h5 class="text-secondary mb-3"><i class="bi bi-skip-forward-fill me-2"></i>Skipped Credentials</h5>
+                <p class="text-muted small">These credentials were not tested because no authentication mechanism was detected or the target was unreachable.</p>
+                <div class="table-responsive mb-4">
+                  <table class="table table-dark table-hover">
+                    <thead>
+                      <tr>
+                        <th>Target</th>
+                        <th>Port</th>
+                        <th>Protocol</th>
+                        <th>Username</th>
+                        <th>Password</th>
+                        <th>Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody id="skippedTable"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- No Results Message -->
+              <div id="noResults" class="text-center py-5" style="display: none;">
+                <i class="bi bi-inbox fs-1 text-secondary"></i>
+                <p class="mt-3 text-secondary">No credential test results available yet. Results will appear here as the scan progresses.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Output Tab -->
+        <div class="tab-pane fade" id="outputTab">
+          <div class="p-3 bg-black text-light" style="max-height: 650px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; border-radius: 6px; border: 1px solid #333;">
+            <pre id="outputContent" style="white-space: pre-wrap; word-break: break-word; margin: 0;">Loading...</pre>
+          </div>
+        </div>
+
+        <!-- Errors Tab -->
+        <div class="tab-pane fade" id="errorsTab">
+          <div class="p-3 bg-black text-danger" style="max-height: 650px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; border-radius: 6px; border: 1px solid #333;">
+            <pre id="errorsContent" style="white-space: pre-wrap; word-break: break-word; margin: 0;">No errors detected</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* =========================================================
+   Credential Scan Detail Styling (Aligned with Task Detail)
+   ========================================================= */
+
+/* Status badges */
+.status-badge {
+  padding: 0.5rem 1.25rem;
+  border-radius: 0.375rem;
+  font-size: 1rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}
+.status-badge i {
+  font-size: 1.1rem;
+  margin-right: 0.5rem;
+}
+.status-pending { background-color: rgba(13, 202, 240, 0.15); color: #0dcaf0; border: 1px solid rgba(13, 202, 240, 0.3); }
+.status-running { background-color: rgba(255, 193, 7, 0.15); color: #ffc107; border: 1px solid rgba(255, 193, 7, 0.3); animation: pulse-glow 2s ease-in-out infinite; }
+.status-completed { background-color: rgba(25, 135, 84, 0.15); color: #198754; border: 1px solid rgba(25, 135, 84, 0.3); }
+.status-failed { background-color: rgba(220, 53, 69, 0.15); color: #dc3545; border: 1px solid rgba(220, 53, 69, 0.3); }
+.status-cancelled { background-color: rgba(108, 117, 125, 0.15); color: #6c757d; border: 1px solid rgba(108, 117, 125, 0.3); }
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(255, 193, 7, 0.4); }
+  50% { box-shadow: 0 0 15px rgba(255, 193, 7, 0.6); }
+}
+
+/* Scan info layout */
+.scan-info-list dt {
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: #adb5bd;
+  padding: 1rem 0;
+  letter-spacing: 0.3px;
+}
+.scan-info-list dd {
+  padding: 1rem 0;
+  margin-bottom: 0;
+}
+.scan-info-list dt:not(:first-child),
+.scan-info-list dd:not(:nth-child(2)) {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Tabs */
+.nav-tabs .nav-link {
+  color: #8b949e;
+  border: none;
+  background: transparent;
+}
+.nav-tabs .nav-link:hover {
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.05);
+}
+.nav-tabs .nav-link.active {
+  color: #58a6ff;
+  background: #0d1117;
+  border-bottom: 2px solid #58a6ff;
+}
+
+/* =========================================================
+   Terminal-Like Output Area
+   ========================================================= */
+#outputContent,
+#errorsContent {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  padding: 1.25rem;
+  color: #e6edf3;
+  background: #0d1117;
+  border-radius: 8px;
+  overflow-y: auto;
+  max-height: 650px;
+  border: 1px solid #30363d;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Scrollbar consistency */
+#outputContent::-webkit-scrollbar,
+#errorsContent::-webkit-scrollbar {
+  width: 10px;
+}
+#outputContent::-webkit-scrollbar-thumb,
+#errorsContent::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 6px;
+}
+
+/* Light theme support */
+body.light-theme #outputContent,
+body.light-theme #errorsContent {
+  background: #fafafa;
+  color: #1f1f1f;
+  border-color: #ddd;
+}
+</style>
+
+
+<script>
+const scanId = "{{ scan_id }}";
+let refreshInterval = null;
+let startTime = null;
+let timerInterval = null;
+let scanInfoCollapsed = false;
+
+// Toggle scan info collapse
+function toggleScanInfo() {
+  const collapse = document.getElementById('scanInfoCollapse');
+  const chevron = document.getElementById('scanInfoChevron');
+  const bsCollapse = new bootstrap.Collapse(collapse, { toggle: false });
+
+  if (collapse.classList.contains('show')) {
+    bsCollapse.hide();
+    chevron.style.transform = 'rotate(-90deg)';
+    scanInfoCollapsed = true;
+  } else {
+    bsCollapse.show();
+    chevron.style.transform = 'rotate(0deg)';
+    scanInfoCollapsed = false;
+  }
+}
+
+// --- Incremental output tracking ---
+let outputBuffer = [];
+let errorBuffer = [];
+let lastOutputCount = 0;
+let lastErrorCount = 0;
+
+async function fetchScanDetails() {
+  try {
+    const response = await fetch(`/api/credrecon/scans/${scanId}`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        document.body.innerHTML = '<div class="container mt-5"><div class="alert alert-danger">Scan not found</div></div>';
+        return;
+      }
+      throw new Error('Failed to fetch scan');
+    }
+
+    const scan = await response.json();
+
+    // Reset buffers if starting a new or rerun scan
+    if ((scan.status === 'pending' || scan.status === 'running') && outputBuffer.length === 0) {
+      outputBuffer = [];
+      errorBuffer = [];
+      lastOutputCount = 0;
+      lastErrorCount = 0;
+      document.getElementById("outputContent").textContent = "Loading...";
+      document.getElementById("errorsContent").textContent = "";
+    }
+
+    updateScanInfo(scan);
+
+    // Fetch and stream new output incrementally
+    const outputResponse = await fetch(`/api/credrecon/scans/${scanId}/output`);
+    if (outputResponse.ok) {
+      const outputData = await outputResponse.json();
+      updateOutput(outputData);
+    }
+
+  } catch (error) {
+    console.error('Error fetching scan:', error);
+  }
+}
+
+function updateScanInfo(scan) {
+  // Basic info
+  document.getElementById('scan-id').textContent = scan.scan_id ? scan.scan_id.substring(0, 12) : scanId.substring(0, 12);
+  document.getElementById('scan-targets').textContent = scan.num_targets || '-';
+  document.getElementById('scan-protocol').textContent = scan.protocol || 'auto';
+  document.getElementById('scan-command').textContent = scan.command || '-';
+  document.getElementById('scan-created').textContent = formatTime(scan.created_at);
+  document.getElementById('scan-started').textContent = formatTime(scan.started_at);
+  document.getElementById('scan-completed').textContent = formatTime(scan.completed_at);
+
+  // Status badge with icons
+  const statusEl = document.getElementById('scan-status');
+  const statusClass = `status-${scan.status}`;
+  const statusIcon = {
+    pending: 'clock-history',
+    running: 'hourglass-split',
+    completed: 'check-circle-fill',
+    failed: 'x-circle-fill',
+    cancelled: 'dash-circle'
+  }[scan.status] || 'question-circle';
+
+  statusEl.innerHTML = `<span class="status-badge ${statusClass}"><i class="bi bi-${statusIcon}"></i>${scan.status}</span>`;
+
+  // Duration
+  document.getElementById('scan-duration').textContent = calculateDuration(scan);
+
+  // Action buttons
+  document.getElementById('cancelBtn').style.display = scan.status === 'running' ? 'inline-block' : 'none';
+  document.getElementById('deleteBtn').style.display = scan.status !== 'running' ? 'inline-block' : 'none';
+
+  // Show success banner for completed scans
+  const successBanner = document.getElementById('successBanner');
+  if (scan.status === 'completed') {
+    successBanner.classList.remove('d-none');
+
+    // Auto-collapse scan info when complete (only once)
+    if (!scanInfoCollapsed && !window.scanCompleted) {
+      window.scanCompleted = true;
+      const collapse = document.getElementById('scanInfoCollapse');
+      const chevron = document.getElementById('scanInfoChevron');
+      if (collapse.classList.contains('show')) {
+        const bsCollapse = new bootstrap.Collapse(collapse, { toggle: false });
+        bsCollapse.hide();
+        chevron.style.transform = 'rotate(-90deg)';
+        scanInfoCollapsed = true;
+      }
+    }
+  } else {
+    successBanner.classList.add('d-none');
+  }
+
+  // Running timer (inline in header)
+  if (scan.status === 'running') {
+    if (scan.started_at) {
+      let isoString = scan.started_at;
+      if (!isoString.endsWith('Z') && !isoString.includes('+') && !isoString.includes('-', 10)) {
+        isoString = isoString + 'Z';
+      }
+      const parsedStart = new Date(isoString);
+
+      if (!isNaN(parsedStart.getTime())) {
+        if (!startTime) {
+          startTime = parsedStart;
+        }
+        if (!timerInterval) {
+          startTimer();
+        }
+      }
+    }
+    document.getElementById('runningTimerInline').style.display = 'block';
+  } else {
+    document.getElementById('runningTimerInline').style.display = 'none';
+    stopTimer();
+    startTime = null;
+  }
+
+  // Auto-refresh logic
+  if (scan.status === 'running' || scan.status === 'pending') {
+    if (!refreshInterval) {
+      refreshInterval = setInterval(fetchScanDetails, 2000);
+    }
+  } else {
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+      refreshInterval = null;
+    }
+  }
+}
+
+function updateOutput(data) {
+  const newOutput = data.output || [];
+  const newErrors = data.errors || [];
+
+  const outputEl = document.getElementById("outputContent");
+  const errEl = document.getElementById("errorsContent");
+
+  // Clear "Loading..." on first data receive
+  if (outputEl.textContent === "Loading..." && newOutput.length > 0) {
+    outputEl.textContent = "";
+    lastOutputCount = 0;
+  }
+
+  // If we're at the beginning and there's output, initialize it
+  if (lastOutputCount === 0 && newOutput.length > 0) {
+    outputBuffer = [...newOutput];
+    lastOutputCount = newOutput.length;
+    outputEl.textContent = newOutput.join("\n");
+    outputEl.scrollTop = outputEl.scrollHeight;
+  }
+  // Append only new lines (incremental updates)
+  else if (newOutput.length > lastOutputCount) {
+    const delta = newOutput.slice(lastOutputCount);
+    outputBuffer.push(...delta);
+    lastOutputCount = newOutput.length;
+    outputEl.textContent += "\n" + delta.join("\n");
+    outputEl.scrollTop = outputEl.scrollHeight;
+  }
+
+  // Handle case where scan completed but no output
+  if (data.status && (data.status === 'completed' || data.status === 'failed')) {
+    if (newOutput.length === 0 && outputEl.textContent === "Loading...") {
+      outputEl.textContent = "No output generated by this scan.";
+    }
+  }
+
+  // Similar logic for errors
+  if (lastErrorCount === 0 && newErrors.length > 0) {
+    errorBuffer = [...newErrors];
+    lastErrorCount = newErrors.length;
+    errEl.textContent = newErrors.join("\n");
+    errEl.scrollTop = errEl.scrollHeight;
+  }
+  else if (newErrors.length > lastErrorCount) {
+    const deltaErr = newErrors.slice(lastErrorCount);
+    errorBuffer.push(...deltaErr);
+    lastErrorCount = newErrors.length;
+
+    if (errEl.textContent.includes("No errors detected")) {
+      errEl.textContent = "";
+    }
+    errEl.textContent += "\n" + deltaErr.join("\n");
+    errEl.scrollTop = errEl.scrollHeight;
+  }
+
+  // Update badge counts
+  document.getElementById("outputBadge").textContent = outputBuffer.length;
+  document.getElementById("errorsBadge").textContent = errorBuffer.length;
+
+  // Show "No errors" message if no errors
+  if (errorBuffer.length === 0 && errEl.textContent === "") {
+    errEl.textContent = "No errors detected";
+  }
+}
+
+function formatTime(isoString) {
+  if (!isoString) return '-';
+  try {
+    let iso = isoString;
+    if (!iso.endsWith('Z') && !iso.includes('+') && !iso.includes('-', 10)) {
+      iso = iso + 'Z';
+    }
+    const date = new Date(iso);
+
+    if (isNaN(date.getTime())) {
+      return '-';
+    }
+
+    const options = {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    };
+
+    return date.toLocaleString('en-US', options);
+  } catch (e) {
+    return '-';
+  }
+}
+
+function calculateDuration(scan) {
+  if (!scan.started_at) return '-';
+
+  try {
+    let startIso = scan.started_at;
+    if (!startIso.endsWith('Z') && !startIso.includes('+') && !startIso.includes('-', 10)) {
+      startIso = startIso + 'Z';
+    }
+    const start = new Date(startIso);
+
+    let end;
+    if (scan.completed_at) {
+      let endIso = scan.completed_at;
+      if (!endIso.endsWith('Z') && !endIso.includes('+') && !endIso.includes('-', 10)) {
+        endIso = endIso + 'Z';
+      }
+      end = new Date(endIso);
+    } else {
+      end = new Date();
+    }
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return '-';
+    }
+
+    let diff = end - start;
+    if (diff < 0) diff = 0;
+
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000);
+
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+  } catch (e) {
+    return '-';
+  }
+}
+
+function startTimer() {
+  if (timerInterval) return;
+
+  if (!startTime || isNaN(startTime.getTime())) {
+    return;
+  }
+
+  function updateTimer() {
+    if (!startTime) return;
+
+    const now = new Date();
+    let diff = now - startTime;
+    if (diff < 0) diff = 0;
+
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000);
+
+    let timeString;
+    if (hours > 0) {
+      timeString = `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    } else {
+      timeString = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    const timerEl = document.getElementById('elapsedTimeInline');
+    if (timerEl) {
+      timerEl.textContent = timeString;
+    }
+  }
+
+  updateTimer();
+  timerInterval = setInterval(updateTimer, 1000);
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
+async function cancelScan() {
+  if (!confirm('Cancel this scan?')) return;
+
+  try {
+    const response = await fetch(`/api/credrecon/scans/${scanId}`, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Failed to cancel scan');
+    await fetchScanDetails();
+  } catch (error) {
+    alert('Error cancelling scan: ' + error.message);
+  }
+}
+
+async function deleteScan() {
+  if (!confirm('Delete this scan? This cannot be undone.')) return;
+
+  try {
+    const response = await fetch(`/api/credrecon/scans/${scanId}`, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Failed to delete scan');
+    window.location.href = '/credrecon';
+  } catch (error) {
+    alert('Error deleting scan: ' + error.message);
+  }
+}
+
+async function fetchResults() {
+  try {
+    const response = await fetch(`/api/credrecon/scans/${scanId}/results`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        // Scan not found or no results yet
+        document.getElementById('resultsLoading').style.display = 'none';
+        document.getElementById('noResults').style.display = 'block';
+        return;
+      }
+      throw new Error('Failed to fetch results');
+    }
+
+    const data = await response.json();
+
+    // Update badge
+    document.getElementById('resultsBadge').textContent = data.total || 0;
+
+    // Update summary cards
+    document.getElementById('successCount').textContent = data.successful || 0;
+    document.getElementById('failedCount').textContent = data.failed || 0;
+    document.getElementById('errorCount').textContent = data.errors || 0;
+    document.getElementById('skippedCount').textContent = data.skipped || 0;
+
+    // Hide loading, show content
+    document.getElementById('resultsLoading').style.display = 'none';
+
+    if (data.total === 0) {
+      document.getElementById('noResults').style.display = 'block';
+      return;
+    }
+
+    document.getElementById('resultsContent').style.display = 'block';
+    document.getElementById('noResults').style.display = 'none';
+
+    // Populate Successful table
+    if (data.results.successful && data.results.successful.length > 0) {
+      document.getElementById('successfulSection').style.display = 'block';
+      const tbody = document.getElementById('successfulTable');
+      tbody.innerHTML = '';
+      data.results.successful.forEach(result => {
+        const row = `
+          <tr>
+            <td><code class="text-success">${escapeHtml(result.target)}</code></td>
+            <td>${result.port}</td>
+            <td><span class="badge bg-primary">${result.protocol.toUpperCase()}</span></td>
+            <td><span class="badge bg-info">${escapeHtml(result.username)}</span></td>
+            <td><span class="badge bg-warning text-dark">${escapeHtml(result.password || '(empty)')}</span></td>
+            <td class="text-success">${escapeHtml(result.reason || 'Authentication successful')}</td>
+          </tr>
+        `;
+        tbody.innerHTML += row;
+      });
+    }
+
+    // Populate Failed table
+    if (data.results.failed && data.results.failed.length > 0) {
+      document.getElementById('failedSection').style.display = 'block';
+      const tbody = document.getElementById('failedTable');
+      tbody.innerHTML = '';
+      data.results.failed.forEach(result => {
+        const row = `
+          <tr>
+            <td><code>${escapeHtml(result.target)}</code></td>
+            <td>${result.port}</td>
+            <td><span class="badge bg-primary">${result.protocol.toUpperCase()}</span></td>
+            <td><span class="badge bg-info">${escapeHtml(result.username)}</span></td>
+            <td><span class="badge bg-warning text-dark">${escapeHtml(result.password || '(empty)')}</span></td>
+            <td class="text-danger small">${escapeHtml(result.reason || 'Authentication failed')}</td>
+          </tr>
+        `;
+        tbody.innerHTML += row;
+      });
+    }
+
+    // Populate Error table
+    if (data.results.errors && data.results.errors.length > 0) {
+      document.getElementById('errorSection').style.display = 'block';
+      const tbody = document.getElementById('errorTable');
+      tbody.innerHTML = '';
+      data.results.errors.forEach(result => {
+        const row = `
+          <tr>
+            <td><code>${escapeHtml(result.target)}</code></td>
+            <td>${result.port}</td>
+            <td><span class="badge bg-primary">${result.protocol.toUpperCase()}</span></td>
+            <td><span class="badge bg-info">${escapeHtml(result.username)}</span></td>
+            <td><span class="badge bg-warning text-dark">${escapeHtml(result.password || '(empty)')}</span></td>
+            <td class="text-warning small">${escapeHtml(result.reason || 'Unknown error')}</td>
+          </tr>
+        `;
+        tbody.innerHTML += row;
+      });
+    }
+
+    // Populate Skipped table
+    if (data.results.skipped && data.results.skipped.length > 0) {
+      document.getElementById('skippedSection').style.display = 'block';
+      const tbody = document.getElementById('skippedTable');
+      tbody.innerHTML = '';
+      data.results.skipped.forEach(result => {
+        const row = `
+          <tr>
+            <td><code class="text-secondary">${escapeHtml(result.target)}</code></td>
+            <td>${result.port}</td>
+            <td><span class="badge bg-secondary">${result.protocol.toUpperCase()}</span></td>
+            <td><span class="badge bg-dark">${escapeHtml(result.username)}</span></td>
+            <td><span class="badge bg-dark">${escapeHtml(result.password || '(empty)')}</span></td>
+            <td class="text-secondary small">${escapeHtml(result.reason || 'Skipped')}</td>
+          </tr>
+        `;
+        tbody.innerHTML += row;
+      });
+    }
+
+  } catch (error) {
+    console.error('Error fetching results:', error);
+    document.getElementById('resultsLoading').innerHTML = `
+      <i class="bi bi-exclamation-triangle text-warning fs-1"></i>
+      <p class="mt-3 text-warning">Error loading results: ${error.message}</p>
+    `;
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function refreshTask() {
+  fetchScanDetails();
+  fetchResults();
+}
+
+async function copyCommand(event) {
+  try {
+    const text = document.getElementById('scan-command').textContent;
+    await navigator.clipboard.writeText(text);
+
+    const btn = event.target.closest('button');
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+    btn.classList.remove('btn-outline-secondary');
+    btn.classList.add('btn-success');
+
+    setTimeout(() => {
+      btn.innerHTML = originalHTML;
+      btn.classList.remove('btn-success');
+      btn.classList.add('btn-outline-secondary');
+    }, 2000);
+  } catch (err) {
+    console.error('Failed to copy command:', err);
+  }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  fetchScanDetails();
+  fetchResults();
+});
+
+// Auto-refresh when page gains focus
+window.addEventListener('focus', () => {
+  console.log('Scan detail focused - refreshing...');
+  fetchScanDetails();
+  fetchResults();
+});
+
+// Cleanup
+window.addEventListener('beforeunload', () => {
+  if (refreshInterval) clearInterval(refreshInterval);
+  stopTimer();
+});
+</script>
+
+{% endblock %}
