@@ -383,6 +383,18 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
             log(f"[+] Ingested nfsexplorer JSON: {file.name}", level=1, verbose=verbose)
             return
 
+        # ---------- CREDRECON ----------
+        # Skip credrecon JSON files - they should not be ingested into Host/Port tables
+        # Credrecon results are stored separately in CredReconScan and CredReconResult tables
+        elif module_hint == "credrecon" or fname == "credrecon_results.json" or (
+            isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict) and
+            any(key in data[0] for key in ["username", "password", "status"]) and
+            any(key in data[0] for key in ["ip", "target"]) and
+            any(key in data[0] for key in ["protocol", "port"])
+        ):
+            log(f"[i] Skipping credrecon JSON file: {file.name} (credrecon results are stored separately)", level=2, verbose=verbose)
+            return
+
         # ---------- GENERIC JSON FALLBACK ----------
         else:
             await ingest_generic_json(file, session, data, module_hint, verbose=verbose)

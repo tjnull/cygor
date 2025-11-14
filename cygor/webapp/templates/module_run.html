@@ -232,33 +232,33 @@
       <!-- Help Card -->
       <div class="card bg-dark border-secondary mt-4">
         <div class="card-body">
-          <h6 class="card-title">
+          <h5 class="card-title mb-3" style="font-size: 1.25rem; font-weight: 600;">
             <i class="bi bi-info-circle me-2"></i>Module Requirements
-          </h6>
+          </h5>
           <div class="table-responsive">
-            <table class="table table-sm table-dark table-borderless mb-0 small">
+            <table class="table table-dark table-borderless mb-0 module-requirements-table">
               <thead>
                 <tr class="text-light">
-                  <th>Module</th>
-                  <th>Target Format</th>
-                  <th>Dependencies</th>
+                  <th style="font-size: 1.05rem; font-weight: 600; padding: 0.75rem 1rem;">Module</th>
+                  <th style="font-size: 1.05rem; font-weight: 600; padding: 0.75rem 1rem;">Target Format</th>
+                  <th style="font-size: 1.05rem; font-weight: 600; padding: 0.75rem 1rem;">Dependencies</th>
                 </tr>
               </thead>
               <tbody class="text-light">
                 <tr>
-                  <td><strong>Lockon</strong></td>
-                  <td><code>http://192.168.1.1:80</code></td>
-                  <td>Playwright (auto-installed)</td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;"><strong>Lockon</strong></td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;"><code class="target-format-code">http://192.168.1.1:80</code></td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;">Playwright (auto-installed)</td>
                 </tr>
                 <tr>
-                  <td><strong>SMB Explorer</strong></td>
-                  <td><code>192.168.1.1</code> or <code>hostname</code></td>
-                  <td>smbmap</td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;"><strong>SMB Explorer</strong></td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;"><code class="target-format-code">192.168.1.1</code> or <code class="target-format-code">hostname</code></td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;">smbmap</td>
                 </tr>
                 <tr>
-                  <td><strong>NFS Explorer</strong></td>
-                  <td><code>192.168.1.1</code></td>
-                  <td>pyNfsClient</td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;"><strong>NFS Explorer</strong></td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;"><code class="target-format-code">192.168.1.1</code></td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;">pyNfsClient</td>
                 </tr>
               </tbody>
             </table>
@@ -271,6 +271,58 @@
 </div>
 
 <style>
+/* Module Requirements Table Styling */
+.module-requirements-table {
+  font-size: 1rem !important;
+}
+
+.module-requirements-table tbody td {
+  font-size: 1rem !important;
+  line-height: 1.6;
+}
+
+.module-requirements-table code.target-format-code {
+  font-size: 1rem !important;
+  font-family: 'Courier New', 'Monaco', 'Consolas', monospace;
+  background: rgba(255, 20, 147, 0.2) !important;
+  color: #ff69b4 !important;
+  padding: 0.4rem 0.6rem !important;
+  border-radius: 0.25rem !important;
+  font-weight: 600 !important;
+  border: 1px solid rgba(255, 20, 147, 0.3) !important;
+}
+
+.module-requirements-table tbody td strong {
+  font-size: 1.05rem !important;
+  font-weight: 600 !important;
+  color: #ffffff !important;
+}
+
+/* Light theme overrides for Module Requirements */
+body.light-theme .module-requirements-table {
+  background: #ffffff !important;
+}
+
+body.light-theme .module-requirements-table thead th {
+  color: #212529 !important;
+  background: #f8f9fa !important;
+}
+
+body.light-theme .module-requirements-table tbody td {
+  color: #212529 !important;
+  background: #ffffff !important;
+}
+
+body.light-theme .module-requirements-table tbody td strong {
+  color: #212529 !important;
+}
+
+body.light-theme .module-requirements-table code.target-format-code {
+  background: rgba(255, 20, 147, 0.15) !important;
+  color: #c71585 !important;
+  border-color: rgba(255, 20, 147, 0.25) !important;
+}
+
 /* Enhanced readability for form text */
 .form-text {
   color: #adb5bd !important;

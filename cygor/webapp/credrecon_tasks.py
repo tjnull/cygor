@@ -84,6 +84,8 @@ class CredScannerManager:
         try:
             scan.status = CredReconStatus.RUNNING
             scan.started_at = datetime.utcnow()
+            # Update database when scan starts
+            await self._update_scan_in_database(scan)
 
             # Run the command
             process = await asyncio.create_subprocess_exec(
@@ -124,6 +126,8 @@ class CredScannerManager:
             scan.error_lines.append(f"Exception during scan: {str(e)}")
         finally:
             scan.completed_at = datetime.utcnow()
+            # Update database record when scan completes
+            await self._update_scan_in_database(scan)
 
     async def get_scan(self, scan_id: str) -> Optional[CredReconTask]:
         """Get a scan by ID."""
@@ -163,10 +167,71 @@ class CredScannerManager:
                     scan.process.kill()
                 scan.status = CredReconStatus.FAILED
                 scan.completed_at = datetime.utcnow()
+                # Update database record when scan is cancelled
+                await self._update_scan_in_database(scan)
                 return True
             except Exception:
                 return False
         return False
+
+    async def _update_scan_in_database(self, scan: CredReconTask):
+        """Update the database record for a scan when it completes or is cancelled."""
+        try:
+            from sqlalchemy import select
+            from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+            from sqlalchemy.orm import sessionmaker
+            from cygor.webapp.models import CredReconScan
+            from cygor.webapp import db
+            import os
+            
+            # Use the same database connection logic as the main app
+            # Try to use the existing engine if available, otherwise create a new one
+            db_url = os.environ.get("CYGOR_DB_URL") or db.get_default_database_url()
+            
+            # Convert to async URL format if needed
+            if db_url.startswith("postgresql://"):
+                db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            elif db_url.startswith("postgresql+psycopg_async://"):
+                # Already in async format
+                pass
+            elif db_url.startswith("sqlite:///"):
+                db_url = db_url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+            elif not db_url.startswith("sqlite+aiosqlite://"):
+                # Default to SQLite if format is unknown
+                db_url = "sqlite+aiosqlite:///cygor.db"
+            
+            engine = create_async_engine(db_url, echo=False, pool_pre_ping=True)
+            async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+            
+            try:
+                async with async_session() as session:
+                    # Find the scan record by scan_id
+                    statement = select(CredReconScan).where(CredReconScan.scan_id == scan.scan_id)
+                    result = await session.execute(statement)
+                    db_scan = result.scalar_one_or_none()
+                    
+                    if db_scan:
+                        # Update the database record
+                        db_scan.status = scan.status.value
+                        if scan.started_at:
+                            db_scan.started_at = scan.started_at.isoformat()
+                        if scan.completed_at:
+                            db_scan.completed_at = scan.completed_at.isoformat()
+                        
+                        await session.commit()
+                    else:
+                        # Table might not exist yet - this is okay, just log it
+                        print(f"Info: Scan {scan.scan_id} not found in database (table may not exist yet)", file=__import__('sys').stderr)
+            finally:
+                await engine.dispose()
+        except Exception as e:
+            # Don't fail the scan if database update fails, just log it
+            # This can happen if the table doesn't exist yet or database isn't initialized
+            error_msg = str(e)
+            if "no such table" in error_msg.lower():
+                print(f"Info: Database table not found for scan {scan.scan_id} - table may need to be created", file=__import__('sys').stderr)
+            else:
+                print(f"Warning: Failed to update scan {scan.scan_id} in database: {e}", file=__import__('sys').stderr)
 
 
 # Global instance

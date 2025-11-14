@@ -132,13 +132,13 @@
                       <span class="target-url" title="{{ result.ip }}">{{ result.ip }}</span>
                     {% endif %}
                   </td>
-                  <td class="py-3 px-4"><span class="badge bg-primary fs-6">{{ result.port }}</span></td>
-                  <td class="py-3 px-4" style="font-size: 0.95rem;">{{ result.protocol|upper }}</td>
-                  <td class="py-3 px-4" style="font-size: 0.95rem;">{{ result.service }}</td>
-                  <td class="py-3 px-4"><code class="text-warning fs-6">{{ result.username or '(empty)' }}</code></td>
-                  <td class="py-3 px-4"><code class="text-danger fs-6">{{ result.password or '(empty)' }}</code></td>
-                  <td class="py-3 px-4" style="font-size: 0.95rem;">{{ result.details }}</td>
-                  <td class="py-3 px-4" style="font-size: 0.9rem;">{{ result.timestamp }}</td>
+                  <td class="py-3 px-4"><span class="badge bg-primary" style="font-size: 1rem; padding: 0.5rem 0.75rem;">{{ result.port }}</span></td>
+                  <td class="py-3 px-4" style="font-size: 1rem; color: #58a6ff; font-weight: 500;">{{ result.protocol|upper }}</td>
+                  <td class="py-3 px-4" style="font-size: 1rem; color: #c9d1d9; font-weight: 500;">{{ result.service }}</td>
+                  <td class="py-3 px-4"><code class="text-warning" style="font-size: 1rem; background: rgba(255, 193, 7, 0.15); padding: 0.4rem 0.6rem; border-radius: 0.25rem; font-weight: 600;">{{ result.username or '(empty)' }}</code></td>
+                  <td class="py-3 px-4"><code class="text-danger" style="font-size: 1rem; background: rgba(220, 53, 69, 0.15); padding: 0.4rem 0.6rem; border-radius: 0.25rem; font-weight: 600;">{{ result.password or '(empty)' }}</code></td>
+                  <td class="py-3 px-4" style="font-size: 1rem; color: #e6edf3; line-height: 1.6;">{{ result.details }}</td>
+                  <td class="py-3 px-4" style="font-size: 0.95rem; color: #8b949e;">{{ result.timestamp }}</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -177,12 +177,12 @@
                 <tbody>
                   {% for result in failed[:100] %}
                   <tr>
-                    <td class="py-2 px-3"><code class="text-muted">{{ result.ip }}</code></td>
-                    <td class="py-2 px-3">{{ result.port }}</td>
-                    <td class="py-2 px-3">{{ result.protocol }}</td>
-                    <td class="py-2 px-3"><code>{{ result.username }}</code></td>
-                    <td class="py-2 px-3"><code>{{ result.password }}</code></td>
-                    <td class="py-2 px-3"><small class="text-muted">{{ result.details }}</small></td>
+                    <td class="py-2 px-3"><code style="color: #8b949e; font-size: 0.95rem; background: rgba(139, 148, 158, 0.1); padding: 0.3rem 0.5rem; border-radius: 0.25rem;">{{ result.ip }}</code></td>
+                    <td class="py-2 px-3" style="color: #c9d1d9; font-size: 0.95rem;">{{ result.port }}</td>
+                    <td class="py-2 px-3" style="color: #58a6ff; font-size: 0.95rem; font-weight: 500;">{{ result.protocol }}</td>
+                    <td class="py-2 px-3"><code style="color: #ffc107; font-size: 0.95rem; background: rgba(255, 193, 7, 0.1); padding: 0.3rem 0.5rem; border-radius: 0.25rem;">{{ result.username }}</code></td>
+                    <td class="py-2 px-3"><code style="color: #dc3545; font-size: 0.95rem; background: rgba(220, 53, 69, 0.1); padding: 0.3rem 0.5rem; border-radius: 0.25rem;">{{ result.password }}</code></td>
+                    <td class="py-2 px-3" style="color: #8b949e; font-size: 0.95rem; line-height: 1.5;">{{ result.details }}</td>
                   </tr>
                   {% endfor %}
                   {% if failed|length > 100 %}
@@ -227,10 +227,10 @@
                 <tbody>
                   {% for result in errors[:100] %}
                   <tr>
-                    <td class="py-2 px-3"><code class="text-muted">{{ result.ip }}</code></td>
-                    <td class="py-2 px-3">{{ result.port }}</td>
-                    <td class="py-2 px-3">{{ result.protocol }}</td>
-                    <td class="py-2 px-3"><small class="text-danger">{{ result.details }}</small></td>
+                    <td class="py-2 px-3"><code style="color: #8b949e; font-size: 0.95rem; background: rgba(139, 148, 158, 0.1); padding: 0.3rem 0.5rem; border-radius: 0.25rem;">{{ result.ip }}</code></td>
+                    <td class="py-2 px-3" style="color: #c9d1d9; font-size: 0.95rem;">{{ result.port }}</td>
+                    <td class="py-2 px-3" style="color: #58a6ff; font-size: 0.95rem; font-weight: 500;">{{ result.protocol }}</td>
+                    <td class="py-2 px-3" style="color: #ffc107; font-size: 1rem; font-weight: 500; line-height: 1.6; background: rgba(255, 193, 7, 0.1); padding: 0.5rem; border-radius: 0.25rem;">{{ result.details }}</td>
                   </tr>
                   {% endfor %}
                   {% if errors|length > 100 %}
@@ -292,11 +292,38 @@
 .table tbody td {
   font-size: 0.95rem !important;
   line-height: 1.6;
+  color: #e6edf3 !important;
 }
 
 .table thead th {
   font-weight: 600;
   letter-spacing: 0.3px;
+  color: #c9d1d9 !important;
+  font-size: 1.05rem !important;
+}
+
+/* Light theme overrides */
+body.light-theme .table tbody td {
+  color: #212529 !important;
+}
+
+body.light-theme .table thead th {
+  color: #495057 !important;
+}
+
+/* Improve code block visibility */
+.table code {
+  font-size: 1rem !important;
+  padding: 0.4rem 0.6rem !important;
+  border-radius: 0.25rem;
+  display: inline-block;
+}
+
+/* Improve badge visibility */
+.table .badge {
+  font-size: 1rem !important;
+  padding: 0.5rem 0.75rem !important;
+  font-weight: 500;
 }
 </style>
 

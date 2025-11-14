@@ -590,7 +590,7 @@ async def lifespan(app: FastAPI):
     # -------------------------
     global DISCOVERED_MODULES
     try:
-        print("[DEBUG] Module loader: using default modules path from module_loader")
+        # print("[DEBUG] Module loader: using default modules path from module_loader")
         DISCOVERED_MODULES = discover_modules()
         _register_module_routes(app, templates_dir, settings.RESULTS_DIR)
 
@@ -1901,30 +1901,68 @@ async def credrecon_scan_detail(request: Request, scan_id: str):
 async def credrecon_results_page(request: Request):
     """Credential reconnaissance results page."""
     from cygor import credrecon
-    results_dir = Path(settings.RESULTS_DIR) / "credrecon"
+    # Search in both old and new directory structures (for backward compatibility)
+    results_dirs = [
+        Path("credrecon") / "credrecon-tasks",  # New structure
+        Path(settings.RESULTS_DIR) / "credrecon" / "credrecon-tasks",  # New structure with RESULTS_DIR
+        Path("credrecon-tasks"),  # Old structure (backward compatibility)
+        Path(settings.RESULTS_DIR) / "credrecon-tasks",  # Old structure with RESULTS_DIR (backward compatibility)
+        Path(settings.RESULTS_DIR) / "credrecon",  # Legacy structure
+        Path("credrecon"),  # Legacy structure
+    ]
 
     # Load all credential scanner results
+    # Track loaded files by absolute path to avoid duplicates
+    loaded_files = set()
     all_results = []
-    if results_dir.exists():
-        for json_file in sorted(results_dir.rglob("credrecon_results.json")):
-            try:
-                data = json.loads(json_file.read_text())
-                if isinstance(data, list):
-                    all_results.extend(data)
-            except Exception as e:
-                print(f"Error loading {json_file}: {e}", file=sys.stderr)
+    for results_dir in results_dirs:
+        if results_dir.exists():
+            for json_file in sorted(results_dir.rglob("credrecon_results.json")):
+                # Use absolute path to avoid loading the same file twice
+                abs_path = json_file.resolve()
+                if abs_path in loaded_files:
+                    continue
+                loaded_files.add(abs_path)
+                
+                try:
+                    data = json.loads(json_file.read_text())
+                    if isinstance(data, list):
+                        all_results.extend(data)
+                except Exception as e:
+                    print(f"Error loading {json_file}: {e}", file=sys.stderr)
+
+    # Deduplicate results based on unique combination of fields
+    # Create a set of unique result identifiers
+    seen_results = set()
+    unique_results = []
+    for result in all_results:
+        # Create a unique key from result fields
+        target = result.get("ip") or result.get("target", "")
+        port = result.get("port", 0)
+        protocol = result.get("protocol", "")
+        username = result.get("username", "")
+        password = result.get("password", "")
+        status = result.get("status", "")
+        timestamp = result.get("timestamp", "")
+        
+        # Create unique identifier
+        result_key = (target, port, protocol, username, password, status, timestamp)
+        
+        if result_key not in seen_results:
+            seen_results.add(result_key)
+            unique_results.append(result)
 
     # Separate successful from failed
-    successful = [r for r in all_results if r.get("status") == "success"]
-    failed = [r for r in all_results if r.get("status") == "failed"]
-    errors = [r for r in all_results if r.get("status") == "error"]
+    successful = [r for r in unique_results if r.get("status") == "success"]
+    failed = [r for r in unique_results if r.get("status") == "failed"]
+    errors = [r for r in unique_results if r.get("status") == "error"]
 
     return templates.TemplateResponse("credrecon_results.html", {
         "request": request,
         "successful": successful,
         "failed": failed,
         "errors": errors,
-        "total": len(all_results)
+        "total": len(unique_results)
     })
 
 # -------- Task Management API --------
@@ -2032,19 +2070,33 @@ async def create_credrecon_task(request: Request, db_session: AsyncSession = Dep
         if not targets and not uploaded_targets:
             raise HTTPException(status_code=400, detail="No targets provided")
 
-        # Create temporary targets file
-        import tempfile
+        # Generate scan ID first (needed for directory name)
+        import uuid
+        scan_id = str(uuid.uuid4())
+
+        # Create output directory: credrecon/credrecon-tasks/credrecon-taskid-timestamp
+        from datetime import datetime
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        # Use short scan ID (first 8 chars) for directory name
+        short_scan_id = scan_id[:8]
+        # Create credrecon directory if it doesn't exist
+        credrecon_base = Path("credrecon")
+        credrecon_base.mkdir(exist_ok=True)
+        output_dir = credrecon_base / "credrecon-tasks" / f"credrecon-{short_scan_id}-{timestamp}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save targets file in the output directory instead of /tmp
         if uploaded_targets:
             targets_content = uploaded_targets
         else:
             targets_content = "\n".join(targets)
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        targets_file = output_dir / "targets.txt"
+        with open(targets_file, 'w') as f:
             f.write(targets_content)
-            targets_file = f.name
 
         # Build command
-        cmd = ["cygor", "credrecon", "-i", targets_file]
+        cmd = ["cygor", "credrecon", "-i", str(targets_file)]
 
         if protocol and protocol != "auto":
             cmd.extend(["--protocol", protocol])
@@ -2064,28 +2116,18 @@ async def create_credrecon_task(request: Request, db_session: AsyncSession = Dep
         if creds_file:
             cmd.extend(["--creds-file", creds_file])
 
-        # Handle username/password file uploads
+        # Handle username/password file uploads - save in output directory
         if uploaded_usernames and uploaded_passwords:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='_usernames.txt', delete=False) as f:
+            usernames_file = output_dir / "usernames.txt"
+            with open(usernames_file, 'w') as f:
                 f.write(uploaded_usernames)
-                usernames_file = f.name
 
-            with tempfile.NamedTemporaryFile(mode='w', suffix='_passwords.txt', delete=False) as f:
+            passwords_file = output_dir / "passwords.txt"
+            with open(passwords_file, 'w') as f:
                 f.write(uploaded_passwords)
-                passwords_file = f.name
 
-            cmd.extend(["--usernames-file", usernames_file])
-            cmd.extend(["--passwords-file", passwords_file])
-
-        # Generate scan ID first
-        import uuid
-        scan_id = str(uuid.uuid4())
-
-        # Create output directory with timestamp in separate credrecon folder
-        from datetime import datetime
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
-        output_dir = Path("credrecon") / timestamp
-        output_dir.mkdir(parents=True, exist_ok=True)
+            cmd.extend(["--usernames-file", str(usernames_file)])
+            cmd.extend(["--passwords-file", str(passwords_file)])
 
         # Add output directory and scan-id to command
         cmd.extend(["-o", str(output_dir)])
@@ -2100,8 +2142,9 @@ async def create_credrecon_task(request: Request, db_session: AsyncSession = Dep
                 created_at=datetime.utcnow().isoformat(),
                 status="pending",
                 command=" ".join(cmd),
-                num_targets=len(targets_content.splitlines()),
-                output_dir=str(output_dir)
+                num_targets=len(targets_content.splitlines())
+                # Note: output_dir column doesn't exist in database, so we don't set it here
+                # The output directory path is stored in the command string and can be reconstructed from created_at timestamp
             )
             db_session.add(db_scan)
             await db_session.commit()
@@ -2124,18 +2167,58 @@ async def create_credrecon_task(request: Request, db_session: AsyncSession = Dep
 @app.get("/api/credrecon/stats")
 async def get_credrecon_stats(session: AsyncSession = Depends(get_session)):
     """Get credential scanner statistics for dashboard."""
-    results_dir = Path("credrecon")
+    # Search in both old and new directory structures (for backward compatibility)
+    results_dirs = [
+        Path("credrecon") / "credrecon-tasks",  # New structure
+        Path(settings.RESULTS_DIR) / "credrecon" / "credrecon-tasks",  # New structure with RESULTS_DIR
+        Path("credrecon-tasks"),  # Old structure (backward compatibility)
+        Path(settings.RESULTS_DIR) / "credrecon-tasks",  # Old structure with RESULTS_DIR (backward compatibility)
+        Path(settings.RESULTS_DIR) / "credrecon",  # Legacy structure
+        Path("credrecon"),  # Legacy structure
+    ]
 
     # Load all credential scanner results from disk (completed scans)
+    # Track loaded files by absolute path to avoid duplicates
+    loaded_files = set()
     all_results = []
-    if results_dir.exists():
-        for json_file in sorted(results_dir.rglob("credrecon_results.json")):
-            try:
-                data = json.loads(json_file.read_text())
-                if isinstance(data, list):
-                    all_results.extend(data)
-            except Exception as e:
-                print(f"Error loading {json_file}: {e}", file=sys.stderr)
+    for results_dir in results_dirs:
+        if results_dir.exists():
+            for json_file in sorted(results_dir.rglob("credrecon_results.json")):
+                # Use absolute path to avoid loading the same file twice
+                abs_path = json_file.resolve()
+                if abs_path in loaded_files:
+                    continue
+                loaded_files.add(abs_path)
+                
+                try:
+                    data = json.loads(json_file.read_text())
+                    if isinstance(data, list):
+                        all_results.extend(data)
+                except Exception as e:
+                    print(f"Error loading {json_file}: {e}", file=sys.stderr)
+    
+    # Deduplicate results based on unique combination of fields
+    seen_results = set()
+    unique_results = []
+    for result in all_results:
+        # Create a unique key from result fields
+        target = result.get("ip") or result.get("target", "")
+        port = result.get("port", 0)
+        protocol = result.get("protocol", "")
+        username = result.get("username", "")
+        password = result.get("password", "")
+        status = result.get("status", "")
+        timestamp = result.get("timestamp", "")
+        
+        # Create unique identifier
+        result_key = (target, port, protocol, username, password, status, timestamp)
+        
+        if result_key not in seen_results:
+            seen_results.add(result_key)
+            unique_results.append(result)
+    
+    # Use unique_results instead of all_results
+    all_results = unique_results
 
     # Calculate stats
     successful = [r for r in all_results if r.get("status") == "success"]
@@ -2145,13 +2228,16 @@ async def get_credrecon_stats(session: AsyncSession = Depends(get_session)):
     # Get recent scans (last 20 results for dashboard, prioritize successful)
     recent = sorted(successful, key=lambda x: x.get("timestamp", ""), reverse=True)[:20]
 
-    # Get ONLY active (pending/running) scan tasks from credrecon_manager
-    # Completed/failed scans should come from database (historical)
+    # Get ALL scan tasks from credrecon_manager (including completed ones that might not be in DB yet)
     all_task_scans = await credrecon_manager.get_all_scans()
     active_scan_info = []
 
     # Only include pending/running scans (current active tasks)
     active_scans = [s for s in all_task_scans if s.status.value in ['pending', 'running']]
+    
+    # Also include recently completed scans from task manager (in case DB hasn't been updated yet)
+    # This ensures completed scans show up immediately
+    recently_completed = [s for s in all_task_scans if s.status.value in ['completed', 'failed']]
 
     # Sort: running first, then pending
     def scan_sort_key(scan):
@@ -2166,36 +2252,163 @@ async def get_credrecon_stats(session: AsyncSession = Depends(get_session)):
             "created_at": scan.created_at.isoformat() if scan.created_at else None,
             "started_at": scan.started_at.isoformat() if scan.started_at else None,
             "completed_at": scan.completed_at.isoformat() if scan.completed_at else None,
+            "command": " ".join(scan.command),
         })
 
-    # Get historical scans (completed/failed) from database ONLY
-    # This ensures historical scans are truly past events or from page reloads
+    # Get historical scans (completed/failed) from database
+    # Also merge in recently completed scans from task manager to ensure we don't miss any
     from sqlalchemy import select
     from cygor.webapp.models import CredReconScan
 
     historical_scan_info = []
+    db_scan_ids = set()  # Track which scan IDs we've already added from DB
+    
     try:
         # Get completed/failed scans from database, ordered by most recent
+        # Explicitly select only columns that exist in the database (excluding output_dir)
         statement = (
-            select(CredReconScan)
+            select(
+                CredReconScan.id,
+                CredReconScan.scan_id,
+                CredReconScan.created_at,
+                CredReconScan.started_at,
+                CredReconScan.completed_at,
+                CredReconScan.status,
+                CredReconScan.command,
+                CredReconScan.num_targets
+            )
             .where(CredReconScan.status.in_(['completed', 'failed']))
             .order_by(CredReconScan.created_at.desc())
-            .limit(20)
+            .limit(50)  # Increased limit to get more historical scans
         )
         result = await session.execute(statement)
-        db_scans = result.scalars().all()
+        db_scans = result.all()
 
         for scan in db_scans:
+            db_scan_ids.add(scan.scan_id)
+            # Note: created_at, started_at, completed_at are already strings (ISO format) in the database
             historical_scan_info.append({
                 "scan_id": scan.scan_id,
                 "status": scan.status,
                 "num_targets": scan.num_targets,
-                "created_at": scan.created_at,
-                "started_at": scan.started_at,
-                "completed_at": scan.completed_at,
+                "created_at": scan.created_at if scan.created_at else None,
+                "started_at": scan.started_at if scan.started_at else None,
+                "completed_at": scan.completed_at if scan.completed_at else None,
+                "command": scan.command,
             })
     except Exception as e:
         print(f"Error fetching historical scans from database: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+    
+    # Add recently completed scans from task manager that aren't in database yet
+    # This ensures scans show up immediately after completion
+    for scan in recently_completed:
+        if scan.scan_id not in db_scan_ids:
+            historical_scan_info.append({
+                "scan_id": scan.scan_id,
+                "status": scan.status.value,
+                "num_targets": scan.num_targets,
+                "created_at": scan.created_at.isoformat() if scan.created_at else None,
+                "started_at": scan.started_at.isoformat() if scan.started_at else None,
+                "completed_at": scan.completed_at.isoformat() if scan.completed_at else None,
+                "command": " ".join(scan.command),
+            })
+            db_scan_ids.add(scan.scan_id)  # Mark as added
+    
+    # Discover scans from JSON files on disk that aren't in database or task manager
+    # This handles cases where scans were run but database records weren't created/updated
+    discovered_dirs = set()
+    all_known_scan_ids = db_scan_ids.copy()
+    
+    # Get all scan IDs from task manager too
+    for scan in all_task_scans:
+        all_known_scan_ids.add(scan.scan_id)
+    
+    for results_dir in results_dirs:
+        if results_dir.exists():
+            for json_file in sorted(results_dir.rglob("credrecon_results.json")):
+                try:
+                    # Try to extract scan_id from directory name
+                    # Format: credrecon/credrecon-tasks/credrecon-{short_scan_id}-{timestamp}/credrecon_results.json
+                    # Or: credrecon-tasks/credrecon-{short_scan_id}-{timestamp}/credrecon_results.json (old format)
+                    parent_dir = json_file.parent.name
+                    if parent_dir.startswith("credrecon-") and len(parent_dir) > 10:
+                        # Extract the short scan ID (first 8 chars after "credrecon-")
+                        parts = parent_dir.split("-")
+                        if len(parts) >= 2:
+                            short_id = parts[1]  # e.g., "e3ef5374"
+                            
+                            # Try to find full scan_id by checking if any known scan_id starts with short_id
+                            file_scan_id = None
+                            for known_scan_id in all_known_scan_ids:
+                                if known_scan_id.startswith(short_id):
+                                    file_scan_id = known_scan_id
+                                    break
+                            
+                            # If not found, search database for scan_ids starting with short_id
+                            if not file_scan_id:
+                                try:
+                                    # Query database for scan_ids that start with short_id
+                                    search_statement = (
+                                        select(CredReconScan.scan_id)
+                                        .where(CredReconScan.scan_id.like(f"{short_id}%"))
+                                        .limit(1)
+                                    )
+                                    search_result = await session.execute(search_statement)
+                                    found_scan = search_result.scalar_one_or_none()
+                                    if found_scan:
+                                        file_scan_id = found_scan
+                                        all_known_scan_ids.add(found_scan)
+                                except Exception as e:
+                                    print(f"Error searching for scan_id starting with {short_id}: {e}", file=sys.stderr)
+                            
+                            # Only add if we haven't seen this directory before
+                            if parent_dir not in discovered_dirs:
+                                # Check if this scan_id is already in our historical scans
+                                scan_id_to_check = file_scan_id if file_scan_id else f"discovered-{short_id}"
+                                
+                                # Only add if not already in historical_scan_info
+                                already_added = any(s.get('scan_id') == scan_id_to_check for s in historical_scan_info)
+                                
+                                if not already_added:
+                                    discovered_dirs.add(parent_dir)
+                                    
+                                    # Check file modification time to estimate when scan was created
+                                    file_mtime = json_file.stat().st_mtime
+                                    from datetime import datetime
+                                    file_time = datetime.fromtimestamp(file_mtime)
+                                    
+                                    # Try to load JSON to get result count
+                                    try:
+                                        json_data = json.loads(json_file.read_text())
+                                        num_results = len(json_data) if isinstance(json_data, list) else 0
+                                    except:
+                                        num_results = 0
+                                    
+                                    # Create scan info from file discovery
+                                    # Use the found scan_id or create a reference using the directory name
+                                    scan_id_to_use = file_scan_id if file_scan_id else f"historic-{short_id}"
+                                    
+                                    historical_scan_info.append({
+                                        "scan_id": scan_id_to_use,
+                                        "status": "completed",  # Assume completed if results file exists
+                                        "num_targets": num_results,  # Use result count as proxy
+                                        "created_at": file_time.isoformat(),
+                                        "started_at": file_time.isoformat(),
+                                        "completed_at": file_time.isoformat(),
+                                        "command": f"cygor credrecon -o {parent_dir}",
+                                    })
+                                    db_scan_ids.add(scan_id_to_use)  # Mark as added
+                except Exception as e:
+                    print(f"Error discovering scan from {json_file}: {e}", file=sys.stderr)
+                    continue
+    
+    # Debug logging
+    # print(f"DEBUG: Returning {len(historical_scan_info)} historical scans", file=sys.stderr)
+    if historical_scan_info:
+        scan_ids = [s['scan_id'][:8] if s.get('scan_id') else 'N/A' for s in historical_scan_info[:5]]
+        # print(f"DEBUG: Historical scan IDs (first 5): {scan_ids}", file=sys.stderr)
 
     return JSONResponse({
         "successful": len(successful),
@@ -2216,14 +2429,181 @@ async def list_credrecon_scans():
 @app.get("/api/credrecon/scans/{scan_id}")
 async def get_credrecon_scan(scan_id: str):
     """Get details of a specific credential scanner scan."""
-    scan = await credrecon_manager.get_scan(scan_id)
-    if not scan:
-        raise HTTPException(status_code=404, detail="Scan not found")
-    return JSONResponse(scan.to_dict())
+    # Handle historic scans (from disk discovery)
+    if scan_id.startswith("historic-"):
+        short_id = scan_id.replace("historic-", "")
+        
+        # Find the directory matching this short_id
+        discovered_json_file = None
+        discovered_dir = None
+        
+        for results_dir in [
+            Path("credrecon") / "credrecon-tasks",  # New structure
+            Path(settings.RESULTS_DIR) / "credrecon" / "credrecon-tasks",  # New structure with RESULTS_DIR
+            Path("credrecon-tasks"),  # Old structure (backward compatibility)
+            Path(settings.RESULTS_DIR) / "credrecon-tasks",  # Old structure with RESULTS_DIR (backward compatibility)
+            Path("credrecon"),  # Legacy structure
+            Path(settings.RESULTS_DIR) / "credrecon",  # Legacy structure
+        ]:
+            if results_dir.exists():
+                for json_file in results_dir.rglob("credrecon_results.json"):
+                    parent_dir = json_file.parent.name
+                    if parent_dir.startswith("credrecon-") and short_id in parent_dir:
+                        discovered_json_file = json_file
+                        discovered_dir = parent_dir
+                        break
+                if discovered_json_file:
+                    break
+        
+        if discovered_json_file:
+            # Create scan dict from discovered scan
+            file_mtime = discovered_json_file.stat().st_mtime
+            from datetime import datetime
+            file_time = datetime.fromtimestamp(file_mtime)
+            
+            # Try to load JSON to get result count
+            try:
+                json_data = json.loads(discovered_json_file.read_text())
+                num_results = len(json_data) if isinstance(json_data, list) else 0
+            except:
+                num_results = 0
+            
+            scan_dict = {
+                "scan_id": scan_id,
+                "status": "completed",
+                "num_targets": num_results,
+                "created_at": file_time.isoformat(),
+                "started_at": file_time.isoformat(),
+                "completed_at": file_time.isoformat(),
+                "command": [f"cygor", "credrecon", "-o", discovered_dir],
+            }
+            return JSONResponse(scan_dict)
+        else:
+            raise HTTPException(status_code=404, detail="Historic scan not found on disk")
+    
+    # Regular scan from task manager
+    try:
+        scan = await credrecon_manager.get_scan(scan_id)
+        if scan:
+            return JSONResponse(scan.to_dict())
+    except:
+        pass
+    
+    raise HTTPException(status_code=404, detail="Scan not found")
 
 @app.get("/api/credrecon/scans/{scan_id}/output")
 async def get_credrecon_scan_output(scan_id: str):
     """Get the output of a specific credential scanner scan."""
+    # Handle historic scans (from disk discovery) - try to load output from files
+    if scan_id.startswith("historic-"):
+        short_id = scan_id.replace("historic-", "")
+        
+        # Find the directory matching this short_id
+        historic_dir = None
+        for results_dir in [
+            Path("credrecon") / "credrecon-tasks",  # New structure
+            Path(settings.RESULTS_DIR) / "credrecon" / "credrecon-tasks",  # New structure with RESULTS_DIR
+            Path("credrecon-tasks"),  # Old structure (backward compatibility)
+            Path(settings.RESULTS_DIR) / "credrecon-tasks",  # Old structure with RESULTS_DIR (backward compatibility)
+            Path("credrecon"),  # Legacy structure
+            Path(settings.RESULTS_DIR) / "credrecon",  # Legacy structure
+        ]:
+            if results_dir.exists():
+                for json_file in results_dir.rglob("credrecon_results.json"):
+                    parent_dir = json_file.parent.name
+                    if parent_dir.startswith("credrecon-") and short_id in parent_dir:
+                        historic_dir = json_file.parent
+                        break
+                if historic_dir:
+                    break
+        
+        if historic_dir:
+            # Try to find output files (stdout, stderr, or log files)
+            output_text = ""
+            error_text = ""
+            
+            # Look for common output file names
+            output_files = [
+                historic_dir / "output.txt",
+                historic_dir / "stdout.txt",
+                historic_dir / "log.txt",
+                historic_dir / "credrecon.log",
+            ]
+            
+            for output_file in output_files:
+                if output_file.exists():
+                    try:
+                        output_text = output_file.read_text()
+                        break
+                    except:
+                        pass
+            
+            # Look for error files
+            error_files = [
+                historic_dir / "errors.txt",
+                historic_dir / "stderr.txt",
+            ]
+            
+            for error_file in error_files:
+                if error_file.exists():
+                    try:
+                        error_text = error_file.read_text()
+                        break
+                    except:
+                        pass
+            
+            # If no output files found, create a summary from the JSON results
+            if not output_text:
+                json_file = historic_dir / "credrecon_results.json"
+                if json_file.exists():
+                    try:
+                        import json
+                        results = json.loads(json_file.read_text())
+                        if isinstance(results, list):
+                            output_text = f"Historic scan results loaded from disk.\n"
+                            output_text += f"Total results: {len(results)}\n"
+                            output_text += f"Successful: {len([r for r in results if r.get('status') == 'success'])}\n"
+                            output_text += f"Failed: {len([r for r in results if r.get('status') == 'failed'])}\n"
+                            output_text += f"Errors: {len([r for r in results if r.get('status') == 'error'])}\n"
+                            
+                            # Add detailed results summary
+                            output_text += f"\n--- Detailed Results ---\n"
+                            for i, result in enumerate(results[:20], 1):  # Show first 20 results
+                                target = result.get('ip') or result.get('target', 'N/A')
+                                port = result.get('port', 'N/A')
+                                protocol = result.get('protocol', 'N/A')
+                                username = result.get('username', 'N/A')
+                                status = result.get('status', 'N/A')
+                                reason = result.get('details') or result.get('reason', 'N/A')
+                                output_text += f"{i}. {target}:{port} ({protocol}) - {username} - {status} - {reason}\n"
+                            if len(results) > 20:
+                                output_text += f"\n... and {len(results) - 20} more results (see Results tab for full details)\n"
+                    except Exception as e:
+                        output_text = f"Historic scan discovered from disk. Results are available in the Results tab.\nError loading details: {str(e)}"
+                else:
+                    output_text = "Historic scan discovered from disk. Results are available in the Results tab."
+            
+            # Convert strings to arrays of lines (as expected by the frontend)
+            output_lines = output_text.split('\n') if output_text else []
+            error_lines = error_text.split('\n') if error_text else []
+            
+            # Remove empty last line if present
+            if output_lines and output_lines[-1] == '':
+                output_lines = output_lines[:-1]
+            if error_lines and error_lines[-1] == '':
+                error_lines = error_lines[:-1]
+            
+            return JSONResponse({
+                "output": output_lines,
+                "errors": error_lines
+            })
+        else:
+            return JSONResponse({
+                "output": ["Historic scan discovered from disk. Results are available in the Results tab."],
+                "errors": []
+            })
+    
+    # Regular scan from task manager
     output = await credrecon_manager.get_scan_output(scan_id)
     if "error" in output:
         raise HTTPException(status_code=404, detail=output["error"])
@@ -2236,49 +2616,263 @@ async def get_credrecon_scan_results(scan_id: str, session: AsyncSession = Depen
     from cygor.webapp.models import CredReconScan, CredReconResult
 
     try:
-        # Get the scan
-        statement = select(CredReconScan).where(CredReconScan.scan_id == scan_id)
+        # First, try to get scan from task manager (in case it's not in DB yet)
+        scan_from_manager = None
+        try:
+            scan_from_manager = await credrecon_manager.get_scan(scan_id)
+        except:
+            pass  # Scan not in task manager, will check database
+        
+        # Get the scan from database - explicitly select columns that exist (excluding output_dir)
+        statement = (
+            select(
+                CredReconScan.id,
+                CredReconScan.scan_id,
+                CredReconScan.created_at,
+                CredReconScan.started_at,
+                CredReconScan.completed_at,
+                CredReconScan.status,
+                CredReconScan.command,
+                CredReconScan.num_targets
+            )
+            .where(CredReconScan.scan_id == scan_id)
+        )
         result = await session.execute(statement)
-        scan = result.scalars().first()
+        scan_row = result.first()
 
-        if not scan:
-            raise HTTPException(status_code=404, detail="Scan not found")
-
-        # Get all results for this scan from database
-        statement = select(CredReconResult).where(CredReconResult.scan_id == scan.id)
-        result = await session.execute(statement)
-        db_results = result.scalars().all()
-
-        # If no database results but scan has output_dir, try reading from JSON file
-        results = []
-        if not db_results and scan.output_dir:
-            json_file = Path(scan.output_dir) / "credrecon_results.json"
-            if json_file.exists():
-                try:
-                    import json
-                    file_results = json.loads(json_file.read_text())
-                    # Convert file results to match database format
-                    for r in file_results:
-                        # Create a simple object to hold the result data
-                        class FileResult:
-                            def __init__(self, data):
-                                self.target = data.get('ip', data.get('target', ''))
-                                self.port = data.get('port', 0)
-                                self.protocol = data.get('protocol', '')
-                                self.service = data.get('service')
-                                self.username = data.get('username', '')
-                                self.password = data.get('password')
-                                self.status = data.get('status', '')
-                                self.reason = data.get('details', data.get('reason'))
-                                self.tested_at = data.get('timestamp')
-                        results.append(FileResult(r))
-                except Exception as e:
-                    print(f"Error reading JSON results: {e}", file=sys.stderr)
-                    results = db_results
+        # If not in database, try to create a mock scan_row from task manager data or discovered scan
+        if not scan_row:
+            if scan_from_manager:
+                # Create a simple object that mimics scan_row structure
+                class MockScanRow:
+                    def __init__(self, scan):
+                        self.id = None  # No DB ID since not in DB
+                        self.scan_id = scan.scan_id
+                        self.created_at = scan.created_at.isoformat() if scan.created_at else None
+                        self.started_at = scan.started_at.isoformat() if scan.started_at else None
+                        self.completed_at = scan.completed_at.isoformat() if scan.completed_at else None
+                        self.status = scan.status.value
+                        self.command = " ".join(scan.command) if scan.command else ""
+                        self.num_targets = scan.num_targets
+                
+                scan_row = MockScanRow(scan_from_manager)
+            elif scan_id.startswith("historic-"):
+                # Handle historic scans (from disk discovery)
+                # Format: historic-{short_id}
+                short_id = scan_id.replace("historic-", "")
+                
+                # Find the directory matching this short_id
+                discovered_json_file = None
+                discovered_dir = None
+                
+                for results_dir in [
+                    Path("credrecon-tasks"),
+                    Path(settings.RESULTS_DIR) / "credrecon-tasks",
+                    Path("credrecon"),
+                    Path(settings.RESULTS_DIR) / "credrecon",
+                ]:
+                    if results_dir.exists():
+                        for json_file in results_dir.rglob("credrecon_results.json"):
+                            parent_dir = json_file.parent.name
+                            if parent_dir.startswith("credrecon-") and short_id in parent_dir:
+                                discovered_json_file = json_file
+                                discovered_dir = parent_dir
+                                break
+                        if discovered_json_file:
+                            break
+                
+                if discovered_json_file:
+                    # Create a mock scan_row from discovered scan
+                    file_mtime = discovered_json_file.stat().st_mtime
+                    from datetime import datetime
+                    file_time = datetime.fromtimestamp(file_mtime)
+                    
+                    class DiscoveredScanRow:
+                        def __init__(self, scan_id, dir_name, file_time):
+                            self.id = None
+                            self.scan_id = scan_id
+                            self.created_at = file_time.isoformat()
+                            self.started_at = file_time.isoformat()
+                            self.completed_at = file_time.isoformat()
+                            self.status = "completed"
+                            self.command = f"cygor credrecon -o {dir_name}"
+                            self.num_targets = 0
+                    
+                    scan_row = DiscoveredScanRow(scan_id, discovered_dir, file_time)
+                else:
+                    raise HTTPException(status_code=404, detail="Historic scan not found on disk")
             else:
-                results = db_results
-        else:
+                raise HTTPException(status_code=404, detail="Scan not found")
+
+        # Get all results for this scan from database (only if scan has a DB ID)
+        db_results = []
+        if scan_row.id is not None:
+            try:
+                statement = select(CredReconResult).where(CredReconResult.scan_id == scan_row.id)
+                result = await session.execute(statement)
+                db_results = result.scalars().all()
+            except Exception as e:
+                print(f"Error fetching results from database: {e}", file=sys.stderr)
+                db_results = []
+
+        # If no database results, try reading from JSON file
+        results = []
+        if db_results:
             results = db_results
+        else:
+            # Try to find JSON file by reconstructing output directory from created_at timestamp
+            # Output dir format: credrecon/YYYY-MM-DD_HH-MM-SS/credrecon_results.json
+            import json
+            from datetime import datetime
+            
+            json_file = None
+            
+            # Method 1: Try to reconstruct path from scan_id and created_at timestamp
+            # New format: credrecon/credrecon-tasks/credrecon-taskid-timestamp/credrecon_results.json
+            # Old format: credrecon-tasks/credrecon-taskid-timestamp/credrecon_results.json (backward compatibility)
+            if scan_id:
+                try:
+                    # Handle historic scans specially
+                    if scan_id.startswith("historic-"):
+                        short_scan_id = scan_id.replace("historic-", "")
+                    else:
+                        short_scan_id = scan_id[:8]
+                    
+                    # Try new format first - search for directories containing the scan_id
+                    base_dirs = [
+                        Path("credrecon") / "credrecon-tasks",  # New structure
+                        Path(settings.RESULTS_DIR) / "credrecon" / "credrecon-tasks",  # New structure with RESULTS_DIR
+                        Path("credrecon-tasks"),  # Old structure (backward compatibility)
+                        Path(settings.RESULTS_DIR) / "credrecon-tasks",  # Old structure with RESULTS_DIR (backward compatibility)
+                    ]
+                    
+                    for base_dir in base_dirs:
+                        if base_dir.exists():
+                            # Search for directories that contain the short scan_id
+                            for task_dir in base_dir.iterdir():
+                                if task_dir.is_dir() and short_scan_id in task_dir.name:
+                                    potential_json = task_dir / "credrecon_results.json"
+                                    if potential_json.exists():
+                                        json_file = potential_json
+                                        break
+                            if json_file:
+                                break
+                    
+                    # If still not found and we have created_at, try with timestamp
+                    if not json_file and scan_row.created_at:
+                        try:
+                            created_dt = datetime.fromisoformat(scan_row.created_at.replace('Z', '+00:00'))
+                            timestamp = created_dt.strftime("%Y%m%d_%H%M%S")
+                            new_format_paths = [
+                                Path("credrecon") / "credrecon-tasks" / f"credrecon-{short_scan_id}-{timestamp}" / "credrecon_results.json",  # New structure
+                                Path(settings.RESULTS_DIR) / "credrecon" / "credrecon-tasks" / f"credrecon-{short_scan_id}-{timestamp}" / "credrecon_results.json",  # New structure with RESULTS_DIR
+                                Path("credrecon-tasks") / f"credrecon-{short_scan_id}-{timestamp}" / "credrecon_results.json",  # Old structure (backward compatibility)
+                                Path(settings.RESULTS_DIR) / "credrecon-tasks" / f"credrecon-{short_scan_id}-{timestamp}" / "credrecon_results.json",  # Old structure with RESULTS_DIR (backward compatibility)
+                            ]
+                            for potential_path in new_format_paths:
+                                if potential_path.exists():
+                                    json_file = potential_path
+                                    break
+                        except Exception as e:
+                            print(f"Error reconstructing timestamp path: {e}", file=sys.stderr)
+                except Exception as e:
+                    print(f"Error reconstructing new format path: {e}", file=sys.stderr)
+            
+            # Method 1b: Try old format paths (for backward compatibility)
+            if not json_file and scan_row.created_at:
+                try:
+                    # Parse the created_at timestamp
+                    created_dt = datetime.fromisoformat(scan_row.created_at.replace('Z', '+00:00'))
+                    timestamp1 = created_dt.strftime("%Y-%m-%d_%H-%M-%S")  # Old API format
+                    timestamp2 = created_dt.strftime("%Y%m%d_%H%M%S")  # resolve_output_dir format
+                    
+                    # Try various old path combinations
+                    potential_paths = [
+                        Path("credrecon") / timestamp1 / "credrecon_results.json",  # Relative, old API format
+                        Path(settings.RESULTS_DIR) / "credrecon" / timestamp1 / "credrecon_results.json",  # RESULTS_DIR, old API format
+                        Path("credrecon") / timestamp1 / timestamp2 / "credrecon_results.json",  # Nested with resolve_output_dir
+                        Path(settings.RESULTS_DIR) / "credrecon" / timestamp1 / timestamp2 / "credrecon_results.json",  # RESULTS_DIR nested
+                        Path("credrecon") / timestamp2 / "credrecon_results.json",  # Direct resolve_output_dir format
+                        Path(settings.RESULTS_DIR) / "credrecon" / timestamp2 / "credrecon_results.json",  # RESULTS_DIR, resolve format
+                    ]
+                    
+                    for potential_path in potential_paths:
+                        if potential_path.exists():
+                            json_file = potential_path
+                            break
+                except Exception as e:
+                    print(f"Error parsing timestamp: {e}", file=sys.stderr)
+            
+            # Method 2: Search for JSON files in credrecon directories and match by timestamp or scan_id
+            if not json_file:
+                # Try multiple base directories (both old and new structure, for backward compatibility)
+                base_dirs = [
+                    Path("credrecon") / "credrecon-tasks",  # New structure
+                    Path(settings.RESULTS_DIR) / "credrecon" / "credrecon-tasks",  # New structure with RESULTS_DIR
+                    Path("credrecon-tasks"),  # Old structure (backward compatibility)
+                    Path(settings.RESULTS_DIR) / "credrecon-tasks",  # Old structure with RESULTS_DIR (backward compatibility)
+                    Path(settings.RESULTS_DIR) / "credrecon",  # Legacy structure
+                    Path("credrecon"),  # Legacy structure
+                    Path(settings.RESULTS_DIR),  # Fallback
+                ]
+                
+                for base_dir in base_dirs:
+                    if not base_dir.exists():
+                        continue
+                    
+                    # Search all credrecon_results.json files
+                    for json_path in base_dir.rglob("credrecon_results.json"):
+                        try:
+                            # First, check if the directory name contains the scan_id
+                            parent_dir = json_path.parent.name
+                            if scan_id and scan_id[:8] in parent_dir:
+                                json_file = json_path
+                                break
+                            
+                            # Otherwise, check if file was created around the same time as the scan
+                            file_mtime = datetime.fromtimestamp(json_path.stat().st_mtime)
+                            if scan_row.created_at:
+                                try:
+                                    scan_time = datetime.fromisoformat(scan_row.created_at.replace('Z', '+00:00'))
+                                    # If file was created within 10 minutes of scan creation, it's likely the right one
+                                    time_diff = abs((file_mtime - scan_time.replace(tzinfo=None)).total_seconds())
+                                    if time_diff < 600:  # 10 minutes (more generous)
+                                        json_file = json_path
+                                        break
+                                except:
+                                    pass
+                        except Exception:
+                            continue
+                    
+                    if json_file:
+                        break
+            
+            # Read JSON file if found
+            if json_file and json_file.exists():
+                try:
+                    file_results = json.loads(json_file.read_text())
+                    if not isinstance(file_results, list):
+                        file_results = []
+                    
+                    # Convert file results to match database format
+                    class FileResult:
+                        def __init__(self, data):
+                            self.target = data.get('ip', data.get('target', ''))
+                            self.port = data.get('port', 0)
+                            self.protocol = data.get('protocol', '')
+                            self.service = data.get('service')
+                            self.username = data.get('username', '')
+                            self.password = data.get('password')
+                            self.status = data.get('status', '')
+                            self.reason = data.get('details', data.get('reason'))
+                            self.tested_at = data.get('timestamp')
+                    
+                    results = [FileResult(r) for r in file_results]
+                except Exception as e:
+                    print(f"Error reading JSON results from {json_file}: {e}", file=sys.stderr)
+                    results = []
+            else:
+                results = []
 
         # Group results by status
         successful = [r for r in results if r.status == "success"]

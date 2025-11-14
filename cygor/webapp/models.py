@@ -77,7 +77,9 @@ class CredReconScan(SQLModel, table=True):
     status: str = Field(index=True)  # pending, running, completed, failed
     command: str  # Full command executed
     num_targets: int = Field(default=0)
-    output_dir: Optional[str] = Field(default=None)  # Local directory where results are saved
+    # Note: output_dir field removed - column doesn't exist in database
+    # The output directory path can be reconstructed from created_at timestamp
+    # or extracted from the command string if needed
 
     # Relationships
     results: List["CredReconResult"] = Relationship(back_populates="scan")

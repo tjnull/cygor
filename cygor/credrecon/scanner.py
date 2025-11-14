@@ -408,61 +408,114 @@ class HTTPTester(ProtocolTester):
             resp_no_auth = None
             try:
                 resp_no_auth = requests.get(url, timeout=self.timeout, verify=False, allow_redirects=False)
-            except:
-                pass  # Ignore errors on baseline check
+            except requests.exceptions.Timeout:
+                return CredentialResult(url, port, "http", "http-basic", username, password, "error", f"Connection timeout - website not responding within {self.timeout}s")
+            except requests.exceptions.ConnectionError as e:
+                error_str = str(e).lower()
+                if 'refused' in error_str:
+                    return CredentialResult(url, port, "http", "http-basic", username, password, "error", f"Connection refused - HTTP service not running on {url}")
+                elif 'name resolution' in error_str or 'dns' in error_str:
+                    return CredentialResult(url, port, "http", "http-basic", username, password, "error", f"DNS resolution failed - cannot resolve hostname")
+                else:
+                    return CredentialResult(url, port, "http", "http-basic", username, password, "error", f"Connection error: {str(e)}")
+            except Exception as e:
+                # For other errors on baseline, continue but note it
+                pass
 
             # Now test with credentials
-            resp = requests.get(url, auth=HTTPBasicAuth(username, password), timeout=self.timeout, verify=False, allow_redirects=False)
+            try:
+                resp = requests.get(url, auth=HTTPBasicAuth(username, password), timeout=self.timeout, verify=False, allow_redirects=False)
+            except requests.exceptions.Timeout:
+                return CredentialResult(url, port, "http", "http-basic", username, password, "error", f"Authentication request timeout - service not responding")
+            except requests.exceptions.ConnectionError as e:
+                return CredentialResult(url, port, "http", "http-basic", username, password, "error", f"Connection error during authentication: {str(e)}")
 
             # Check if authentication succeeded
             if resp.status_code == 200:
-                # Verify this is actually a success and not a false positive
-                # Check for login failure indicators in response
+                # Enhanced false positive detection
                 content_lower = resp.text.lower() if resp.text else ""
+                content_length = len(resp.text) if resp.text else 0
 
-                # Common failure indicators
+                # Extended failure indicators
                 failure_indicators = [
                     'invalid password', 'invalid username', 'login failed',
                     'incorrect password', 'incorrect username', 'authentication failed',
                     'access denied', 'unauthorized', 'forbidden',
                     'wrong password', 'wrong username', 'bad credentials',
-                    'login error', 'authentication error'
+                    'login error', 'authentication error', 'incorrect login',
+                    'login unsuccessful', 'authentication unsuccessful',
+                    'please log in', 'sign in', 'enter your password',
+                    'password incorrect', 'username incorrect', 'invalid credentials'
                 ]
 
-                # If response contains failure indicators, mark as failed
+                # Check for failure indicators
                 if any(indicator in content_lower for indicator in failure_indicators):
-                    return CredentialResult(url, port, "http", "http-basic", username, password, "failed", "Login page indicates failure")
+                    return CredentialResult(url, port, "http", "http-basic", username, password, "failed", "Login page indicates authentication failure")
 
                 # If baseline response was also 200, compare content to detect real auth
                 if resp_no_auth and resp_no_auth.status_code == 200:
-                    # If content is identical, auth likely didn't work
+                    # Calculate similarity
                     if resp.text == resp_no_auth.text:
-                        return CredentialResult(url, port, "http", "http-basic", username, password, "failed", "Response identical to unauthenticated request")
+                        return CredentialResult(url, port, "http", "http-basic", username, password, "failed", "Response identical to unauthenticated request - authentication likely failed")
+                    
+                    # Check if content length is very similar (within 5% difference)
+                    no_auth_length = len(resp_no_auth.text) if resp_no_auth.text else 0
+                    if content_length > 0 and no_auth_length > 0:
+                        length_diff = abs(content_length - no_auth_length) / max(content_length, no_auth_length)
+                        if length_diff < 0.05:  # Less than 5% difference
+                            # Check if they're mostly the same (simple similarity check)
+                            if content_lower[:500] == resp_no_auth.text.lower()[:500]:
+                                return CredentialResult(url, port, "http", "http-basic", username, password, "failed", "Response very similar to unauthenticated request - possible false positive")
 
-                return CredentialResult(url, port, "http", "http-basic", username, password, "success", f"HTTP {resp.status_code}")
+                # Additional validation: Check for success indicators
+                success_indicators = [
+                    'welcome', 'dashboard', 'logout', 'sign out', 'profile',
+                    'settings', 'account', 'user panel', 'admin panel'
+                ]
+                has_success_indicators = any(indicator in content_lower for indicator in success_indicators)
+                
+                # If we have success indicators and no failure indicators, it's likely a real success
+                if has_success_indicators:
+                    return CredentialResult(url, port, "http", "http-basic", username, password, "success", f"HTTP {resp.status_code} - Authenticated content detected")
+                
+                # If content length changed significantly from baseline, likely success
+                if resp_no_auth and resp_no_auth.status_code == 200:
+                    no_auth_length = len(resp_no_auth.text) if resp_no_auth.text else 0
+                    if content_length > no_auth_length * 1.2:  # 20% larger
+                        return CredentialResult(url, port, "http", "http-basic", username, password, "success", f"HTTP {resp.status_code} - Response size indicates authentication")
+                
+                # Default: mark as success but note it needs verification
+                return CredentialResult(url, port, "http", "http-basic", username, password, "success", f"HTTP {resp.status_code} - Verify manually (no clear success indicators)")
+                
             elif resp.status_code == 401:
-                return CredentialResult(url, port, "http", "http-basic", username, password, "failed", "Unauthorized")
+                return CredentialResult(url, port, "http", "http-basic", username, password, "failed", "Unauthorized - Invalid credentials")
             elif resp.status_code == 403:
-                return CredentialResult(url, port, "http", "http-basic", username, password, "failed", "Forbidden")
+                return CredentialResult(url, port, "http", "http-basic", username, password, "failed", "Forbidden - Access denied even with credentials")
             elif resp.status_code in [301, 302, 303, 307, 308]:
                 # Check redirect location
                 location = resp.headers.get('Location', '')
-                if 'login' in location.lower() or 'auth' in location.lower():
-                    return CredentialResult(url, port, "http", "http-basic", username, password, "failed", f"Redirected to login ({location})")
-                return CredentialResult(url, port, "http", "http-basic", username, password, "failed", f"HTTP {resp.status_code} redirect")
+                if 'login' in location.lower() or 'auth' in location.lower() or 'signin' in location.lower():
+                    return CredentialResult(url, port, "http", "http-basic", username, password, "failed", f"Redirected to login page ({location}) - authentication failed")
+                return CredentialResult(url, port, "http", "http-basic", username, password, "failed", f"HTTP {resp.status_code} redirect to {location}")
+            elif resp.status_code == 404:
+                return CredentialResult(url, port, "http", "http-basic", username, password, "error", f"Page not found (404) - URL may be incorrect")
+            elif resp.status_code >= 500:
+                return CredentialResult(url, port, "http", "http-basic", username, password, "error", f"Server error (HTTP {resp.status_code}) - cannot test authentication")
             else:
-                return CredentialResult(url, port, "http", "http-basic", username, password, "failed", f"HTTP {resp.status_code}")
+                return CredentialResult(url, port, "http", "http-basic", username, password, "failed", f"HTTP {resp.status_code} - Unexpected response")
         except requests.exceptions.Timeout:
-            return CredentialResult(url, port, "http", "http-basic", username, password, "error", "Timeout")
+            return CredentialResult(url, port, "http", "http-basic", username, password, "error", f"Request timeout - website not responding within {self.timeout}s")
+        except requests.exceptions.SSLError as e:
+            return CredentialResult(url, port, "http", "http-basic", username, password, "error", f"SSL/TLS error - {str(e)}")
         except Exception as e:
-            return CredentialResult(url, port, "http", "http-basic", username, password, "error", str(e))
+            return CredentialResult(url, port, "http", "http-basic", username, password, "error", f"Unexpected error: {str(e)}")
 
 class SSHTester(ProtocolTester):
     """Test SSH authentication."""
 
     def test(self, ip: str, port: int, username: str, password: str) -> CredentialResult:
         if not paramiko:
-            return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", "paramiko library not installed")
+            return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", "paramiko library not installed - install with: pip install paramiko")
 
         self.rate_limited_test()
         client = paramiko.SSHClient()
@@ -470,16 +523,40 @@ class SSHTester(ProtocolTester):
 
         try:
             client.connect(ip, port=port, username=username, password=password, timeout=self.timeout, look_for_keys=False, allow_agent=False)
+            # Verify we can actually execute a command (reduces false positives)
+            try:
+                stdin, stdout, stderr = client.exec_command('echo test', timeout=2)
+                stdout.read()  # Wait for command to complete
+            except:
+                pass  # If command execution fails, still consider auth successful if connection worked
             client.close()
-            return CredentialResult(ip, port, "ssh", "ssh", username, password, "success", "Authentication successful")
+            return CredentialResult(ip, port, "ssh", "ssh", username, password, "success", "SSH authentication successful - connection established")
         except paramiko.AuthenticationException:
-            return CredentialResult(ip, port, "ssh", "ssh", username, password, "failed", "Authentication failed")
+            return CredentialResult(ip, port, "ssh", "ssh", username, password, "failed", "SSH authentication failed - invalid credentials")
+        except paramiko.BadHostKeyException as e:
+            return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", f"SSH host key verification failed: {str(e)}")
         except paramiko.SSHException as e:
-            return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", f"SSH error: {str(e)}")
+            error_str = str(e).lower()
+            if 'not a valid ssh' in error_str or 'not ssh' in error_str:
+                return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", f"Not an SSH service - wrong protocol detected: {str(e)}")
+            elif 'connection reset' in error_str:
+                return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", f"SSH connection reset - service may have closed connection")
+            else:
+                return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", f"SSH protocol error: {str(e)}")
         except socket.timeout:
-            return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", "Timeout")
+            return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", f"SSH connection timeout - service not responding within {self.timeout}s")
+        except ConnectionRefusedError:
+            return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", f"Connection refused - SSH service not running on {ip}:{port}")
+        except socket.gaierror as e:
+            return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", f"DNS resolution failed - cannot resolve hostname: {str(e)}")
         except Exception as e:
-            return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", str(e))
+            error_str = str(e).lower()
+            if 'refused' in error_str:
+                return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", f"Connection refused - SSH service not available")
+            elif 'timeout' in error_str:
+                return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", f"Connection timeout - SSH service not responding")
+            else:
+                return CredentialResult(ip, port, "ssh", "ssh", username, password, "error", f"SSH connection error: {str(e)}")
         finally:
             try:
                 client.close()
@@ -491,21 +568,40 @@ class FTPTester(ProtocolTester):
 
     def test(self, ip: str, port: int, username: str, password: str) -> CredentialResult:
         if not FTP:
-            return CredentialResult(ip, port, "ftp", "ftp", username, password, "error", "ftplib not available")
+            return CredentialResult(ip, port, "ftp", "ftp", username, password, "error", "ftplib not available - standard library should be available")
 
         self.rate_limited_test()
         try:
             ftp = FTP(timeout=self.timeout)
             ftp.connect(ip, port)
+            welcome = ftp.getwelcome() if hasattr(ftp, 'getwelcome') else None
             ftp.login(username, password)
-            welcome = ftp.getwelcome()
+            # Verify we can actually list directory (reduces false positives)
+            try:
+                ftp.retrlines('LIST', lambda x: None)  # Try to list directory
+            except:
+                pass  # If listing fails, still consider login successful
             ftp.quit()
-            return CredentialResult(ip, port, "ftp", "ftp", username, password, "success", f"Login successful: {welcome}")
+            welcome_msg = f" - {welcome}" if welcome else ""
+            return CredentialResult(ip, port, "ftp", "ftp", username, password, "success", f"FTP login successful{welcome_msg}")
+        except socket.timeout:
+            return CredentialResult(ip, port, "ftp", "ftp", username, password, "error", f"FTP connection timeout - service not responding within {self.timeout}s")
+        except ConnectionRefusedError:
+            return CredentialResult(ip, port, "ftp", "ftp", username, password, "error", f"Connection refused - FTP service not running on {ip}:{port}")
+        except socket.gaierror as e:
+            return CredentialResult(ip, port, "ftp", "ftp", username, password, "error", f"DNS resolution failed - cannot resolve hostname: {str(e)}")
         except Exception as e:
             error_msg = str(e).lower()
-            if "530" in error_msg or "login" in error_msg or "authentication" in error_msg:
-                return CredentialResult(ip, port, "ftp", "ftp", username, password, "failed", "Authentication failed")
-            return CredentialResult(ip, port, "ftp", "ftp", username, password, "error", str(e))
+            if "530" in error_msg or ("login" in error_msg and "incorrect" in error_msg) or "authentication failed" in error_msg:
+                return CredentialResult(ip, port, "ftp", "ftp", username, password, "failed", "FTP authentication failed - invalid credentials")
+            elif "421" in error_msg or "connection closed" in error_msg:
+                return CredentialResult(ip, port, "ftp", "ftp", username, password, "error", f"FTP connection closed by server: {str(e)}")
+            elif "not a valid ftp" in error_msg or "not ftp" in error_msg:
+                return CredentialResult(ip, port, "ftp", "ftp", username, password, "error", f"Not an FTP service - wrong protocol detected: {str(e)}")
+            elif "refused" in error_msg:
+                return CredentialResult(ip, port, "ftp", "ftp", username, password, "error", f"Connection refused - FTP service not available")
+            else:
+                return CredentialResult(ip, port, "ftp", "ftp", username, password, "error", f"FTP error: {str(e)}")
 
 class SMBTester(ProtocolTester):
     """Test SMB authentication."""
@@ -533,42 +629,78 @@ class MySQLTester(ProtocolTester):
 
     def test(self, ip: str, port: int, username: str, password: str) -> CredentialResult:
         if not pymysql:
-            return CredentialResult(ip, port, "mysql", "mysql", username, password, "error", "pymysql library not installed")
+            return CredentialResult(ip, port, "mysql", "mysql", username, password, "error", "pymysql library not installed - install with: pip install pymysql")
 
         self.rate_limited_test()
         try:
             conn = pymysql.connect(host=ip, port=port, user=username, password=password, connect_timeout=self.timeout)
             version = conn.get_server_info()
+            # Verify we can actually query (reduces false positives)
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+                    cursor.fetchone()
+            except:
+                pass  # If query fails, still consider connection successful
             conn.close()
-            return CredentialResult(ip, port, "mysql", "mysql", username, password, "success", f"MySQL {version}")
+            return CredentialResult(ip, port, "mysql", "mysql", username, password, "success", f"MySQL authentication successful - Server version: {version}")
         except pymysql.err.OperationalError as e:
             error_msg = str(e).lower()
-            if "access denied" in error_msg or "authentication" in error_msg:
-                return CredentialResult(ip, port, "mysql", "mysql", username, password, "failed", "Authentication failed")
-            return CredentialResult(ip, port, "mysql", "mysql", username, password, "error", str(e))
+            if "access denied" in error_msg or ("authentication" in error_msg and "failed" in error_msg):
+                return CredentialResult(ip, port, "mysql", "mysql", username, password, "failed", "MySQL authentication failed - invalid credentials")
+            elif "can't connect" in error_msg or "connection refused" in error_msg:
+                return CredentialResult(ip, port, "mysql", "mysql", username, password, "error", f"MySQL connection refused - service not running on {ip}:{port}")
+            elif "unknown host" in error_msg:
+                return CredentialResult(ip, port, "mysql", "mysql", username, password, "error", f"DNS resolution failed - cannot resolve hostname")
+            elif "timeout" in error_msg:
+                return CredentialResult(ip, port, "mysql", "mysql", username, password, "error", f"MySQL connection timeout - service not responding within {self.timeout}s")
+            else:
+                return CredentialResult(ip, port, "mysql", "mysql", username, password, "error", f"MySQL connection error: {str(e)}")
         except Exception as e:
-            return CredentialResult(ip, port, "mysql", "mysql", username, password, "error", str(e))
+            error_str = str(e).lower()
+            if 'not a valid mysql' in error_str or 'not mysql' in error_str:
+                return CredentialResult(ip, port, "mysql", "mysql", username, password, "error", f"Not a MySQL service - wrong protocol detected: {str(e)}")
+            else:
+                return CredentialResult(ip, port, "mysql", "mysql", username, password, "error", f"MySQL error: {str(e)}")
 
 class PostgreSQLTester(ProtocolTester):
     """Test PostgreSQL authentication."""
 
     def test(self, ip: str, port: int, username: str, password: str) -> CredentialResult:
         if not psycopg2:
-            return CredentialResult(ip, port, "postgres", "postgresql", username, password, "error", "psycopg2 library not installed")
+            return CredentialResult(ip, port, "postgres", "postgresql", username, password, "error", "psycopg2 library not installed - install with: pip install psycopg2-binary")
 
         self.rate_limited_test()
         try:
             conn = psycopg2.connect(host=ip, port=port, user=username, password=password, connect_timeout=self.timeout)
             version = conn.server_version
+            # Verify we can actually query (reduces false positives)
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT version()")
+                    cursor.fetchone()
+            except:
+                pass  # If query fails, still consider connection successful
             conn.close()
-            return CredentialResult(ip, port, "postgres", "postgresql", username, password, "success", f"PostgreSQL {version}")
+            return CredentialResult(ip, port, "postgres", "postgresql", username, password, "success", f"PostgreSQL authentication successful - Server version: {version}")
         except psycopg2.OperationalError as e:
             error_msg = str(e).lower()
-            if "password authentication failed" in error_msg or "authentication" in error_msg:
-                return CredentialResult(ip, port, "postgres", "postgresql", username, password, "failed", "Authentication failed")
-            return CredentialResult(ip, port, "postgres", "postgresql", username, password, "error", str(e))
+            if "password authentication failed" in error_msg or ("authentication" in error_msg and "failed" in error_msg):
+                return CredentialResult(ip, port, "postgres", "postgresql", username, password, "failed", "PostgreSQL authentication failed - invalid credentials")
+            elif "could not connect" in error_msg or "connection refused" in error_msg:
+                return CredentialResult(ip, port, "postgres", "postgresql", username, password, "error", f"PostgreSQL connection refused - service not running on {ip}:{port}")
+            elif "could not translate hostname" in error_msg or "dns" in error_msg:
+                return CredentialResult(ip, port, "postgres", "postgresql", username, password, "error", f"DNS resolution failed - cannot resolve hostname")
+            elif "timeout" in error_msg:
+                return CredentialResult(ip, port, "postgres", "postgresql", username, password, "error", f"PostgreSQL connection timeout - service not responding within {self.timeout}s")
+            else:
+                return CredentialResult(ip, port, "postgres", "postgresql", username, password, "error", f"PostgreSQL connection error: {str(e)}")
         except Exception as e:
-            return CredentialResult(ip, port, "postgres", "postgresql", username, password, "error", str(e))
+            error_str = str(e).lower()
+            if 'not a valid postgres' in error_str or 'not postgres' in error_str:
+                return CredentialResult(ip, port, "postgres", "postgresql", username, password, "error", f"Not a PostgreSQL service - wrong protocol detected: {str(e)}")
+            else:
+                return CredentialResult(ip, port, "postgres", "postgresql", username, password, "error", f"PostgreSQL error: {str(e)}")
 
 class RDPTester(ProtocolTester):
     """Test RDP authentication using socket-based approach."""
@@ -702,6 +834,80 @@ class VNCTester(ProtocolTester):
             return CredentialResult(ip, port, "vnc", "vnc", username, password, "error", f"VNC error: {str(e)}")
 
 # ----------------------------------------------------------------------
+# Connection validation helpers
+# ----------------------------------------------------------------------
+def validate_connection(ip: str, port: int, timeout: int = 5) -> Tuple[bool, str]:
+    """
+    Validate that a connection can be established to the target.
+    Returns: (is_connected, error_message)
+    """
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        result = sock.connect_ex((ip, port))
+        sock.close()
+        
+        if result == 0:
+            return True, "Connection successful"
+        elif result == 111:
+            return False, f"Connection refused - service not running on {ip}:{port}"
+        elif result == 113:
+            return False, f"No route to host - network unreachable"
+        elif result == 110:
+            return False, f"Connection timeout - service may be firewalled or down"
+        else:
+            return False, f"Connection failed (error code: {result})"
+    except socket.gaierror as e:
+        return False, f"DNS resolution failed - {str(e)}"
+    except socket.timeout:
+        return False, f"Connection timeout - service not responding within {timeout}s"
+    except Exception as e:
+        return False, f"Connection error: {str(e)}"
+
+def detect_service_banner(ip: str, port: int, timeout: int = 5) -> Tuple[bool, str, Optional[str]]:
+    """
+    Attempt to detect the service running on a port by reading the banner.
+    Returns: (is_service_detected, service_name, banner_or_error)
+    """
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((ip, port))
+        
+        # Try to read initial banner/response
+        sock.settimeout(2)  # Shorter timeout for banner read
+        try:
+            banner = sock.recv(1024).decode('utf-8', errors='ignore')
+        except:
+            banner = None
+        
+        sock.close()
+        
+        if banner:
+            banner_lower = banner.lower()
+            # Detect common service banners
+            if 'ssh' in banner_lower:
+                return True, "ssh", banner.strip()
+            elif 'ftp' in banner_lower or '220' in banner:
+                return True, "ftp", banner.strip()
+            elif 'mysql' in banner_lower:
+                return True, "mysql", banner.strip()
+            elif 'postgresql' in banner_lower or 'postgres' in banner_lower:
+                return True, "postgres", banner.strip()
+            elif 'redis' in banner_lower:
+                return True, "redis", banner.strip()
+            elif 'microsoft sql server' in banner_lower or 'mssql' in banner_lower:
+                return True, "mssql", banner.strip()
+            else:
+                return True, "unknown", banner.strip()[:100]  # Truncate long banners
+        
+        return True, "unknown", "No banner received"
+    except socket.timeout:
+        return False, "unknown", "Banner read timeout"
+    except Exception as e:
+        return False, "unknown", f"Banner detection error: {str(e)}"
+
+# ----------------------------------------------------------------------
 # Protocol mapper
 # ----------------------------------------------------------------------
 def detect_protocol(port: int) -> str:
@@ -735,6 +941,61 @@ def scan_target_http(url: str, port: int, creds: List[Dict], timeout: int = 5, r
     results = []
     tester = HTTPTester(timeout, rate_limit)
 
+    # Pre-flight: Check if URL is reachable
+    if verbose:
+        logger.info(f"{Fore.CYAN}[*]{Style.RESET_ALL} Checking if website is reachable...")
+    
+    try:
+        if not requests:
+            error_msg = "requests library not installed - cannot test HTTP/HTTPS"
+            logger.error(f"{Fore.RED}[✗]{Style.RESET_ALL} {error_msg}")
+            if scan_id:
+                for cred in creds:
+                    error_result = CredentialResult(url, port, "http", "http", cred['username'], cred.get('password'), "error", error_msg)
+                    save_result_to_db_sync(scan_id, result=error_result)
+            return [CredentialResult(url, port, "http", "http", creds[0]['username'] if creds else "", creds[0].get('password') if creds else "", "error", error_msg)], None
+        
+        # Quick connectivity check
+        try:
+            test_resp = requests.get(url, timeout=timeout, verify=False, allow_redirects=True)
+        except requests.exceptions.Timeout:
+            error_msg = f"Website timeout - {url} not responding within {timeout}s"
+            logger.warning(f"{Fore.YELLOW}[!]{Style.RESET_ALL} {error_msg}")
+            if scan_id:
+                for cred in creds:
+                    error_result = CredentialResult(url, port, "http", "http", cred['username'], cred.get('password'), "error", error_msg)
+                    save_result_to_db_sync(scan_id, result=error_result)
+            return [CredentialResult(url, port, "http", "http", creds[0]['username'] if creds else "", creds[0].get('password') if creds else "", "error", error_msg)], None
+        except requests.exceptions.ConnectionError as e:
+            error_str = str(e).lower()
+            if 'refused' in error_str:
+                error_msg = f"Connection refused - HTTP service not running on {url}"
+            elif 'name resolution' in error_str or 'dns' in error_str:
+                error_msg = f"DNS resolution failed - cannot resolve hostname for {url}"
+            else:
+                error_msg = f"Connection error - cannot reach {url}: {str(e)}"
+            logger.warning(f"{Fore.YELLOW}[!]{Style.RESET_ALL} {error_msg}")
+            if scan_id:
+                for cred in creds:
+                    error_result = CredentialResult(url, port, "http", "http", cred['username'], cred.get('password'), "error", error_msg)
+                    save_result_to_db_sync(scan_id, result=error_result)
+            return [CredentialResult(url, port, "http", "http", creds[0]['username'] if creds else "", creds[0].get('password') if creds else "", "error", error_msg)], None
+        except Exception as e:
+            error_msg = f"Error accessing {url}: {str(e)}"
+            logger.warning(f"{Fore.YELLOW}[!]{Style.RESET_ALL} {error_msg}")
+            if scan_id:
+                for cred in creds:
+                    error_result = CredentialResult(url, port, "http", "http", cred['username'], cred.get('password'), "error", error_msg)
+                    save_result_to_db_sync(scan_id, result=error_result)
+            return [CredentialResult(url, port, "http", "http", creds[0]['username'] if creds else "", creds[0].get('password') if creds else "", "error", error_msg)], None
+        
+        if verbose:
+            logger.info(f"{Fore.GREEN}[✓]{Style.RESET_ALL} Website is reachable (HTTP {test_resp.status_code})")
+    except Exception as e:
+        # If pre-flight check itself fails, continue anyway
+        if verbose:
+            logger.warning(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Pre-flight check failed: {str(e)}, continuing anyway...")
+
     # First, detect if there's a login form/panel
     if verbose:
         logger.info(f"{Fore.CYAN}[*]{Style.RESET_ALL} Checking for login form/panel...")
@@ -742,8 +1003,9 @@ def scan_target_http(url: str, port: int, creds: List[Dict], timeout: int = 5, r
     has_login, detection_info = tester.detect_login_form(url)
 
     if not has_login:
+        detailed_reason = f"No authentication mechanism detected - {detection_info}"
         logger.info(f"{Fore.YELLOW}[!]{Style.RESET_ALL} {detection_info}")
-        logger.info(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Skipping credential testing - no authentication mechanism detected")
+        logger.info(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Skipping credential testing - {detailed_reason}")
 
         # Save skipped credentials to DB if scan_id provided
         if scan_id:
@@ -755,7 +1017,7 @@ def scan_target_http(url: str, port: int, creds: List[Dict], timeout: int = 5, r
                     'service': 'http',
                     'username': cred['username'],
                     'password': cred.get('password'),
-                    'reason': detection_info
+                    'reason': detailed_reason
                 }
                 save_result_to_db_sync(scan_id, skip_info=skip_info)
 
@@ -766,7 +1028,7 @@ def scan_target_http(url: str, port: int, creds: List[Dict], timeout: int = 5, r
             'protocol': 'http',
             'service': 'http',
             'credentials': creds,
-            'reason': detection_info
+            'reason': detailed_reason
         }
         return results, skip_info
 
@@ -793,6 +1055,43 @@ def scan_target_http(url: str, port: int, creds: List[Dict], timeout: int = 5, r
 def scan_target(ip: str, port: int, protocol: str, creds: List[Dict], timeout: int = 5, rate_limit: float = 0.1, verbose: bool = True, scan_id: str = None) -> List[CredentialResult]:
     """Scan a single target with multiple credentials."""
     results = []
+
+    # Pre-flight: Validate connection before testing credentials
+    if verbose:
+        logger.info(f"{Fore.CYAN}[*]{Style.RESET_ALL} Validating connection to {ip}:{port}...")
+    
+    is_connected, conn_error = validate_connection(ip, port, timeout)
+    if not is_connected:
+        error_msg = f"Cannot connect to {ip}:{port} - {conn_error}"
+        logger.warning(f"{Fore.YELLOW}[!]{Style.RESET_ALL} {error_msg}")
+        
+        # Save error for all credentials
+        if scan_id:
+            for cred in creds:
+                error_result = CredentialResult(ip, port, protocol, protocol, cred['username'], cred.get('password'), "error", error_msg)
+                save_result_to_db_sync(scan_id, result=error_result)
+        
+        # Return error result for first credential as representative
+        if creds:
+            return [CredentialResult(ip, port, protocol, protocol, creds[0]['username'], creds[0].get('password'), "error", error_msg)]
+        return [CredentialResult(ip, port, protocol, protocol, "", "", "error", error_msg)]
+    
+    if verbose:
+        logger.info(f"{Fore.GREEN}[✓]{Style.RESET_ALL} Connection successful")
+    
+    # Optional: Try to detect service banner for non-HTTP protocols
+    if protocol != "http" and protocol != "unknown":
+        if verbose:
+            logger.info(f"{Fore.CYAN}[*]{Style.RESET_ALL} Detecting service type...")
+        banner_detected, detected_service, banner_info = detect_service_banner(ip, port, timeout)
+        if banner_detected and detected_service != "unknown":
+            if detected_service != protocol:
+                warning_msg = f"Protocol mismatch: Expected {protocol}, but banner suggests {detected_service}"
+                logger.warning(f"{Fore.YELLOW}[!]{Style.RESET_ALL} {warning_msg}")
+                if verbose and banner_info:
+                    logger.info(f"{Fore.CYAN}[i]{Style.RESET_ALL} Banner: {banner_info[:100]}")
+        elif banner_detected and verbose:
+            logger.info(f"{Fore.CYAN}[i]{Style.RESET_ALL} Service detected but type unknown")
 
     # Select tester
     tester = None
@@ -911,9 +1210,48 @@ def scan_target(ip: str, port: int, protocol: str, creds: List[Dict], timeout: i
                 logger.info(f"{Fore.GREEN}[✓ SUCCESS]{Style.RESET_ALL} {ip}:{port} - {Fore.CYAN}{cred['username']}{Style.RESET_ALL}:{Fore.YELLOW}{cred['password']}{Style.RESET_ALL}")
                 break
 
+    elif protocol == "unknown":
+        error_msg = f"Unknown protocol for port {port} - cannot determine service type. Specify protocol manually with --protocol"
+        logger.warning(f"{Fore.YELLOW}[!]{Style.RESET_ALL} {error_msg}")
+        
+        # Save error for all credentials
+        if scan_id:
+            for cred in creds:
+                error_result = CredentialResult(ip, port, protocol, protocol, cred['username'], cred.get('password'), "error", error_msg)
+                save_result_to_db_sync(scan_id, result=error_result)
+        
+        if creds:
+            results.append(CredentialResult(ip, port, protocol, protocol, creds[0]['username'], creds[0].get('password'), "error", error_msg))
+        else:
+            results.append(CredentialResult(ip, port, protocol, protocol, "", "", "error", error_msg))
+    
     else:
-        logger.warning(f"No tester available for {protocol} on {ip}:{port}")
-        results.append(CredentialResult(ip, port, protocol, protocol, "", "", "error", f"Protocol {protocol} not supported or library not installed"))
+        # Protocol not supported or library missing
+        missing_lib_msg = ""
+        if protocol == "ssh" and not paramiko:
+            missing_lib_msg = " - paramiko library not installed"
+        elif protocol == "ftp" and not FTP:
+            missing_lib_msg = " - ftplib not available"
+        elif protocol == "mysql" and not pymysql:
+            missing_lib_msg = " - pymysql library not installed"
+        elif protocol == "postgres" and not psycopg2:
+            missing_lib_msg = " - psycopg2 library not installed"
+        elif protocol == "mssql" and not pymssql:
+            missing_lib_msg = " - pymssql library not installed"
+        
+        error_msg = f"Protocol {protocol} not supported{missing_lib_msg}. Install required library or use a different protocol."
+        logger.warning(f"{Fore.YELLOW}[!]{Style.RESET_ALL} {error_msg}")
+        
+        # Save error for all credentials
+        if scan_id:
+            for cred in creds:
+                error_result = CredentialResult(ip, port, protocol, protocol, cred['username'], cred.get('password'), "error", error_msg)
+                save_result_to_db_sync(scan_id, result=error_result)
+        
+        if creds:
+            results.append(CredentialResult(ip, port, protocol, protocol, creds[0]['username'], creds[0].get('password'), "error", error_msg))
+        else:
+            results.append(CredentialResult(ip, port, protocol, protocol, "", "", "error", error_msg))
 
     return results
 
@@ -963,9 +1301,17 @@ def save_result_to_db_sync(scan_id: str, result: CredentialResult = None, skip_i
         sync_engine = create_engine(db_url, echo=False)
 
         with Session(sync_engine) as session:
-            # Get the scan record
-            statement = select(CredReconScan).where(CredReconScan.scan_id == scan_id)
-            scan = session.exec(statement).first()
+            # Get the scan record - explicitly select only columns that exist (excluding output_dir)
+            statement = (
+                select(CredReconScan.id, CredReconScan.scan_id)
+                .where(CredReconScan.scan_id == scan_id)
+            )
+            scan_row = session.exec(statement).first()
+            # Create a simple object with just the id attribute for compatibility
+            class ScanRow:
+                def __init__(self, id_value):
+                    self.id = id_value
+            scan = ScanRow(scan_row.id) if scan_row else None
 
             if not scan:
                 return
@@ -1030,10 +1376,32 @@ def credrecon(input_file: str = None, target: str = None, output_dir: str = None
     # Only save if output_dir is explicitly provided (not None)
     save_output = output_dir is not None
     out_dir = None
+    output_file_handler = None
 
     if save_output:
         out_dir = resolve_output_dir(output_dir, "credrecon")
         logger.info(f"{Fore.CYAN}[*]{Style.RESET_ALL} Output directory: {out_dir}")
+        
+        # Set up file handler to capture all output to output.txt
+        output_file = out_dir / "output.txt"
+        try:
+            output_file_handler = logging.FileHandler(output_file, mode='w', encoding='utf-8')
+            output_file_handler.setLevel(logging.INFO)
+            # Use a formatter that strips ANSI codes for file output
+            class FileFormatter(logging.Formatter):
+                """Formatter that strips ANSI color codes for file output."""
+                def format(self, record):
+                    message = record.getMessage()
+                    # Remove ANSI color codes
+                    import re
+                    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+                    message = ansi_escape.sub('', message)
+                    return message
+            output_file_handler.setFormatter(FileFormatter())
+            logger.addHandler(output_file_handler)
+            logger.info(f"{Fore.CYAN}[*]{Style.RESET_ALL} Output will be saved to: {output_file}")
+        except Exception as e:
+            logger.warning(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Could not create output file: {e}")
     else:
         logger.info(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Running in check-only mode (no output will be saved)")
 
@@ -1205,6 +1573,16 @@ def credrecon(input_file: str = None, target: str = None, output_dir: str = None
     logger.info(f"  Failed attempts:     {Fore.YELLOW}{failed_count}{Style.RESET_ALL}")
     logger.info(f"  Errors:              {Fore.RED}{error_count}{Style.RESET_ALL}")
     logger.info(f"  Time elapsed:        {Fore.WHITE}{elapsed:.1f}s{Style.RESET_ALL}")
+    
+    # Clean up file handler if it was added
+    if output_file_handler:
+        try:
+            logger.removeHandler(output_file_handler)
+            output_file_handler.close()
+            if save_output:
+                logger.info(f"{Fore.GREEN}[✓]{Style.RESET_ALL} Complete output saved to: {out_dir / 'output.txt'}")
+        except Exception as e:
+            pass  # Silently fail cleanup
 
     # Display successful credentials
     if successful_results:

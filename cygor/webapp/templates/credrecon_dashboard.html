@@ -94,7 +94,7 @@
   <div id="active-scans-card" class="card bg-dark shadow mb-4" style="display: none;">
     <div class="card-header d-flex justify-content-between align-items-center py-3">
       <h4 class="mb-0 fw-bold">
-        <i class="bi bi-activity me-2"></i>Active & Recent Scans
+        <i class="bi bi-activity me-2"></i>Current Tasks
       </h4>
       <button class="btn btn-outline-secondary" onclick="refreshStats()">
         <i class="bi bi-arrow-clockwise me-2"></i>Refresh
@@ -102,15 +102,15 @@
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table table-dark table-hover mb-0">
+        <table class="table table-dark table-hover mb-0 aligned-table">
           <thead class="table-dark">
             <tr>
-              <th class="py-3 px-4" style="font-size: 0.95rem; width: 35%;">Scan ID</th>
-              <th class="py-3 px-4" style="font-size: 0.95rem;">Status</th>
-              <th class="py-3 px-4" style="font-size: 0.95rem;">Targets</th>
-              <th class="py-3 px-4" style="font-size: 0.95rem;">Started</th>
-              <th class="py-3 px-4" style="font-size: 0.95rem;">Completed</th>
-              <th class="py-3 px-4" style="font-size: 0.95rem;">Actions</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem; width: 20%;">Scan ID</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem; width: 10%;">Status</th>
+              <th class="py-3 px-4 text-center" style="font-size: 0.95rem; width: 8%;">Targets</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem; width: 18%;">Started</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem; width: 18%;">Completed</th>
+              <th class="py-3 px-4 text-center" style="font-size: 0.95rem; width: 10%;">Actions</th>
             </tr>
           </thead>
           <tbody id="active-scans-tbody">
@@ -120,41 +120,11 @@
     </div>
   </div>
 
-  <!-- Historical Scans -->
-  <div id="historical-scans-card" class="card bg-dark shadow mb-4" style="display: none;">
-    <div class="card-header py-3" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#historicalScansCollapse">
-      <h4 class="mb-0 fw-bold d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-clock-history me-2"></i>Historical Scans</span>
-        <i class="bi bi-chevron-down"></i>
-      </h4>
-    </div>
-    <div id="historicalScansCollapse" class="collapse">
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table table-dark table-hover mb-0">
-            <thead class="table-dark">
-              <tr>
-                <th class="py-3 px-4" style="font-size: 0.95rem; width: 35%;">Scan ID</th>
-                <th class="py-3 px-4" style="font-size: 0.95rem;">Status</th>
-                <th class="py-3 px-4" style="font-size: 0.95rem;">Targets</th>
-                <th class="py-3 px-4" style="font-size: 0.95rem;">Started</th>
-                <th class="py-3 px-4" style="font-size: 0.95rem;">Completed</th>
-                <th class="py-3 px-4" style="font-size: 0.95rem;">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="historical-scans-tbody">
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Recent Successful Logins -->
-  <div class="card bg-dark shadow">
+  <!-- All Tasks -->
+  <div class="card bg-dark shadow mb-4">
     <div class="card-header d-flex justify-content-between align-items-center py-3">
       <h4 class="mb-0 fw-bold">
-        <i class="bi bi-shield-exclamation me-2"></i>Recent Successful Logins
+        <i class="bi bi-table me-2"></i>All Tasks
       </h4>
       <button class="btn btn-outline-secondary" onclick="refreshStats()">
         <i class="bi bi-arrow-clockwise me-2"></i>Refresh
@@ -162,27 +132,62 @@
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table table-dark table-hover mb-0">
+        <table class="table table-dark table-hover mb-0 tasks-table aligned-table">
           <thead class="table-dark">
             <tr>
-              <th class="py-3 px-4" style="font-size: 0.95rem;">Target</th>
-              <th class="py-3 px-4" style="font-size: 0.95rem;">Port</th>
-              <th class="py-3 px-4" style="font-size: 0.95rem;">Protocol</th>
-              <th class="py-3 px-4" style="font-size: 0.95rem;">Status</th>
-              <th class="py-3 px-4" style="font-size: 0.95rem;">Username</th>
-              <th class="py-3 px-4" style="font-size: 0.95rem;">Details</th>
-              <th class="py-3 px-4" style="font-size: 0.95rem;">Timestamp</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem; width: 8%;">ID</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem; width: 8%;">Type</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem; width: 30%;">Command</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem; width: 10%;">Status</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem; width: 18%;">Created</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem; width: 8%;">Duration</th>
+              <th class="py-3 px-4 text-center" style="font-size: 0.95rem; width: 10%;">Actions</th>
             </tr>
           </thead>
-          <tbody id="scans-tbody">
+          <tbody id="all-tasks-tbody">
             <tr>
               <td colspan="7" class="text-center text-muted py-5">
                 <i class="bi bi-hourglass-split me-2 fs-4"></i>
-                <div class="mt-2 fs-5">Loading results...</div>
+                <div class="mt-2 fs-5">Loading tasks...</div>
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Historical Scans (Collapsible) -->
+  <div id="historical-scans-card" class="card bg-dark shadow mb-4" style="display: none;">
+    <div class="card-header py-3" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#historicalScansCollapse" aria-expanded="false" aria-controls="historicalScansCollapse">
+      <h4 class="mb-0 fw-bold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clock-history me-2"></i>Previous Scans</span>
+        <div class="d-flex align-items-center gap-2">
+          <button class="btn btn-outline-secondary btn-sm" onclick="event.stopPropagation(); refreshStats();">
+            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+          </button>
+          <i class="bi bi-chevron-down" id="historicalScansChevron"></i>
+        </div>
+      </h4>
+    </div>
+    <div id="historicalScansCollapse" class="collapse">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-dark table-hover mb-0 aligned-table">
+            <thead class="table-dark">
+              <tr>
+                <th class="py-3 px-4" style="font-size: 0.95rem; width: 20%;">Scan ID</th>
+                <th class="py-3 px-4" style="font-size: 0.95rem; width: 10%;">Status</th>
+                <th class="py-3 px-4 text-center" style="font-size: 0.95rem; width: 8%;">Targets</th>
+                <th class="py-3 px-4" style="font-size: 0.95rem; width: 18%;">Started</th>
+                <th class="py-3 px-4" style="font-size: 0.95rem; width: 18%;">Completed</th>
+                <th class="py-3 px-4 text-center" style="font-size: 0.95rem; width: 10%;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="historical-scans-tbody">
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -244,6 +249,96 @@ code.scan-id {
   display: block;
   line-height: 1.4;
 }
+
+/* Aligned table styling - consistent across all tables */
+.aligned-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.aligned-table tbody td {
+  padding: 1.25rem 1rem !important;
+  font-size: 0.95rem !important;
+  vertical-align: middle !important;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.aligned-table tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.aligned-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.aligned-table thead th {
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* Table enhancements for All Tasks */
+.tasks-table tbody td {
+  padding: 1.25rem 1rem !important;
+  font-size: 0.95rem !important;
+  vertical-align: middle !important;
+}
+
+.tasks-table tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tasks-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Command cell styling */
+.command-cell {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: left;
+  padding-left: 0 !important;
+  margin: 0 auto;
+  max-width: 900px;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.command-cell code {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.95rem;
+  color: #e6edf3;
+  display: inline-block;
+  width: 100%;
+}
+
+.tasks-table .btn-group .btn {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.tasks-table .btn-group .btn i {
+  font-size: 0.9rem;
+}
+
+.tasks-table code {
+  font-size: 0.9rem;
+  word-break: break-all;
+}
+
+.tasks-table code.text-info {
+  color: #6ea8fe !important;
+  font-weight: 500;
+}
+
+.tasks-table .badge {
+  font-size: 0.85rem;
+  padding: 0.4rem 0.8rem;
+}
 </style>
 
 <script>
@@ -265,6 +360,37 @@ async function fetchStats() {
     const historicalTbody = document.getElementById('historical-scans-tbody');
     const historicalCard = document.getElementById('historical-scans-card');
 
+    // Function to format time similar to ondemandscans
+    const formatTime = (isoString) => {
+      if (!isoString) return '<span class="text-muted">-</span>';
+      try {
+        let iso = isoString;
+        // Handle ISO strings that might not have timezone info
+        if (!iso.endsWith('Z') && !iso.includes('+') && !iso.includes('-', 10)) {
+          iso = iso + 'Z';
+        }
+        const date = new Date(iso);
+        
+        if (isNaN(date.getTime())) {
+          return '<span class="text-muted">-</span>';
+        }
+        
+        const options = {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true
+        };
+        
+        return date.toLocaleString('en-US', options);
+      } catch (e) {
+        return '<span class="text-muted">-</span>';
+      }
+    };
+
     // Function to render scan row
     const renderScanRow = (scan) => {
       const statusClass = {
@@ -281,23 +407,23 @@ async function fetchStats() {
         'failed': 'x-circle-fill'
       }[scan.status] || 'circle';
 
-      const startedTime = scan.started_at ? new Date(scan.started_at).toLocaleString() : '-';
-      const completedTime = scan.completed_at ? new Date(scan.completed_at).toLocaleString() : '-';
+      const startedTime = formatTime(scan.started_at);
+      const completedTime = formatTime(scan.completed_at);
 
       return `
         <tr>
           <td class="px-4">
-            <code class="text-info" style="font-size: 0.85rem; word-break: break-all;">${scan.scan_id}</code>
+            <code class="text-info" style="font-size: 0.9rem; word-break: break-all;">${scan.scan_id.substring(0, 8)}</code>
           </td>
           <td class="px-4">
             <span class="badge ${statusClass}">
               <i class="bi bi-${statusIcon} me-1"></i>${scan.status.toUpperCase()}
             </span>
           </td>
-          <td class="px-4">${scan.num_targets}</td>
-          <td class="px-4"><small>${startedTime}</small></td>
-          <td class="px-4"><small>${completedTime}</small></td>
-          <td class="px-4">
+          <td class="px-4" style="font-size: 0.95rem; text-align: center;">${scan.num_targets || 0}</td>
+          <td class="px-4" style="font-size: 0.95rem; white-space: nowrap;">${startedTime}</td>
+          <td class="px-4" style="font-size: 0.95rem; white-space: nowrap;">${completedTime}</td>
+          <td class="px-4 text-center">
             <a href="/credrecon/scans/${scan.scan_id}" class="btn btn-sm btn-outline-primary">
               <i class="bi bi-eye me-1"></i>View
             </a>
@@ -315,50 +441,152 @@ async function fetchStats() {
     }
 
     // Populate historical scans table (completed/failed from database)
-    if (data.historical_scans && data.historical_scans.length > 0) {
+    console.log('Historical scans data:', data.historical_scans);
+    if (data.historical_scans && Array.isArray(data.historical_scans) && data.historical_scans.length > 0) {
       historicalCard.style.display = 'block';
-      historicalTbody.innerHTML = data.historical_scans.map(renderScanRow).join('');
+      // Ensure all historical scans have required fields
+      const validHistoricalScans = data.historical_scans.filter(scan => scan && scan.scan_id);
+      if (validHistoricalScans.length > 0) {
+        historicalTbody.innerHTML = validHistoricalScans.map(renderScanRow).join('');
+        console.log(`Displayed ${validHistoricalScans.length} historical scans in Previous Scans table`);
+      } else {
+        historicalTbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No valid historical scans found</td></tr>';
+        console.log('Historical scans found but none are valid');
+      }
     } else {
       historicalCard.style.display = 'none';
+      console.log('No historical scans to display');
+    }
+    
+    // Update chevron icon based on collapse state
+    const historicalCollapse = document.getElementById('historicalScansCollapse');
+    const historicalChevron = document.getElementById('historicalScansChevron');
+    if (historicalCollapse && historicalChevron) {
+      historicalCollapse.addEventListener('show.bs.collapse', () => {
+        historicalChevron.style.transform = 'rotate(180deg)';
+      });
+      historicalCollapse.addEventListener('hide.bs.collapse', () => {
+        historicalChevron.style.transform = 'rotate(0deg)';
+      });
     }
 
-    // Update recent successful logins table
-    const tbody = document.getElementById('scans-tbody');
+    // Function to calculate duration
+    const calculateDuration = (scan) => {
+      if (!scan.started_at) return '<span class="text-muted">-</span>';
+      
+      try {
+        let startIso = scan.started_at;
+        if (!startIso.endsWith('Z') && !startIso.includes('+') && !startIso.includes('-', 10)) {
+          startIso = startIso + 'Z';
+        }
+        const start = new Date(startIso);
+        
+        let end;
+        if (scan.completed_at) {
+          let endIso = scan.completed_at;
+          if (!endIso.endsWith('Z') && !endIso.includes('+') && !endIso.includes('-', 10)) {
+            endIso = endIso + 'Z';
+          }
+          end = new Date(endIso);
+        } else if (scan.status === 'running' || scan.status === 'pending') {
+          end = new Date(); // Use current time for running/pending tasks
+        } else {
+          return '<span class="text-muted">-</span>';
+        }
+        
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+          return '<span class="text-muted">-</span>';
+        }
+        
+        let diff = end - start;
+        if (diff < 0) diff = 0;
+        
+        const hours = Math.floor(diff / 3600000);
+        const minutes = Math.floor((diff % 3600000) / 60000);
+        const seconds = Math.floor((diff % 60000) / 1000);
+        
+        if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+        if (minutes > 0) return `${minutes}m ${seconds}s`;
+        return `${seconds}s`;
+      } catch (e) {
+        return '<span class="text-muted">-</span>';
+      }
+    };
 
-    if (!data.recent || data.recent.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5"><i class="bi bi-inbox me-2 fs-4"></i><div class="mt-2 fs-5">No successful logins found yet.</div></td></tr>';
+    // Combine active and historical scans for All Tasks table
+    // NOTE: Only include scans from database/task manager, NOT discovered scans from disk
+    console.log('Active scans:', data.active_scans);
+    console.log('Historical scans for All Tasks:', data.historical_scans);
+    
+    // Ensure we have valid arrays and filter out any invalid scans
+    const validActiveScans = (data.active_scans || []).filter(scan => scan && scan.scan_id);
+    // Filter out historic scans (those starting with "historic-") from All Tasks
+    const validHistoricalScans = (data.historical_scans || []).filter(scan => 
+      scan && scan.scan_id && !scan.scan_id.startsWith('historic-')
+    );
+    
+    const allScans = [
+      ...validActiveScans,
+      ...validHistoricalScans
+    ].sort((a, b) => {
+      // Sort by created_at descending (most recent first)
+      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return bTime - aTime;
+    });
+    console.log(`Combined ${allScans.length} total scans for All Tasks table (${validActiveScans.length} active + ${validHistoricalScans.length} historical, excluding discovered scans)`);
+
+    // Update All Tasks table
+    const allTasksTbody = document.getElementById('all-tasks-tbody');
+
+    if (allScans.length === 0) {
+      allTasksTbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5"><i class="bi bi-inbox me-2 fs-4"></i><div class="mt-2 fs-5">No tasks found</div></td></tr>';
     } else {
-      tbody.innerHTML = data.recent.map(scan => {
-        const statusClass = `status-${scan.status}`;
+      allTasksTbody.innerHTML = allScans.map(scan => {
+        const statusClass = {
+          'pending': 'status-pending',
+          'running': 'status-running',
+          'completed': 'status-success',
+          'failed': 'status-failed'
+        }[scan.status] || 'status-failed';
+
         const statusIcon = {
-          success: 'check-circle-fill',
-          failed: 'x-circle',
-          error: 'exclamation-circle'
+          'pending': 'clock-history',
+          'running': 'hourglass-split',
+          'completed': 'check-circle-fill',
+          'failed': 'x-circle-fill'
         }[scan.status] || 'question-circle';
 
-        // Create clickable link for HTTP/HTTPS targets
-        let targetCell = '';
-        if (scan.ip.startsWith('http://') || scan.ip.startsWith('https://')) {
-          targetCell = `<a href="${scan.ip}" target="_blank" rel="noopener noreferrer" style="color: #6ea8fe; text-decoration: none; font-family: 'Courier New', monospace;">${scan.ip} <i class="bi bi-box-arrow-up-right" style="font-size: 0.8rem;"></i></a>`;
-        } else if (scan.protocol.toLowerCase() === 'http' || scan.protocol.toLowerCase() === 'https') {
-          targetCell = `<a href="${scan.protocol.toLowerCase()}://${scan.ip}" target="_blank" rel="noopener noreferrer" style="color: #6ea8fe; text-decoration: none; font-family: 'Courier New', monospace;">${scan.ip} <i class="bi bi-box-arrow-up-right" style="font-size: 0.8rem;"></i></a>`;
-        } else {
-          targetCell = `<code>${scan.ip}</code>`;
-        }
+        const duration = calculateDuration(scan);
+        const createdTime = formatTime(scan.created_at);
+        const command = scan.command || 'cygor credrecon';
 
         return `
           <tr>
-            <td class="px-4">${targetCell}</td>
-            <td class="px-4"><span class="badge bg-primary">${scan.port}</span></td>
-            <td class="px-4">${scan.protocol.toUpperCase()}</td>
+            <td class="px-4"><code class="text-info" style="font-size: 0.9rem; word-break: break-all;">${scan.scan_id.substring(0, 8)}</code></td>
+            <td class="px-4"><span class="badge bg-secondary">credrecon</span></td>
+            <td class="px-4" style="word-break: break-all;">
+              <code class="text-light" style="font-size: 0.85rem; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 6px; padding: 0.4rem 0.6rem; display: inline-block; max-width: 100%;">${command}</code>
+            </td>
             <td class="px-4">
               <span class="status-badge ${statusClass}">
-                <i class="bi bi-${statusIcon} me-1"></i>${scan.status}
+                <i class="bi bi-${statusIcon}"></i>${scan.status}
               </span>
             </td>
-            <td class="px-4"><code class="text-warning">${scan.username || '(empty)'}</code></td>
-            <td class="px-4"><small class="text-muted">${scan.details || '-'}</small></td>
-            <td class="px-4"><small>${scan.timestamp || '-'}</small></td>
+            <td class="text-light px-4" style="white-space: nowrap;">${createdTime}</td>
+            <td class="text-light px-4" style="white-space: nowrap;">${duration}</td>
+            <td class="px-4 text-center">
+              <div class="btn-group" role="group">
+                <a href="/credrecon/scans/${scan.scan_id}" class="btn btn-outline-primary" title="View Details">
+                  <i class="bi bi-eye-fill"></i>
+                </a>
+                ${scan.status !== 'running' ? `
+                  <button onclick="deleteScan('${scan.scan_id}')" class="btn btn-outline-danger" title="Delete Scan">
+                    <i class="bi bi-trash-fill"></i>
+                  </button>
+                ` : ''}
+              </div>
+            </td>
           </tr>
         `;
       }).join('');
@@ -366,8 +594,11 @@ async function fetchStats() {
 
   } catch (error) {
     console.error('Error fetching stats:', error);
-    document.getElementById('scans-tbody').innerHTML =
-      '<tr><td colspan="7" class="text-center text-danger py-5"><i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i><div class="mt-2 fs-5">Error loading data</div></td></tr>';
+    const allTasksTbody = document.getElementById('all-tasks-tbody');
+    if (allTasksTbody) {
+      allTasksTbody.innerHTML =
+        '<tr><td colspan="7" class="text-center text-danger py-5"><i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i><div class="mt-2 fs-5">Error loading data</div></td></tr>';
+    }
   }
 }
 
@@ -415,6 +646,29 @@ window.addEventListener('blur', () => {
 window.addEventListener('focus', () => {
   startAutoRefresh();
 });
+
+// Delete scan function
+async function deleteScan(scanId) {
+  if (!confirm(`Are you sure you want to delete scan ${scanId.substring(0, 8)}?`)) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/api/credrecon/scans/${scanId}`, {
+      method: 'DELETE'
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to delete scan');
+    }
+    
+    // Refresh the page to update the table
+    refreshStats();
+  } catch (error) {
+    console.error('Error deleting scan:', error);
+    alert('Failed to delete scan. Please try again.');
+  }
+}
 </script>
 
 {% endblock %}

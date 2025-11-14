@@ -140,38 +140,38 @@
               <!-- Summary Cards -->
               <div class="row mb-4">
                 <div class="col-md-3">
-                  <div class="card bg-success bg-opacity-10 border-success">
+                  <div class="card bg-success bg-opacity-10 border-success summary-card">
                     <div class="card-body text-center">
                       <i class="bi bi-check-circle-fill text-success fs-2"></i>
-                      <h3 class="mt-2 mb-0 text-success" id="successCount">0</h3>
-                      <p class="mb-0 text-secondary">Successful</p>
+                      <h3 class="mt-2 mb-0 text-success fw-bold" id="successCount" style="font-size: 2rem;">0</h3>
+                      <p class="mb-0 text-secondary fw-semibold" style="font-size: 0.95rem;">Successful</p>
                     </div>
                   </div>
                 </div>
                 <div class="col-md-3">
-                  <div class="card bg-danger bg-opacity-10 border-danger">
+                  <div class="card bg-danger bg-opacity-10 border-danger summary-card">
                     <div class="card-body text-center">
                       <i class="bi bi-x-circle-fill text-danger fs-2"></i>
-                      <h3 class="mt-2 mb-0 text-danger" id="failedCount">0</h3>
-                      <p class="mb-0 text-secondary">Failed</p>
+                      <h3 class="mt-2 mb-0 text-danger fw-bold" id="failedCount" style="font-size: 2rem;">0</h3>
+                      <p class="mb-0 text-secondary fw-semibold" style="font-size: 0.95rem;">Failed</p>
                     </div>
                   </div>
                 </div>
                 <div class="col-md-3">
-                  <div class="card bg-warning bg-opacity-10 border-warning">
+                  <div class="card bg-warning bg-opacity-10 border-warning summary-card">
                     <div class="card-body text-center">
                       <i class="bi bi-exclamation-triangle-fill text-warning fs-2"></i>
-                      <h3 class="mt-2 mb-0 text-warning" id="errorCount">0</h3>
-                      <p class="mb-0 text-secondary">Errors</p>
+                      <h3 class="mt-2 mb-0 text-warning fw-bold" id="errorCount" style="font-size: 2rem;">0</h3>
+                      <p class="mb-0 text-secondary fw-semibold" style="font-size: 0.95rem;">Errors</p>
                     </div>
                   </div>
                 </div>
                 <div class="col-md-3">
-                  <div class="card bg-secondary bg-opacity-10 border-secondary">
+                  <div class="card bg-secondary bg-opacity-10 border-secondary summary-card">
                     <div class="card-body text-center">
                       <i class="bi bi-skip-forward-fill text-secondary fs-2"></i>
-                      <h3 class="mt-2 mb-0 text-light" id="skippedCount">0</h3>
-                      <p class="mb-0 text-secondary">Skipped</p>
+                      <h3 class="mt-2 mb-0 text-secondary fw-bold" id="skippedCount" style="font-size: 2rem;">0</h3>
+                      <p class="mb-0 text-secondary fw-semibold" style="font-size: 0.95rem;">Skipped</p>
                     </div>
                   </div>
                 </div>
@@ -269,14 +269,14 @@
 
         <!-- Output Tab -->
         <div class="tab-pane fade" id="outputTab">
-          <div class="p-3 bg-black text-light" style="max-height: 650px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; border-radius: 6px; border: 1px solid #333;">
+          <div class="p-3 bg-black text-light output-container" style="max-height: 650px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; border-radius: 6px; border: 1px solid #333;">
             <pre id="outputContent" style="white-space: pre-wrap; word-break: break-word; margin: 0;">Loading...</pre>
           </div>
         </div>
 
         <!-- Errors Tab -->
         <div class="tab-pane fade" id="errorsTab">
-          <div class="p-3 bg-black text-danger" style="max-height: 650px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; border-radius: 6px; border: 1px solid #333;">
+          <div class="p-3 bg-black text-danger errors-container" style="max-height: 650px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; border-radius: 6px; border: 1px solid #333;">
             <pre id="errorsContent" style="white-space: pre-wrap; word-break: break-word; margin: 0;">No errors detected</pre>
           </div>
         </div>
@@ -380,9 +380,85 @@
 /* Light theme support */
 body.light-theme #outputContent,
 body.light-theme #errorsContent {
-  background: #fafafa;
-  color: #1f1f1f;
-  border-color: #ddd;
+  background: #fafafa !important;
+  color: #1f1f1f !important;
+  border-color: #ddd !important;
+}
+
+body.light-theme #outputContent::-webkit-scrollbar-thumb,
+body.light-theme #errorsContent::-webkit-scrollbar-thumb {
+  background: #adb5bd !important;
+}
+
+/* Light theme overrides for scan detail page */
+body.light-theme .text-light {
+  color: #212529 !important;
+}
+
+body.light-theme code.text-light {
+  color: #212529 !important;
+  background: rgba(0,0,0,0.05) !important;
+}
+
+/* Improve table readability in scan detail */
+#resultsContent .table {
+  font-size: 1rem;
+}
+
+#resultsContent .table thead th {
+  color: #c9d1d9 !important;
+  font-weight: 600;
+  font-size: 1.05rem;
+  padding: 0.75rem;
+}
+
+#resultsContent .table tbody td {
+  color: #e6edf3 !important;
+  padding: 0.75rem;
+  vertical-align: middle;
+}
+
+/* Light theme overrides for table-dark */
+body.light-theme #resultsContent .table.table-dark {
+  background-color: #ffffff !important;
+  color: #212529 !important;
+}
+
+body.light-theme #resultsContent .table.table-dark thead {
+  background-color: #f8f9fa !important;
+}
+
+body.light-theme #resultsContent .table.table-dark thead th {
+  color: #212529 !important;
+  font-weight: 700 !important;
+  border-bottom: 2px solid #dee2e6 !important;
+}
+
+body.light-theme #resultsContent .table.table-dark tbody {
+  background-color: #ffffff !important;
+}
+
+body.light-theme #resultsContent .table.table-dark tbody td {
+  color: #212529 !important;
+  border-bottom: 1px solid #dee2e6 !important;
+}
+
+body.light-theme #resultsContent .table.table-dark tbody tr:hover {
+  background-color: #f8f9fa !important;
+}
+
+#resultsContent .table code {
+  font-size: 1rem !important;
+  padding: 0.4rem 0.6rem !important;
+  border-radius: 0.25rem;
+  display: inline-block;
+  font-weight: 500;
+}
+
+#resultsContent .table .badge {
+  font-size: 1rem !important;
+  padding: 0.5rem 0.75rem !important;
+  font-weight: 500;
 }
 </style>
 
@@ -390,9 +466,11 @@ body.light-theme #errorsContent {
 <script>
 const scanId = "{{ scan_id }}";
 let refreshInterval = null;
+let resultsRefreshInterval = null;
 let startTime = null;
 let timerInterval = null;
 let scanInfoCollapsed = false;
+let previousStatus = null;
 
 // Toggle scan info collapse
 function toggleScanInfo() {
@@ -535,17 +613,54 @@ function updateScanInfo(scan) {
     if (!refreshInterval) {
       refreshInterval = setInterval(fetchScanDetails, 2000);
     }
+    // Also refresh results periodically while running
+    if (!resultsRefreshInterval) {
+      resultsRefreshInterval = setInterval(fetchResults, 3000);
+    }
   } else {
     if (refreshInterval) {
       clearInterval(refreshInterval);
       refreshInterval = null;
     }
+    if (resultsRefreshInterval) {
+      clearInterval(resultsRefreshInterval);
+      resultsRefreshInterval = null;
+    }
   }
+  
+  // Auto-refresh results when scan completes (transition from running/pending to completed/failed)
+  if (previousStatus && (previousStatus === 'running' || previousStatus === 'pending') && 
+      (scan.status === 'completed' || scan.status === 'failed')) {
+    // Scan just completed - fetch results immediately
+    console.log('Scan completed, fetching results...');
+    fetchResults();
+    // Also fetch results a few more times in case they're still being written
+    let retryCount = 0;
+    const maxRetries = 5;
+    const resultsRetryInterval = setInterval(() => {
+      retryCount++;
+      fetchResults();
+      if (retryCount >= maxRetries) {
+        clearInterval(resultsRetryInterval);
+      }
+    }, 2000);
+  }
+  
+  previousStatus = scan.status;
 }
 
 function updateOutput(data) {
-  const newOutput = data.output || [];
-  const newErrors = data.errors || [];
+  // Handle both array and string formats (for backward compatibility and historic scans)
+  let newOutput = data.output || [];
+  let newErrors = data.errors || [];
+  
+  // Convert strings to arrays if needed
+  if (typeof newOutput === 'string') {
+    newOutput = newOutput.split('\n').filter(line => line.length > 0);
+  }
+  if (typeof newErrors === 'string') {
+    newErrors = newErrors.split('\n').filter(line => line.length > 0);
+  }
 
   const outputEl = document.getElementById("outputContent");
   const errEl = document.getElementById("errorsContent");
@@ -786,12 +901,12 @@ async function fetchResults() {
       data.results.successful.forEach(result => {
         const row = `
           <tr>
-            <td><code class="text-success">${escapeHtml(result.target)}</code></td>
-            <td>${result.port}</td>
-            <td><span class="badge bg-primary">${result.protocol.toUpperCase()}</span></td>
-            <td><span class="badge bg-info">${escapeHtml(result.username)}</span></td>
-            <td><span class="badge bg-warning text-dark">${escapeHtml(result.password || '(empty)')}</span></td>
-            <td class="text-success">${escapeHtml(result.reason || 'Authentication successful')}</td>
+            <td style="padding: 0.75rem;">${formatTargetCell(result.target, result.protocol, 'text-success')}</td>
+            <td style="padding: 0.75rem; color: #c9d1d9; font-size: 1rem; font-weight: 600;" class="port-cell">${result.port}</td>
+            <td style="padding: 0.75rem;"><span class="badge bg-primary" style="font-size: 1rem; padding: 0.5rem 0.75rem;">${result.protocol.toUpperCase()}</span></td>
+            <td style="padding: 0.75rem;"><span class="badge bg-info" style="font-size: 1rem; padding: 0.5rem 0.75rem; font-weight: 500;">${escapeHtml(result.username)}</span></td>
+            <td style="padding: 0.75rem;"><span class="badge bg-warning text-dark" style="font-size: 1rem; padding: 0.5rem 0.75rem; font-weight: 600;">${escapeHtml(result.password || '(empty)')}</span></td>
+            <td style="padding: 0.75rem; color: #198754; font-size: 1rem; font-weight: 600; line-height: 1.6;" class="details-cell">${escapeHtml(result.reason || 'Authentication successful')}</td>
           </tr>
         `;
         tbody.innerHTML += row;
@@ -806,12 +921,12 @@ async function fetchResults() {
       data.results.failed.forEach(result => {
         const row = `
           <tr>
-            <td><code>${escapeHtml(result.target)}</code></td>
-            <td>${result.port}</td>
-            <td><span class="badge bg-primary">${result.protocol.toUpperCase()}</span></td>
-            <td><span class="badge bg-info">${escapeHtml(result.username)}</span></td>
-            <td><span class="badge bg-warning text-dark">${escapeHtml(result.password || '(empty)')}</span></td>
-            <td class="text-danger small">${escapeHtml(result.reason || 'Authentication failed')}</td>
+            <td style="padding: 0.75rem;">${formatTargetCell(result.target, result.protocol, 'text-muted')}</td>
+            <td style="padding: 0.75rem; color: #c9d1d9; font-size: 1rem; font-weight: 600;" class="port-cell">${result.port}</td>
+            <td style="padding: 0.75rem;"><span class="badge bg-primary" style="font-size: 1rem; padding: 0.5rem 0.75rem;">${result.protocol.toUpperCase()}</span></td>
+            <td style="padding: 0.75rem;"><span class="badge bg-info" style="font-size: 1rem; padding: 0.5rem 0.75rem; font-weight: 500;">${escapeHtml(result.username)}</span></td>
+            <td style="padding: 0.75rem;"><span class="badge bg-warning text-dark" style="font-size: 1rem; padding: 0.5rem 0.75rem; font-weight: 600;">${escapeHtml(result.password || '(empty)')}</span></td>
+            <td style="padding: 0.75rem; color: #dc3545; font-size: 1rem; font-weight: 600; line-height: 1.6; background: rgba(220, 53, 69, 0.1); border-radius: 0.25rem;" class="details-cell">${escapeHtml(result.reason || 'Authentication failed')}</td>
           </tr>
         `;
         tbody.innerHTML += row;
@@ -826,12 +941,12 @@ async function fetchResults() {
       data.results.errors.forEach(result => {
         const row = `
           <tr>
-            <td><code>${escapeHtml(result.target)}</code></td>
-            <td>${result.port}</td>
-            <td><span class="badge bg-primary">${result.protocol.toUpperCase()}</span></td>
-            <td><span class="badge bg-info">${escapeHtml(result.username)}</span></td>
-            <td><span class="badge bg-warning text-dark">${escapeHtml(result.password || '(empty)')}</span></td>
-            <td class="text-warning small">${escapeHtml(result.reason || 'Unknown error')}</td>
+            <td style="padding: 0.75rem;">${formatTargetCell(result.target, result.protocol, 'text-muted')}</td>
+            <td style="padding: 0.75rem; color: #c9d1d9; font-size: 1rem; font-weight: 600;" class="port-cell">${result.port}</td>
+            <td style="padding: 0.75rem;"><span class="badge bg-primary" style="font-size: 1rem; padding: 0.5rem 0.75rem;">${result.protocol.toUpperCase()}</span></td>
+            <td style="padding: 0.75rem;"><span class="badge bg-info" style="font-size: 1rem; padding: 0.5rem 0.75rem; font-weight: 500;">${escapeHtml(result.username)}</span></td>
+            <td style="padding: 0.75rem;"><span class="badge bg-warning text-dark" style="font-size: 1rem; padding: 0.5rem 0.75rem; font-weight: 600;">${escapeHtml(result.password || '(empty)')}</span></td>
+            <td style="padding: 0.75rem; color: #ffc107; font-size: 1rem; font-weight: 600; line-height: 1.6; background: rgba(255, 193, 7, 0.15); border-radius: 0.25rem;" class="details-cell">${escapeHtml(result.reason || 'Unknown error')}</td>
           </tr>
         `;
         tbody.innerHTML += row;
@@ -846,12 +961,12 @@ async function fetchResults() {
       data.results.skipped.forEach(result => {
         const row = `
           <tr>
-            <td><code class="text-secondary">${escapeHtml(result.target)}</code></td>
-            <td>${result.port}</td>
-            <td><span class="badge bg-secondary">${result.protocol.toUpperCase()}</span></td>
-            <td><span class="badge bg-dark">${escapeHtml(result.username)}</span></td>
-            <td><span class="badge bg-dark">${escapeHtml(result.password || '(empty)')}</span></td>
-            <td class="text-secondary small">${escapeHtml(result.reason || 'Skipped')}</td>
+            <td style="padding: 0.75rem;">${formatTargetCell(result.target, result.protocol, 'text-secondary')}</td>
+            <td style="padding: 0.75rem; color: #c9d1d9; font-size: 1rem; font-weight: 600;" class="port-cell">${result.port}</td>
+            <td style="padding: 0.75rem;"><span class="badge bg-secondary" style="font-size: 1rem; padding: 0.5rem 0.75rem;">${result.protocol.toUpperCase()}</span></td>
+            <td style="padding: 0.75rem;"><span class="badge" style="background: rgba(108, 117, 125, 0.3); color: #adb5bd; font-size: 1rem; padding: 0.5rem 0.75rem; font-weight: 500; border: 1px solid rgba(108, 117, 125, 0.5);">${escapeHtml(result.username)}</span></td>
+            <td style="padding: 0.75rem;"><span class="badge" style="background: rgba(108, 117, 125, 0.3); color: #adb5bd; font-size: 1rem; padding: 0.5rem 0.75rem; font-weight: 500; border: 1px solid rgba(108, 117, 125, 0.5);">${escapeHtml(result.password || '(empty)')}</span></td>
+            <td style="padding: 0.75rem; color: #8b949e; font-size: 1rem; font-weight: 600; line-height: 1.6;" class="details-cell">${escapeHtml(result.reason || 'Skipped')}</td>
           </tr>
         `;
         tbody.innerHTML += row;
@@ -871,6 +986,34 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+function formatTargetCell(target, protocol, colorClass = 'text-success') {
+  // Check if target is already a full URL
+  if (target && (target.startsWith('http://') || target.startsWith('https://'))) {
+    return `<a href="${escapeHtml(target)}" target="_blank" rel="noopener noreferrer" style="color: #6ea8fe; text-decoration: none; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(110, 168, 254, 0.15); padding: 0.4rem 0.6rem; border-radius: 0.25rem; display: inline-block; font-weight: 600;" title="${escapeHtml(target)}">${escapeHtml(target)} <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.8rem;"></i></a>`;
+  }
+  // Check if protocol is HTTP/HTTPS and construct URL
+  else if (protocol && (protocol.toLowerCase() === 'http' || protocol.toLowerCase() === 'https')) {
+    const url = `${protocol.toLowerCase()}://${target}`;
+    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color: #6ea8fe; text-decoration: none; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(110, 168, 254, 0.15); padding: 0.4rem 0.6rem; border-radius: 0.25rem; display: inline-block; font-weight: 600;" title="${escapeHtml(url)}">${escapeHtml(target)} <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.8rem;"></i></a>`;
+  }
+  // Otherwise, display as plain text with code styling
+  else {
+    const colorMap = {
+      'text-success': '#198754',
+      'text-muted': '#8b949e',
+      'text-secondary': '#6c757d'
+    };
+    const bgMap = {
+      'text-success': 'rgba(25, 135, 84, 0.15)',
+      'text-muted': 'rgba(139, 148, 158, 0.1)',
+      'text-secondary': 'rgba(108, 117, 125, 0.15)'
+    };
+    const color = colorMap[colorClass] || colorMap['text-muted'];
+    const bg = bgMap[colorClass] || bgMap['text-muted'];
+    return `<code style="color: ${color}; font-size: 1rem; background: ${bg}; padding: 0.4rem 0.6rem; border-radius: 0.25rem; font-weight: 600;">${escapeHtml(target)}</code>`;
+  }
 }
 
 function refreshTask() {
@@ -915,8 +1058,412 @@ window.addEventListener('focus', () => {
 // Cleanup
 window.addEventListener('beforeunload', () => {
   if (refreshInterval) clearInterval(refreshInterval);
+  if (resultsRefreshInterval) clearInterval(resultsRefreshInterval);
   stopTimer();
 });
 </script>
+
+<style>
+/* Light theme overrides for scan detail page */
+body.light-theme .text-light {
+  color: #212529 !important;
+}
+
+body.light-theme code.text-light {
+  color: #212529 !important;
+  background: rgba(0, 0, 0, 0.05) !important;
+}
+
+body.light-theme .text-info {
+  color: #0d6efd !important;
+}
+
+body.light-theme .text-secondary {
+  color: #6c757d !important;
+}
+
+body.light-theme .text-muted {
+  color: #6c757d !important;
+}
+
+body.light-theme .bg-dark {
+  background: #ffffff !important;
+}
+
+body.light-theme .card.bg-dark {
+  background: #ffffff !important;
+  border: 1px solid #dee2e6 !important;
+}
+
+body.light-theme .card-header {
+  background: #f8f9fa !important;
+  border-bottom: 1px solid #dee2e6 !important;
+  color: #212529 !important;
+}
+
+body.light-theme .card-body {
+  background: #ffffff !important;
+  color: #212529 !important;
+}
+
+body.light-theme dt {
+  color: #495057 !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme dd {
+  color: #212529 !important;
+}
+
+body.light-theme .output-container,
+body.light-theme .errors-container {
+  background: #f8f9fa !important;
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme #outputContent,
+body.light-theme #errorsContent {
+  background: #f8f9fa !important;
+  color: #212529 !important;
+}
+
+body.light-theme .output-container .text-light {
+  color: #212529 !important;
+}
+
+body.light-theme .errors-container .text-danger {
+  color: #dc3545 !important;
+}
+
+body.light-theme #outputContent::-webkit-scrollbar-thumb,
+body.light-theme #errorsContent::-webkit-scrollbar-thumb {
+  background: #adb5bd !important;
+}
+
+body.light-theme .table-dark {
+  background: #ffffff !important;
+  color: #212529 !important;
+}
+
+body.light-theme .table-dark thead th {
+  background: #f8f9fa !important;
+  color: #212529 !important;
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme .table-dark tbody td {
+  background: #ffffff !important;
+  color: #212529 !important;
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme .badge {
+  color: #ffffff !important;
+}
+
+body.light-theme .badge.bg-warning.text-dark {
+  color: #000000 !important;
+}
+
+body.light-theme .nav-tabs .nav-link {
+  color: #495057 !important;
+}
+
+body.light-theme .nav-tabs .nav-link.active {
+  color: #0d6efd !important;
+  background: #ffffff !important;
+  border-color: #dee2e6 #dee2e6 #ffffff !important;
+}
+
+body.light-theme .alert {
+  color: #212529 !important;
+}
+
+body.light-theme .btn-outline-secondary {
+  color: #6c757d !important;
+  border-color: #6c757d !important;
+}
+
+body.light-theme .btn-outline-secondary:hover {
+  color: #ffffff !important;
+  background-color: #6c757d !important;
+  border-color: #6c757d !important;
+}
+
+/* Light theme overrides for summary cards */
+body.light-theme .summary-card,
+body.light-theme .card.bg-success.bg-opacity-10,
+body.light-theme .card.bg-danger.bg-opacity-10,
+body.light-theme .card.bg-warning.bg-opacity-10,
+body.light-theme .card.bg-secondary.bg-opacity-10 {
+  background: #ffffff !important;
+  border: 2px solid !important;
+}
+
+body.light-theme .summary-card.bg-success.bg-opacity-10,
+body.light-theme .card.bg-success.bg-opacity-10 {
+  border-color: #198754 !important;
+}
+
+body.light-theme .summary-card.bg-danger.bg-opacity-10,
+body.light-theme .card.bg-danger.bg-opacity-10 {
+  border-color: #dc3545 !important;
+}
+
+body.light-theme .summary-card.bg-warning.bg-opacity-10,
+body.light-theme .card.bg-warning.bg-opacity-10 {
+  border-color: #ffc107 !important;
+}
+
+body.light-theme .summary-card.bg-secondary.bg-opacity-10,
+body.light-theme .card.bg-secondary.bg-opacity-10 {
+  border-color: #6c757d !important;
+}
+
+body.light-theme .summary-card .card-body h3,
+body.light-theme .card-body h3 {
+  color: #212529 !important;
+  font-weight: 700 !important;
+  font-size: 2rem !important;
+}
+
+body.light-theme .summary-card .card-body h3.text-success {
+  color: #198754 !important;
+}
+
+body.light-theme .summary-card .card-body h3.text-danger {
+  color: #dc3545 !important;
+}
+
+body.light-theme .summary-card .card-body h3.text-warning {
+  color: #856404 !important;
+}
+
+body.light-theme .summary-card .card-body h3.text-secondary {
+  color: #6c757d !important;
+}
+
+body.light-theme .summary-card .card-body p.text-secondary,
+body.light-theme .card-body p.text-secondary {
+  color: #495057 !important;
+  font-weight: 600 !important;
+  font-size: 0.95rem !important;
+}
+
+body.light-theme .summary-card .card-body i {
+  font-size: 2.5rem !important;
+}
+
+body.light-theme .text-success {
+  color: #198754 !important;
+}
+
+body.light-theme .text-danger {
+  color: #dc3545 !important;
+}
+
+body.light-theme .text-warning {
+  color: #856404 !important;
+}
+
+body.light-theme h5.text-success,
+body.light-theme h5.text-danger,
+body.light-theme h5.text-warning,
+body.light-theme h5.text-secondary {
+  color: #212529 !important;
+  font-weight: 600 !important;
+  font-size: 1.15rem !important;
+}
+
+body.light-theme h5.text-success i {
+  color: #198754 !important;
+}
+
+body.light-theme h5.text-danger i {
+  color: #dc3545 !important;
+}
+
+body.light-theme h5.text-warning i {
+  color: #856404 !important;
+}
+
+body.light-theme h5.text-secondary i {
+  color: #6c757d !important;
+}
+
+/* Light theme for table cells with inline styles */
+body.light-theme #resultsContent .table tbody td[style*="color: #c9d1d9"],
+body.light-theme #resultsContent .table tbody td[style*="color: #e6edf3"] {
+  color: #212529 !important;
+  font-weight: 600 !important;
+}
+
+/* Light theme for Port column - make it more visible */
+body.light-theme #resultsContent .table tbody td.port-cell,
+body.light-theme #resultsContent .table tbody td:nth-child(2) {
+  color: #212529 !important;
+  font-weight: 700 !important;
+  font-size: 1.05rem !important;
+}
+
+/* Light theme for Details column - ensure visibility */
+body.light-theme #resultsContent .table tbody td.details-cell,
+body.light-theme #resultsContent .table tbody td[style*="color: #198754"] {
+  color: #198754 !important;
+  font-weight: 600 !important;
+  background: rgba(25, 135, 84, 0.12) !important;
+  padding: 0.75rem !important;
+}
+
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #dc3545"],
+body.light-theme #resultsContent .table tbody td[style*="color: #dc3545"] {
+  color: #dc3545 !important;
+  font-weight: 600 !important;
+  background: rgba(220, 53, 69, 0.12) !important;
+  padding: 0.75rem !important;
+}
+
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #ffc107"],
+body.light-theme #resultsContent .table tbody td[style*="color: #ffc107"] {
+  color: #856404 !important;
+  font-weight: 600 !important;
+  background: rgba(255, 193, 7, 0.18) !important;
+  padding: 0.75rem !important;
+}
+
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #6c757d"],
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #8b949e"] {
+  color: #495057 !important;
+  font-weight: 600 !important;
+  background: rgba(108, 117, 125, 0.1) !important;
+  padding: 0.75rem !important;
+}
+
+/* Light theme - ensure all table cells have readable text, but allow Details to override */
+body.light-theme #resultsContent .table tbody td:not(.details-cell) {
+  color: #212529 !important;
+}
+
+/* Force all table text to be dark in light theme - this is the base rule */
+body.light-theme #resultsContent .table tbody td {
+  color: #212529 !important;
+}
+
+body.light-theme #resultsContent .table thead th {
+  color: #212529 !important;
+}
+
+/* Preserve specific colors for Details column (these have higher specificity) */
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #198754"] {
+  color: #198754 !important;
+}
+
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #dc3545"] {
+  color: #dc3545 !important;
+}
+
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #ffc107"] {
+  color: #856404 !important;
+}
+
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #6c757d"],
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #8b949e"] {
+  color: #495057 !important;
+}
+
+/* Preserve badge colors - badges should use their own colors */
+body.light-theme #resultsContent .table .badge.bg-info {
+  color: #000000 !important;
+}
+
+body.light-theme #resultsContent .table .badge.bg-warning.text-dark {
+  color: #000000 !important;
+}
+
+body.light-theme #resultsContent .table .badge.bg-primary {
+  color: #ffffff !important;
+}
+
+body.light-theme #resultsContent .table .badge.bg-secondary {
+  color: #ffffff !important;
+}
+
+/* Light theme for badges in tables */
+body.light-theme .badge.bg-info {
+  background-color: #0dcaf0 !important;
+  color: #000000 !important;
+}
+
+body.light-theme .badge.bg-warning.text-dark {
+  background-color: #ffc107 !important;
+  color: #000000 !important;
+}
+
+body.light-theme .badge.bg-primary {
+  background-color: #0d6efd !important;
+  color: #ffffff !important;
+}
+
+body.light-theme .badge.bg-secondary {
+  background-color: #6c757d !important;
+  color: #ffffff !important;
+}
+
+/* Light theme for code elements in tables */
+body.light-theme code.text-info {
+  color: #0d6efd !important;
+  background: rgba(13, 110, 253, 0.1) !important;
+}
+
+body.light-theme code.text-light {
+  color: #212529 !important;
+  background: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Light theme for links in tables */
+body.light-theme .table a {
+  color: #0d6efd !important;
+}
+
+body.light-theme .table a:hover {
+  color: #0a58ca !important;
+  text-decoration: underline !important;
+}
+
+/* Light theme for spinner and loading text */
+body.light-theme .spinner-border.text-info {
+  color: #0dcaf0 !important;
+}
+
+body.light-theme #resultsLoading .text-secondary {
+  color: #6c757d !important;
+}
+
+body.light-theme #noResults .text-secondary {
+  color: #6c757d !important;
+}
+
+/* Light theme for nav tabs */
+body.light-theme .nav-tabs {
+  border-bottom: 1px solid #dee2e6 !important;
+}
+
+body.light-theme .nav-tabs .nav-link {
+  color: #495057 !important;
+  background: #f8f9fa !important;
+}
+
+body.light-theme .nav-tabs .nav-link:hover {
+  color: #0d6efd !important;
+  background: #e9ecef !important;
+}
+
+body.light-theme .nav-tabs .nav-link.active {
+  color: #0d6efd !important;
+  background: #ffffff !important;
+  border-color: #dee2e6 #dee2e6 #ffffff !important;
+  font-weight: 600 !important;
+}
+</style>
 
 {% endblock %}
