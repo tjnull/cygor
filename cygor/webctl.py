@@ -124,27 +124,110 @@ def start(host: str, port: int, extra_args: list[str], load_dir: Optional[str],
     print(f"[*] Starting Cygor Web on {host}:{port}")
     print(f"[*] Results directory: {base_path}")
 
-    # --- Always use PostgreSQL ---
+    # --- Try PostgreSQL first, fall back to SQLite ---
     from cygor.webapp import db
-    try:
+    db_url = None
+    
+    # Check if CYGOR_DB_URL is set (e.g., from docker-compose)
+    env_db_url = os.environ.get("CYGOR_DB_URL")
+    
+    # Check if PostgreSQL is available and running
+    use_postgres = False
+    
+    # If CYGOR_DB_URL is set to PostgreSQL, try to use it
+    if env_db_url and "postgresql" in env_db_url.lower():
+        print("[*] CYGOR_DB_URL set to PostgreSQL, attempting connection...")
+        try:
+            if verbose > 0:
+                print(f"[*] Connecting to: {env_db_url.split('@')[-1] if '@' in env_db_url else 'PostgreSQL'}")
+            db.init_engine(env_db_url, debug=verbose > 1)
+            
+            # Test the connection
+            import asyncio
+            from sqlalchemy import text
+            async def test_connection():
+                async with db.engine.begin() as conn:
+                    await conn.execute(text("SELECT 1"))
+            
+            asyncio.run(test_connection())
+            use_postgres = True
+            db_url = env_db_url
+            print("[✓] PostgreSQL connection successful")
+        except Exception as e:
+            # Connection failed, fall back to SQLite
+            if verbose > 0:
+                print(f"[!] PostgreSQL connection failed: {e}")
+            else:
+                error_msg = str(e).split('\n')[0] if '\n' in str(e) else str(e)
+                print(f"[!] PostgreSQL connection failed: {error_msg[:80]}...")
+            print("[*] Falling back to SQLite...")
+            use_postgres = False
+            # Clean up the failed PostgreSQL engine
+            if db.engine:
+                try:
+                    asyncio.run(db.engine.dispose())
+                except:
+                    pass
+                db.engine = None
+            # Clear the failed PostgreSQL URL from environment
+            os.environ.pop("CYGOR_DB_URL", None)
+    elif detect_postgresql():
+        # No CYGOR_DB_URL set, but PostgreSQL client is available - try local setup
         print("[*] Checking PostgreSQL availability...")
-        if not detect_postgresql():
-            print(f"[!] PostgreSQL not detected or psql unavailable.")
-            return 1
-
-        # Initialize engine (psycopg-based)
-        db_url = db.setup_postgres(user="cygor", password="cygorpass",
-                                   db_name="cygor", host="localhost")
-        print(f"[*] Using database: {db_url}")
+        try:
+            # Try to set up PostgreSQL and test connection
+            db_url = db.setup_postgres(user="cygor", password="cygorpass",
+                                      db_name="cygor", host="localhost")
+            if verbose > 0:
+                print(f"[*] Attempting to connect to PostgreSQL...")
+            db.init_engine(db_url, debug=verbose > 1)
+            
+            # Test the connection
+            import asyncio
+            from sqlalchemy import text
+            async def test_connection():
+                async with db.engine.begin() as conn:
+                    await conn.execute(text("SELECT 1"))
+            
+            asyncio.run(test_connection())
+            use_postgres = True
+            print("[✓] PostgreSQL connection successful")
+        except Exception as e:
+            # Only show detailed error in verbose mode
+            if verbose > 0:
+                print(f"[!] PostgreSQL connection failed: {e}")
+            else:
+                # Brief message in normal mode
+                error_msg = str(e).split('\n')[0] if '\n' in str(e) else str(e)
+                print(f"[!] PostgreSQL not available: {error_msg[:80]}...")
+            print("[*] Falling back to SQLite...")
+            use_postgres = False
+            # Clean up the failed PostgreSQL engine
+            if db.engine:
+                try:
+                    asyncio.run(db.engine.dispose())
+                except:
+                    pass
+                db.engine = None
+    
+    # Use SQLite if PostgreSQL is not available or failed
+    if not use_postgres:
+        sqlite_path = base_path / "cygor.db"
+        db_url = f"sqlite+aiosqlite:///{sqlite_path}"
+        print(f"[*] Using SQLite database: {db_url}")
         db.init_engine(db_url, debug=verbose > 1)
-
+    
+    # Set the database URL in environment so main.py uses the same database
+    os.environ["CYGOR_DB_URL"] = db_url
+    
+    # Initialize database schema
+    try:
         import asyncio
         if reset_db:
-            print("[!] Resetting PostgreSQL schema (drop + recreate)...")
+            print("[!] Resetting database schema (drop + recreate)...")
             asyncio.run(db.reset_db())
         else:
             asyncio.run(db.init_db())
-
     except Exception as e:
         print(f"[!] Database initialization failed: {e}")
         return 1

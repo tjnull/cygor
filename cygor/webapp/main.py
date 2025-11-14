@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-import os, argparse, asyncio, pkgutil, shutil, json, re, gzip, uvicorn, sys, psycopg, subprocess
+import os, argparse, asyncio, pkgutil, shutil, json, re, gzip, uvicorn, sys, subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from fastapi import FastAPI, Request, Depends, Query, Form, HTTPException
@@ -9,7 +9,16 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
-from psycopg.rows import dict_row
+
+# Optional PostgreSQL support - only import if available
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+    PSYCOPG_AVAILABLE = True
+except ImportError:
+    psycopg = None
+    dict_row = None
+    PSYCOPG_AVAILABLE = False
 from sqlalchemy import select, func, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload

@@ -42,7 +42,9 @@ RUN apt-get update && \
     libxdamage1 \
     libxfixes3 \
     libxkbcommon0 \
-    libxrandr2
+    libxrandr2 \
+    libpq-dev \
+    postgresql-client
 
 # Remove junk to save space:
 RUN apt-get autoclean && \

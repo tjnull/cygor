@@ -56,31 +56,90 @@ pipx install .
 ```
 
 ## Deploying Cygor Using Docker
-To build the Docker image, you can run the following command:
 
+Cygor's Docker setup includes both the application and a PostgreSQL database service. The system automatically falls back to SQLite if PostgreSQL is unavailable.
+
+### Quick Start
+
+**Production (recommended):**
 ```bash
-$ docker build -t cygor .
+# Option 1: Use the wrapper script (automatically handles port conflicts)
+./docker-compose-up.sh up --build
+
+# Option 2: Direct docker compose (uses default ports)
+docker compose up --build
 ```
 
-This will build the image `cygor`, which can be executed using `docker run`:
-
+**Development (with source code mounted):**
 ```bash
-$ docker run --rm -v ./results:/opt/cygor/results cygor web --host 0.0.0.0 --port 8080 --load-dir /opt/cygor/results
+# Option 1: Use the wrapper script (automatically handles port conflicts)
+./docker-compose-up.sh dev up --build
+
+# Option 2: Direct docker compose (uses default ports)
+docker compose -f docker-compose-dev.yaml up --build
 ```
 
-Using `docker-compose.yaml`, the web UI could be started using `docker compose`:
+### Docker Compose Services
+
+The Docker Compose setup includes:
+
+- **PostgreSQL Service**: Automatically configured database (falls back to SQLite if unavailable)
+- **Cygor Service**: Web UI and application
+- **Automatic Port Detection**: Checks for port conflicts and uses alternative ports if needed
+
+### Port Configuration
+
+By default:
+- **Production**: PostgreSQL exposed on host port `5432` (if available)
+- **Development**: PostgreSQL exposed on host port `5434` (if available)
+- **Internal**: Containers always use port `5432` internally (Docker network)
+
+If ports are in use, you can:
+
+1. **Use the wrapper script** (recommended - auto-detects available ports):
+   ```bash
+   ./docker-compose-up.sh up --build
+   ```
+
+2. **Set port manually**:
+   ```bash
+   export POSTGRES_HOST_PORT=5435
+   docker compose up --build
+   ```
+
+3. **Remove port mapping** (if you don't need external PostgreSQL access):
+   Comment out the `ports:` section in `docker-compose.yaml`
+
+### Manual Docker Build
+
+To build the Docker image manually:
 
 ```bash
-$ docker compose up --build
+docker build -t cygor .
 ```
 
-From there, the `docker run` could be used to run commands and write outputs to the desired folder using the `-v` flag.
-
-If you want to contribute to Cygor and its development, it might be a good idea to use the `docker-compose-dev.yaml` file instead, which mounts the `cygor` folder to the image:
+Run a single container (without PostgreSQL service):
 
 ```bash
-$ docker compose -f docker-compose-dev.yaml up --build
+docker run --rm -v ./results:/opt/cygor/results \
+  -e CYGOR_RESULTS_DIR=/opt/cygor/results \
+  cygor web --host 0.0.0.0 --port 8080 --load-dir /opt/cygor/results
 ```
+
+### Database Behavior
+
+- **With Docker Compose**: Uses PostgreSQL service (automatically configured)
+- **If PostgreSQL fails**: Automatically falls back to SQLite
+- **Standalone container**: Uses SQLite by default (unless `CYGOR_DB_URL` is set)
+
+### Environment Variables
+
+Key environment variables for Docker:
+
+- `CYGOR_RESULTS_DIR`: Results directory (default: `/opt/cygor/results`)
+- `CYGOR_DB_URL`: Database connection string (auto-set by docker-compose)
+- `POSTGRES_HOST_PORT`: PostgreSQL host port mapping (for port conflict resolution)
+- `CYGOR_RESULTS_PATH`: Host path for results volume (default: `./results`)
 
 # Running Cygor
 Use the top-level Cygor command to access the available tools. Each subcommand has its own help screen (Cygor <command> --help) that documents flags and actions.

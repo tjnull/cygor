@@ -1,6 +1,34 @@
 name: cygor
 
 services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: cygor-postgres
+    hostname: cygor-postgres
+    
+    environment:
+      POSTGRES_USER: cygor
+      POSTGRES_PASSWORD: cygorpass
+      POSTGRES_DB: cygor
+      PGDATA: /var/lib/postgresql/data/pgdata
+    
+    volumes:
+      # Persist PostgreSQL data
+      - cygor-postgres-data:/var/lib/postgresql/data
+    
+    ports:
+      # Expose PostgreSQL port (optional, for external access)
+      # Uses POSTGRES_HOST_PORT env var if set, otherwise defaults to 5432
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cygor -d cygor"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    
+    restart: unless-stopped
+
   cygor:
     build: .
     image: cygor:latest
@@ -8,10 +36,30 @@ services:
     container_name: cygor
     hostname: cygor
 
+    depends_on:
+      postgres:
+        condition: service_healthy
+
     ports:
       - 8080:8080
 
     volumes:
-      - ${CYGOR_RESULTS_PATH}:/opt/cygor/results
+      # Mount results directory for scan outputs, credrecon results, and database
+      - ${CYGOR_RESULTS_PATH:-./results}:/opt/cygor/results
+
+    environment:
+      # Set results directory for all modules (credrecon, smbexplorer, etc.)
+      - CYGOR_RESULTS_DIR=/opt/cygor/results
+      - CYGOR_WORKSPACE=/opt/cygor/results
+      # Use PostgreSQL service
+      - CYGOR_DB_URL=postgresql+psycopg_async://cygor:cygorpass@postgres:5432/cygor
+      # Optional: Enable debug mode
+      # - CYGOR_DEBUG=0
 
     command: web start --host 0.0.0.0 --port 8080 --load-dir /opt/cygor/results
+
+    restart: unless-stopped
+
+volumes:
+  cygor-postgres-data:
+    driver: local

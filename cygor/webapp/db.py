@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Optional, AsyncGenerator
@@ -69,36 +70,121 @@ def setup_postgres(user="cygor", password="cygorpass", db_name="cygor", host="lo
     if _postgres_initialized:
         return f"postgresql+psycopg_async://{user}:{password}@{host}/{db_name}"
 
-    print(f"[*] Setting up PostgreSQL database '{db_name}' for user '{user}'...")
+    # Only print setup message if we're actually trying to use PostgreSQL
+    # (suppress warnings in Docker where PostgreSQL server isn't running)
+    verbose = os.environ.get("CYGOR_VERBOSE", "0") != "0"
+    if verbose:
+        print(f"[*] Setting up PostgreSQL database '{db_name}' for user '{user}'...")
 
-    # Ensure we can run psql as postgres
-    base_cmd = ["sudo", "-u", "postgres"]
+    # Determine if we need sudo (not needed if running as root or in Docker)
+    need_sudo = os.geteuid() != 0 and shutil.which("sudo")
+    
+    # Try to connect as postgres user first, fallback to current user
+    # In Docker, we might be root, so try direct connection first
+    base_cmd = []
+    if need_sudo:
+        base_cmd = ["sudo", "-u", "postgres"]
+    else:
+        # Try connecting as postgres user directly, or use current user
+        # First try: connect as postgres user (if we're root or postgres)
+        # Second try: connect as current user (might work if PostgreSQL allows it)
+        pass
+
+    # Helper function to run psql commands
+    def run_psql(cmd_args, use_postgres_user=True):
+        """Run psql command, trying different connection methods."""
+        # Method 1: Try with postgres user (if we're root or have sudo)
+        if use_postgres_user:
+            if need_sudo:
+                full_cmd = base_cmd + ["psql"] + cmd_args
+            else:
+                # Try as postgres user directly (works if we're root)
+                full_cmd = ["psql", "-U", "postgres"] + cmd_args
+        else:
+            # Method 2: Try as current user
+            full_cmd = ["psql"] + cmd_args
+        
+        result = subprocess.run(
+            full_cmd,
+            capture_output=True,
+            text=True,
+            cwd="/",
+            env=os.environ.copy()
+        )
+        return result
 
     # --- Create user if missing ---
-    check_user = subprocess.run(
-        base_cmd + ["psql", "-tAc", f"SELECT 1 FROM pg_roles WHERE rolname='{user}'"],
-        capture_output=True, text=True, cwd="/"          # ← added
-    )
+    # Try connecting as postgres user first
+    check_user = run_psql(["-tAc", f"SELECT 1 FROM pg_roles WHERE rolname='{user}'"], use_postgres_user=True)
+    
+    # If that failed and we're not using sudo, try without specifying user
+    if check_user.returncode != 0 and not need_sudo:
+        check_user = run_psql(["-tAc", f"SELECT 1 FROM pg_roles WHERE rolname='{user}'"], use_postgres_user=False)
+    
     if not check_user.stdout.strip():
-        subprocess.run(
-            base_cmd + ["psql", "-c", f"CREATE ROLE {user} LOGIN PASSWORD '{password}';"],
-            check=False, cwd="/"                         # ← added
-        )
-        print(f"[+] Created PostgreSQL role '{user}'")
+        # Create the user
+        create_user_result = run_psql(["-c", f"CREATE ROLE {user} LOGIN PASSWORD '{password}';"], use_postgres_user=True)
+        if create_user_result.returncode != 0 and not need_sudo:
+            create_user_result = run_psql(["-c", f"CREATE ROLE {user} LOGIN PASSWORD '{password}';"], use_postgres_user=False)
+        
+        if create_user_result.returncode == 0:
+            if verbose:
+                print(f"[+] Created PostgreSQL role '{user}'")
+        else:
+            # Only show warnings in verbose mode
+            if verbose:
+                print(f"[!] Warning: Could not create role '{user}': {create_user_result.stderr}")
 
     # --- Create database if missing ---
-    check_db = subprocess.run(
-        base_cmd + ["psql", "-tAc", f"SELECT 1 FROM pg_database WHERE datname='{db_name}'"],
-        capture_output=True, text=True, cwd="/"          # ← added
-    )
+    check_db = run_psql(["-tAc", f"SELECT 1 FROM pg_database WHERE datname='{db_name}'"], use_postgres_user=True)
+    if check_db.returncode != 0 and not need_sudo:
+        check_db = run_psql(["-tAc", f"SELECT 1 FROM pg_database WHERE datname='{db_name}'"], use_postgres_user=False)
+    
     if not check_db.stdout.strip():
-        subprocess.run(
-            base_cmd + ["createdb", "-O", user, db_name],
-            check=False, cwd="/"                         # ← added
+        # Create the database using createdb or psql
+        if need_sudo:
+            create_db_cmd = base_cmd + ["createdb", "-O", user, db_name]
+        else:
+            # Try createdb as postgres user, or as current user
+            create_db_cmd = ["createdb", "-U", "postgres", "-O", user, db_name]
+        
+        create_db_result = subprocess.run(
+            create_db_cmd,
+            capture_output=True,
+            text=True,
+            cwd="/",
+            env=os.environ.copy()
         )
-        print(f"[+] Created PostgreSQL database '{db_name}' owned by '{user}'")
+        
+        # If that failed, try without specifying user
+        if create_db_result.returncode != 0 and not need_sudo:
+            create_db_result = subprocess.run(
+                ["createdb", "-O", user, db_name],
+                capture_output=True,
+                text=True,
+                cwd="/",
+                env=os.environ.copy()
+            )
+        
+        if create_db_result.returncode == 0:
+            print(f"[+] Created PostgreSQL database '{db_name}' owned by '{user}'")
+        else:
+            # Fallback: use psql to create database
+            create_db_sql = f"CREATE DATABASE {db_name} OWNER {user};"
+            psql_result = run_psql(["-c", create_db_sql], use_postgres_user=True)
+            if psql_result.returncode != 0 and not need_sudo:
+                psql_result = run_psql(["-c", create_db_sql], use_postgres_user=False)
+            
+            if psql_result.returncode == 0:
+                if verbose:
+                    print(f"[+] Created PostgreSQL database '{db_name}' owned by '{user}'")
+            else:
+                # Only show warnings in verbose mode
+                if verbose:
+                    print(f"[!] Warning: Could not create database '{db_name}': {psql_result.stderr or create_db_result.stderr}")
 
-    print(f"[✓] PostgreSQL setup complete for user '{user}' and database '{db_name}'.")
+    if verbose:
+        print(f"[✓] PostgreSQL setup complete for user '{user}' and database '{db_name}'.")
     _postgres_initialized = True
     return f"postgresql+psycopg_async://{user}:{password}@{host}/{db_name}"
 
@@ -129,7 +215,16 @@ def init_engine(database_url: str, debug: bool = False):
     )
 
     SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    print(f"[✓] Engine bound using psycopg_async driver.")
+    
+    # Detect and print the correct driver name
+    if "sqlite" in database_url.lower():
+        driver_name = "aiosqlite"
+    elif "psycopg" in database_url.lower():
+        driver_name = "psycopg_async"
+    else:
+        driver_name = "unknown"
+    
+    print(f"[✓] Engine bound using {driver_name} driver.")
     return engine
 
 
