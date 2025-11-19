@@ -15,13 +15,15 @@ Usage:
   cygor <command> [args]
 
 Commands:
-  banner      Cygor tool banner (Warning it is large!)
-  scan        Automated scanner to discover hosts and services. (Will require root/sudo privileges for scanning).
-  parse       Analyze a NMAP scan file (nmap, gnmap, xml) and extract categorized hostlists by common service.
-  enum        Loads enumeration modules that are located in the cygor modules directory.
-  credrecon   Test default and weak credentials across multiple protocols (HTTP, SSH, FTP, databases, etc.)
-  workspace   Manage workspaces (init/set-default/show).
-  web         Control/launch the Cygor Web UI (start/stop/status) or run directly.
+  banner         Cygor tool banner (Warning it is large!)
+  scan           Automated scanner to discover hosts and services. (Will require root/sudo privileges for scanning).
+  parse          Analyze a NMAP scan file (nmap, gnmap, xml) and extract categorized hostlists by common service.
+  enrich         Enrich IOCs with passive reconnaissance and threat intelligence from Shodan, VirusTotal, etc.
+  enrich-config  Manage enrichment API keys (set/get/list/test/unset/info).
+  enum           Loads enumeration modules that are located in the cygor modules directory.
+  credrecon      Test default and weak credentials across multiple protocols (HTTP, SSH, FTP, databases, etc.)
+  workspace      Manage workspaces (init/set-default/show).
+  web            Control/launch the Cygor Web UI (start/stop/status) or run directly.
 
 Environment:
   CYGOR_WORKSPACE     Override default workspace just for this run.
@@ -292,6 +294,20 @@ def main():
                 if os.path.isdir(d):
                     chown_paths.append(d)
         _postrun_chown(chown_paths)
+        return
+
+    # --- enrich ---
+    if cmd == "enrich":
+        ws = _ensure_env_for_workspace()
+        if ws and not ("-o" in cmd_args or "--output" in cmd_args):
+            # Auto-set output directory to workspace if not specified
+            cmd_args = ["--output", os.path.join(ws, "enrichment-results.json")] + cmd_args
+        _exec_module_argv("cygor.enrich", "cygor-enrich", cmd_args)
+        return
+
+    # --- enrich-config ---
+    if cmd == "enrich-config":
+        _exec_module_argv("cygor.enrich_config", "cygor-enrich-config", cmd_args)
         return
 
     # --- enum ---

@@ -13,6 +13,7 @@ class UnifiedTaskType(str, Enum):
     CREDENTIAL_TEST = "credential_test"
     MODULE = "module"
     PARSE = "parse"
+    ENRICH = "enrich"
 
 
 class UnifiedTask:

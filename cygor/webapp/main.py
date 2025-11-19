@@ -1499,6 +1499,142 @@ async def new_parse_page(request: Request):
     """New parse task form page."""
     return templates.TemplateResponse("parse_new.html", {"request": request})
 
+@app.get("/tasks/enrich/new", response_class=HTMLResponse)
+async def new_enrich_page(request: Request):
+    """New enrichment task form page."""
+    return templates.TemplateResponse("enrich_new.html", {"request": request})
+
+
+@app.get("/settings/enrich", response_class=HTMLResponse)
+async def enrich_settings_page(request: Request):
+    """Enrichment API settings page."""
+    return templates.TemplateResponse("settings.html", {"request": request})
+
+
+@app.get("/api/settings/enrich")
+async def get_enrich_settings():
+    """Get current enrichment API settings (masked keys)."""
+    import json
+    from pathlib import Path
+
+    config_path = Path.home() / ".cygor" / "enrich_config.json"
+
+    if config_path.exists():
+        try:
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+
+            # Return full keys (frontend will handle masking if needed)
+            return JSONResponse({
+                "api_keys": config,
+                "config_path": str(config_path)
+            })
+        except Exception as e:
+            return JSONResponse({"api_keys": {}, "error": str(e)})
+
+    return JSONResponse({"api_keys": {}})
+
+
+@app.post("/api/settings/enrich")
+async def save_enrich_settings(req: Dict[str, Any]):
+    """Save enrichment API settings."""
+    import json
+    from pathlib import Path
+
+    try:
+        api_keys = req.get("api_keys", {})
+
+        # Filter out empty keys
+        filtered_keys = {k: v for k, v in api_keys.items() if v and v.strip()}
+
+        # Ensure .cygor directory exists
+        config_dir = Path.home() / ".cygor"
+        config_dir.mkdir(parents=True, exist_ok=True)
+
+        config_path = config_dir / "enrich_config.json"
+
+        # Save configuration
+        with open(config_path, 'w') as f:
+            json.dump(filtered_keys, f, indent=2)
+
+        # Set restrictive permissions (600 - owner read/write only)
+        config_path.chmod(0o600)
+
+        return JSONResponse({
+            "status": "success",
+            "message": "API keys saved successfully",
+            "config_path": str(config_path),
+            "keys_configured": list(filtered_keys.keys())
+        })
+
+    except Exception as e:
+        logger.error(f"Error saving enrichment settings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/settings/test-key")
+async def test_api_key(req: Dict[str, Any]):
+    """Test an API key to verify it's valid."""
+    import requests
+
+    source = req.get("source")
+    api_key = req.get("api_key")
+
+    if not source or not api_key:
+        raise HTTPException(status_code=400, detail="Missing source or api_key")
+
+    try:
+        # Test the API key with a simple request
+        if source == "shodan":
+            url = f"https://api.shodan.io/api-info?key={api_key}"
+            response = requests.get(url, timeout=10)
+            valid = response.status_code == 200
+
+        elif source == "virustotal":
+            url = "https://www.virustotal.com/api/v3/ip_addresses/8.8.8.8"
+            headers = {"x-apikey": api_key}
+            response = requests.get(url, headers=headers, timeout=10)
+            valid = response.status_code == 200
+
+        elif source == "abuseipdb":
+            url = "https://api.abuseipdb.com/api/v2/check"
+            headers = {"Accept": "application/json", "Key": api_key}
+            params = {"ipAddress": "8.8.8.8", "maxAgeInDays": 90}
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            valid = response.status_code == 200
+
+        elif source == "otx":
+            url = "https://otx.alienvault.com/api/v1/indicators/IPv4/8.8.8.8/general"
+            headers = {"X-OTX-API-KEY": api_key}
+            response = requests.get(url, headers=headers, timeout=10)
+            valid = response.status_code == 200
+
+        elif source == "urlscan":
+            url = "https://urlscan.io/api/v1/search/?q=domain:google.com"
+            headers = {"API-Key": api_key}
+            response = requests.get(url, headers=headers, timeout=10)
+            valid = response.status_code == 200
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown source: {source}")
+
+        if valid:
+            return JSONResponse({"valid": True, "message": "API key is valid"})
+        else:
+            return JSONResponse({
+                "valid": False,
+                "error": f"HTTP {response.status_code}: {response.text[:200]}"
+            })
+
+    except requests.exceptions.Timeout:
+        return JSONResponse({"valid": False, "error": "Request timed out"})
+    except requests.exceptions.RequestException as e:
+        return JSONResponse({"valid": False, "error": str(e)})
+    except Exception as e:
+        logger.error(f"Error testing API key for {source}: {e}")
+        return JSONResponse({"valid": False, "error": str(e)})
+
+
 @app.get("/sync-status", response_class=HTMLResponse)
 async def sync_status_page(request: Request):
     """Sync status and history page."""
@@ -2423,6 +2559,73 @@ async def create_parse_task_from_upload(
         logger.error(f"Error creating parse task from upload: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/enrich")
+async def create_enrich_task(req: Dict[str, Any]):
+    """Create a new enrichment task for IOCs."""
+    import tempfile
+
+    try:
+        iocs = req.get("iocs", [])
+        output_format = req.get("format", "json")
+        sources = req.get("sources", ["all"])
+
+        if not iocs:
+            raise HTTPException(status_code=400, detail="No IOCs provided")
+
+        # Create temporary file with IOCs
+        temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+        temp_file.write('\n'.join(iocs))
+        temp_file.close()
+
+        # Determine output file path with correct extension
+        output_dir = str(Path(settings.RESULTS_DIR) / "enrichment")
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+        timestamp = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+
+        # Set file extension based on format
+        file_ext = {
+            'json': 'json',
+            'csv': 'csv',
+            'xml': 'xml',
+            'text': 'txt'
+        }.get(output_format, 'json')
+
+        output_file = str(Path(output_dir) / f"enrichment-{timestamp}.{file_ext}")
+
+        # Build enrichment command
+        cmd = ["cygor", "enrich", temp_file.name, "--output", output_file, "--format", output_format]
+
+        # Add sources if not "all"
+        if sources and sources != ["all"]:
+            cmd.extend(["--sources"] + sources)
+
+        # Build description with sources info
+        sources_str = ", ".join(sources) if sources != ["all"] else "all sources"
+        description = f"Enrich {len(iocs)} IOC(s) using {sources_str}"
+
+        # Create task
+        task_id = await task_manager.create_generic_task(
+            task_name="enrich",
+            command=cmd,
+            description=description,
+            output_dir=output_dir
+        )
+
+        return JSONResponse({
+            "task_id": task_id,
+            "status": "created",
+            "ioc_count": len(iocs),
+            "sources": sources,
+            "output_file": output_file
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating enrichment task: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/credrecon/stats")
 async def get_credrecon_stats(session: AsyncSession = Depends(get_session)):
     """Get credential scanner statistics for dashboard."""
@@ -3227,11 +3430,13 @@ async def list_tasks():
         # Make a copy to avoid modifying original
         task = task_dict.copy()
 
-        # Detect parse tasks by command
+        # Detect parse and enrich tasks by command
         if task.get('task_type') == 'generic':
             cmd_str = task.get('command', '')
             if 'cygor parse' in cmd_str:
                 task['task_type'] = 'parse'
+            elif 'cygor enrich' in cmd_str:
+                task['task_type'] = 'enrich'
             else:
                 task['task_type'] = 'module'
         elif task.get('task_type') == 'scan':

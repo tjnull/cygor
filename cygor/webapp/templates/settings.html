@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container-fluid py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-10 col-xl-8">
+
+      <!-- Header -->
+      <div class="d-flex align-items-center mb-4">
+        <h2 class="mb-0">
+          <i class="bi bi-gear-fill me-2"></i>Enrichment API Settings
+        </h2>
+      </div>
+
+      <!-- Info Alert -->
+      <div class="alert alert-info d-flex align-items-start mb-4" role="alert">
+        <i class="bi bi-info-circle-fill fs-5 me-3 mt-1"></i>
+        <div>
+          <h6 class="alert-heading mb-1">About API Keys</h6>
+          <p class="mb-0 small">
+            Configure API keys for threat intelligence sources used in IOC enrichment.
+            Keys are stored securely in <code>~/.cygor/enrich_config.json</code> and encrypted at rest.
+            You only need to configure the sources you plan to use.
+          </p>
+        </div>
+      </div>
+
+      <!-- Settings Form -->
+      <div class="card bg-dark">
+        <div class="card-body">
+          <form id="settingsForm">
+
+            <!-- Shodan API Key -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                <i class="bi bi-radar me-2"></i>Shodan API Key
+              </label>
+              <div class="input-group">
+                <input type="password" class="form-control" id="shodanKey" placeholder="Enter Shodan API key">
+                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('shodanKey')">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn btn-outline-info" type="button" onclick="testKey('shodan')">
+                  <i class="bi bi-check-circle me-1"></i>Test
+                </button>
+              </div>
+              <div class="form-text">
+                Get your API key from <a href="https://account.shodan.io/" target="_blank">https://account.shodan.io/</a>
+              </div>
+              <div id="shodanStatus" class="mt-2"></div>
+            </div>
+
+            <!-- VirusTotal API Key -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                <i class="bi bi-shield-check me-2"></i>VirusTotal API Key
+              </label>
+              <div class="input-group">
+                <input type="password" class="form-control" id="virustotalKey" placeholder="Enter VirusTotal API key">
+                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('virustotalKey')">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn btn-outline-info" type="button" onclick="testKey('virustotal')">
+                  <i class="bi bi-check-circle me-1"></i>Test
+                </button>
+              </div>
+              <div class="form-text">
+                Get your API key from <a href="https://www.virustotal.com/gui/my-apikey" target="_blank">https://www.virustotal.com/gui/my-apikey</a>
+              </div>
+              <div id="virustotalStatus" class="mt-2"></div>
+            </div>
+
+            <!-- AbuseIPDB API Key -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                <i class="bi bi-exclamation-triangle me-2"></i>AbuseIPDB API Key
+              </label>
+              <div class="input-group">
+                <input type="password" class="form-control" id="abuseipdbKey" placeholder="Enter AbuseIPDB API key">
+                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('abuseipdbKey')">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn btn-outline-info" type="button" onclick="testKey('abuseipdb')">
+                  <i class="bi bi-check-circle me-1"></i>Test
+                </button>
+              </div>
+              <div class="form-text">
+                Get your API key from <a href="https://www.abuseipdb.com/account/api" target="_blank">https://www.abuseipdb.com/account/api</a>
+              </div>
+              <div id="abuseipdbStatus" class="mt-2"></div>
+            </div>
+
+            <!-- AlienVault OTX API Key -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                <i class="bi bi-eye me-2"></i>AlienVault OTX API Key
+              </label>
+              <div class="input-group">
+                <input type="password" class="form-control" id="otxKey" placeholder="Enter OTX API key">
+                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('otxKey')">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn btn-outline-info" type="button" onclick="testKey('otx')">
+                  <i class="bi bi-check-circle me-1"></i>Test
+                </button>
+              </div>
+              <div class="form-text">
+                Get your API key from <a href="https://otx.alienvault.com/api" target="_blank">https://otx.alienvault.com/api</a>
+              </div>
+              <div id="otxStatus" class="mt-2"></div>
+            </div>
+
+            <!-- URLScan.io API Key -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                <i class="bi bi-link-45deg me-2"></i>URLScan.io API Key
+              </label>
+              <div class="input-group">
+                <input type="password" class="form-control" id="urlscanKey" placeholder="Enter URLScan.io API key">
+                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('urlscanKey')">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn btn-outline-info" type="button" onclick="testKey('urlscan')">
+                  <i class="bi bi-check-circle me-1"></i>Test
+                </button>
+              </div>
+              <div class="form-text">
+                Get your API key from <a href="https://urlscan.io/user/profile/" target="_blank">https://urlscan.io/user/profile/</a>
+              </div>
+              <div id="urlscanStatus" class="mt-2"></div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="d-flex gap-3 mt-4">
+              <button type="button" class="btn btn-secondary" onclick="window.location.href='/tasks'">
+                <i class="bi bi-x-circle me-2"></i>Cancel
+              </button>
+              <button type="submit" class="btn btn-primary flex-grow-1">
+                <i class="bi bi-save me-2"></i>Save API Keys
+              </button>
+            </div>
+
+          </form>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Load existing API keys
+  loadApiKeys();
+
+  // Form submission
+  document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const apiKeys = {
+      shodan: document.getElementById('shodanKey').value,
+      virustotal: document.getElementById('virustotalKey').value,
+      abuseipdb: document.getElementById('abuseipdbKey').value,
+      otx: document.getElementById('otxKey').value,
+      urlscan: document.getElementById('urlscanKey').value
+    };
+
+    try {
+      const response = await fetch('/api/settings/enrich', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ api_keys: apiKeys })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        alert('API keys saved successfully!');
+      } else {
+        alert('Error saving API keys: ' + (result.detail || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error saving API keys:', error);
+      alert('Error: ' + error.message);
+    }
+  });
+});
+
+async function loadApiKeys() {
+  try {
+    const response = await fetch('/api/settings/enrich');
+    if (response.ok) {
+      const data = await response.json();
+
+      // Populate fields with masked keys if they exist
+      if (data.api_keys) {
+        if (data.api_keys.shodan) {
+          document.getElementById('shodanKey').value = data.api_keys.shodan;
+          document.getElementById('shodanKey').placeholder = '••••••••' + data.api_keys.shodan.slice(-4);
+        }
+        if (data.api_keys.virustotal) {
+          document.getElementById('virustotalKey').value = data.api_keys.virustotal;
+          document.getElementById('virustotalKey').placeholder = '••••••••' + data.api_keys.virustotal.slice(-4);
+        }
+        if (data.api_keys.abuseipdb) {
+          document.getElementById('abuseipdbKey').value = data.api_keys.abuseipdb;
+          document.getElementById('abuseipdbKey').placeholder = '••••••••' + data.api_keys.abuseipdb.slice(-4);
+        }
+        if (data.api_keys.otx) {
+          document.getElementById('otxKey').value = data.api_keys.otx;
+          document.getElementById('otxKey').placeholder = '••••••••' + data.api_keys.otx.slice(-4);
+        }
+        if (data.api_keys.urlscan) {
+          document.getElementById('urlscanKey').value = data.api_keys.urlscan;
+          document.getElementById('urlscanKey').placeholder = '••••••••' + data.api_keys.urlscan.slice(-4);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error loading API keys:', error);
+  }
+}
+
+function togglePassword(fieldId) {
+  const field = document.getElementById(fieldId);
+  const button = field.nextElementSibling;
+
+  if (field.type === 'password') {
+    field.type = 'text';
+    button.innerHTML = '<i class="bi bi-eye-slash"></i>';
+  } else {
+    field.type = 'password';
+    button.innerHTML = '<i class="bi bi-eye"></i>';
+  }
+}
+
+async function testKey(source) {
+  const keyMap = {
+    'shodan': 'shodanKey',
+    'virustotal': 'virustotalKey',
+    'abuseipdb': 'abuseipdbKey',
+    'otx': 'otxKey',
+    'urlscan': 'urlscanKey'
+  };
+
+  const fieldId = keyMap[source];
+  const apiKey = document.getElementById(fieldId).value;
+  const statusDiv = document.getElementById(source + 'Status');
+
+  if (!apiKey) {
+    statusDiv.innerHTML = '<div class="alert alert-warning small mb-0">Please enter an API key first</div>';
+    return;
+  }
+
+  statusDiv.innerHTML = '<div class="alert alert-info small mb-0"><i class="bi bi-hourglass-split me-2"></i>Testing API key...</div>';
+
+  try {
+    const response = await fetch('/api/settings/test-key', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ source: source, api_key: apiKey })
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.valid) {
+      statusDiv.innerHTML = '<div class="alert alert-success small mb-0"><i class="bi bi-check-circle-fill me-2"></i>API key is valid!</div>';
+    } else {
+      statusDiv.innerHTML = '<div class="alert alert-danger small mb-0"><i class="bi bi-x-circle-fill me-2"></i>API key is invalid: ' + (result.error || 'Unknown error') + '</div>';
+    }
+  } catch (error) {
+    statusDiv.innerHTML = '<div class="alert alert-danger small mb-0"><i class="bi bi-x-circle-fill me-2"></i>Error testing key: ' + error.message + '</div>';
+  }
+}
+</script>
+
+{% endblock %}

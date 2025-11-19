@@ -15,6 +15,7 @@
         <li><a class="dropdown-item" href="/tasks/scan/new"><i class="bi bi-radar me-2"></i>Port Discovery Scan</a></li>
         <li><a class="dropdown-item" href="/credrecon/new"><i class="bi bi-shield-check me-2"></i>Credential Test</a></li>
         <li><a class="dropdown-item" href="/tasks/parse/new"><i class="bi bi-file-earmark-code me-2"></i>Parse Scan Results</a></li>
+        <li><a class="dropdown-item" href="/tasks/enrich/new"><i class="bi bi-search me-2"></i>Enrich IOCs</a></li>
         <li><hr class="dropdown-divider"></li>
         <li><a class="dropdown-item" href="/tasks/module/new"><i class="bi bi-gear-fill me-2"></i>Run Module</a></li>
       </ul>
@@ -77,6 +78,17 @@
         <div class="filter-card-content">
           <h6 class="filter-card-title">Parsed</h6>
           <p class="filter-card-count" id="filter-count-parse">0</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6">
+      <div class="filter-card" data-filter="enrich" onclick="filterTasks('enrich')">
+        <div class="filter-card-icon">
+          <i class="bi bi-search"></i>
+        </div>
+        <div class="filter-card-content">
+          <h6 class="filter-card-title">Enriched</h6>
+          <p class="filter-card-count" id="filter-count-enrich">0</p>
         </div>
       </div>
     </div>
@@ -437,6 +449,7 @@ async function fetchTasks() {
       port_scan: tasks.filter(t => t.task_type === 'port_scan').length,
       credential_test: tasks.filter(t => t.task_type === 'credential_test').length,
       parse: tasks.filter(t => t.task_type === 'parse').length,
+      enrich: tasks.filter(t => t.task_type === 'enrich').length,
       module: tasks.filter(t => t.task_type === 'module').length
     };
 
