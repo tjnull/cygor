@@ -80,50 +80,93 @@ def save_config(config: dict):
         sys.exit(1)
 
 
-def test_api_key(source: str, api_key: str) -> bool:
-    """Test an API key to verify it's valid"""
+def test_api_key(source: str, api_key: str) -> tuple[bool, Optional[str]]:
+    """Test an API key to verify it's valid
+
+    Returns:
+        tuple: (is_valid, error_message)
+            - is_valid: True if key is valid, False otherwise
+            - error_message: None if valid, error message string if invalid
+    """
     try:
         if source == "shodan":
             url = f"https://api.shodan.io/api-info?key={api_key}"
             response = requests.get(url, timeout=10)
-            return response.status_code == 200
+            if response.status_code == 200:
+                return True, None
+            try:
+                error_data = response.json()
+                return False, error_data.get("error", f"HTTP {response.status_code}")
+            except:
+                return False, f"HTTP {response.status_code}"
 
         elif source == "virustotal":
             url = "https://www.virustotal.com/api/v3/ip_addresses/8.8.8.8"
             headers = {"x-apikey": api_key}
             response = requests.get(url, headers=headers, timeout=10)
-            return response.status_code == 200
+            if response.status_code == 200:
+                return True, None
+            # Check for quota exceeded
+            try:
+                error_data = response.json()
+                if "error" in error_data:
+                    error_code = error_data["error"].get("code", "")
+                    error_msg = error_data["error"].get("message", "")
+                    if error_code == "QuotaExceededError":
+                        return False, f"Quota exceeded - {error_msg}. Your API key is valid but you've reached your API quota limit. The key will still be saved and will work once your quota resets."
+                    return False, f"{error_code}: {error_msg}"
+                return False, f"HTTP {response.status_code}"
+            except:
+                return False, f"HTTP {response.status_code}"
 
         elif source == "abuseipdb":
             url = "https://api.abuseipdb.com/api/v2/check"
             headers = {"Accept": "application/json", "Key": api_key}
             params = {"ipAddress": "8.8.8.8", "maxAgeInDays": 90}
             response = requests.get(url, headers=headers, params=params, timeout=10)
-            return response.status_code == 200
+            if response.status_code == 200:
+                return True, None
+            try:
+                error_data = response.json()
+                errors = error_data.get("errors", [])
+                if errors:
+                    return False, str(errors[0])
+                return False, f"HTTP {response.status_code}"
+            except:
+                return False, f"HTTP {response.status_code}"
 
         elif source == "otx":
             url = "https://otx.alienvault.com/api/v1/indicators/IPv4/8.8.8.8/general"
             headers = {"X-OTX-API-KEY": api_key}
             response = requests.get(url, headers=headers, timeout=10)
-            return response.status_code == 200
+            if response.status_code == 200:
+                return True, None
+            try:
+                error_data = response.json()
+                return False, error_data.get("detail", f"HTTP {response.status_code}")
+            except:
+                return False, f"HTTP {response.status_code}"
 
         elif source == "urlscan":
             url = "https://urlscan.io/api/v1/search/?q=domain:google.com"
             headers = {"API-Key": api_key}
             response = requests.get(url, headers=headers, timeout=10)
-            return response.status_code == 200
+            if response.status_code == 200:
+                return True, None
+            try:
+                error_data = response.json()
+                return False, error_data.get("message", f"HTTP {response.status_code}")
+            except:
+                return False, f"HTTP {response.status_code}"
 
-        return False
+        return False, "Unknown source"
 
     except requests.exceptions.Timeout:
-        print(f"{Fore.YELLOW}[!] Request timed out{Style.RESET_ALL}")
-        return False
+        return False, "Request timed out"
     except requests.exceptions.RequestException as e:
-        print(f"{Fore.YELLOW}[!] Request error: {e}{Style.RESET_ALL}")
-        return False
+        return False, f"Request error: {e}"
     except Exception as e:
-        print(f"{Fore.RED}[!] Error testing key: {e}{Style.RESET_ALL}")
-        return False
+        return False, f"Error testing key: {e}"
 
 
 def cmd_set(args):
@@ -140,11 +183,30 @@ def cmd_set(args):
     # Test key if requested
     if not args.no_test:
         print(f"{Fore.YELLOW}[*] Testing {SOURCES[source]['name']} API key...{Style.RESET_ALL}")
-        if test_api_key(source, api_key):
+        is_valid, error_msg = test_api_key(source, api_key)
+        if is_valid:
             print(f"{Fore.GREEN}[+] API key is valid!{Style.RESET_ALL}")
         else:
-            print(f"{Fore.RED}[!] API key validation failed!{Style.RESET_ALL}")
-            if not args.force:
+            # Validation failed - but we need to determine if we should save anyway
+            should_save = False
+
+            if error_msg:
+                # Check if it's a quota error (key is valid but quota exceeded)
+                if "quota" in error_msg.lower():
+                    print(f"{Fore.YELLOW}[!] {error_msg}{Style.RESET_ALL}")
+                    # Auto-save for quota errors since the key is valid
+                    print(f"{Fore.GREEN}[+] Saving API key anyway (quota errors don't indicate invalid keys){Style.RESET_ALL}")
+                    should_save = True
+                else:
+                    print(f"{Fore.RED}[!] API key validation failed!{Style.RESET_ALL}")
+                    print(f"{Fore.YELLOW}[!] Error: {error_msg}{Style.RESET_ALL}")
+                    should_save = args.force
+            else:
+                print(f"{Fore.RED}[!] API key validation failed!{Style.RESET_ALL}")
+                should_save = args.force
+
+            # If we shouldn't save and force is not set, exit
+            if not should_save:
                 print(f"{Fore.YELLOW}[*] Use --force to save anyway{Style.RESET_ALL}")
                 sys.exit(1)
 
@@ -245,13 +307,19 @@ def cmd_test(args):
             continue
 
         print(f"{Fore.YELLOW}[*] Testing {SOURCES[source]['name']}...{Style.RESET_ALL}", end=" ")
-        is_valid = test_api_key(source, config[source])
+        is_valid, error_msg = test_api_key(source, config[source])
         results[source] = is_valid
 
         if is_valid:
             print(f"{Fore.GREEN}✓ Valid{Style.RESET_ALL}")
         else:
             print(f"{Fore.RED}✗ Invalid{Style.RESET_ALL}")
+            if error_msg:
+                # Show the error message indented
+                if "quota" in error_msg.lower():
+                    print(f"  {Fore.YELLOW}→ {error_msg}{Style.RESET_ALL}")
+                else:
+                    print(f"  {Fore.RED}→ {error_msg}{Style.RESET_ALL}")
 
     # Summary
     print(f"\n{Fore.CYAN}Summary:{Style.RESET_ALL}")
@@ -292,48 +360,48 @@ def cmd_info(args):
             status = f"{Fore.GREEN}✓{Style.RESET_ALL}" if is_configured else f"{Fore.RED}✗{Style.RESET_ALL}"
             print(f"{status} {info['name']:20} - {info['url']}")
 
-        print(f"\n{Fore.CYAN}[*] Use 'cygor enrich-config info <source>' for details{Style.RESET_ALL}")
+        print(f"\n{Fore.CYAN}[*] Use 'cygor enrich config-manager info <source>' for details{Style.RESET_ALL}")
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        prog="cygor enrich-config",
+        prog="cygor enrich config-manager",
         description="Manage enrichment API keys",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Set an API key (with automatic validation)
-  cygor enrich-config set shodan YOUR_API_KEY
+  cygor enrich config-manager set shodan YOUR_API_KEY
 
   # Set an API key without validation
-  cygor enrich-config set virustotal YOUR_KEY --no-test
+  cygor enrich config-manager set virustotal YOUR_KEY --no-test
 
   # Get an API key (masked)
-  cygor enrich-config get shodan
+  cygor enrich config-manager get shodan
 
   # Get an API key (full)
-  cygor enrich-config get shodan --show
+  cygor enrich config-manager get shodan --show
 
   # List all configured keys
-  cygor enrich-config list
+  cygor enrich config-manager list
 
   # List all keys (show full keys)
-  cygor enrich-config list --show
+  cygor enrich config-manager list --show
 
   # Remove an API key
-  cygor enrich-config unset shodan
+  cygor enrich config-manager unset shodan
 
   # Test all configured keys
-  cygor enrich-config test
+  cygor enrich config-manager test
 
   # Test a specific key
-  cygor enrich-config test shodan
+  cygor enrich config-manager test shodan
 
   # Show available sources
-  cygor enrich-config info
+  cygor enrich config-manager info
 
   # Show info about a specific source
-  cygor enrich-config info virustotal
+  cygor enrich config-manager info virustotal
 
 Available sources: shodan, virustotal, abuseipdb, otx, urlscan
         """

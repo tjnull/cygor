@@ -19,7 +19,7 @@ Commands:
   scan           Automated scanner to discover hosts and services. (Will require root/sudo privileges for scanning).
   parse          Analyze a NMAP scan file (nmap, gnmap, xml) and extract categorized hostlists by common service.
   enrich         Enrich IOCs with passive reconnaissance and threat intelligence from Shodan, VirusTotal, etc.
-  enrich-config  Manage enrichment API keys (set/get/list/test/unset/info).
+                 Use 'cygor enrich config-manager' to manage API keys.
   enum           Loads enumeration modules that are located in the cygor modules directory.
   credrecon      Test default and weak credentials across multiple protocols (HTTP, SSH, FTP, databases, etc.)
   workspace      Manage workspaces (init/set-default/show).
@@ -303,11 +303,6 @@ def main():
             # Auto-set output directory to workspace if not specified
             cmd_args = ["--output", os.path.join(ws, "enrichment-results.json")] + cmd_args
         _exec_module_argv("cygor.enrich", "cygor-enrich", cmd_args)
-        return
-
-    # --- enrich-config ---
-    if cmd == "enrich-config":
-        _exec_module_argv("cygor.enrich_config", "cygor-enrich-config", cmd_args)
         return
 
     # --- enum ---
