@@ -58,7 +58,8 @@ class EnrichmentConfig:
             'OTX_API_KEY': 'otx',
             'ABUSEIPDB_API_KEY': 'abuseipdb',
             'URLSCAN_API_KEY': 'urlscan',
-            'CENSYS_API_ID': 'censys'  # Format: API_ID:SECRET
+            'CENSYS_API_ID': 'censys',  # Format: API_ID:SECRET
+            'DEHASHED_API_KEY': 'dehashed'  # Format: email:api_key
         }
 
         for env_key, config_key in env_keys.items():
@@ -617,13 +618,436 @@ class CensysEnricher:
             return {"source": "censys", "error": str(e)}
 
 
-def enrich_ioc(ioc: str, config: EnrichmentConfig, sources: Optional[List[str]] = None) -> Dict[str, Any]:
+class WaybackMachineEnricher:
+    """Wayback Machine CDX API enrichment"""
+
+    def __init__(self):
+        # No API key required - public API
+        self.base_url = "http://web.archive.org/cdx/search/cdx"
+
+    def enrich_domain(self, domain: str) -> Dict[str, Any]:
+        """Enrich domain with Wayback Machine historical data"""
+        try:
+            # Query for domain captures with JSON output
+            params = {
+                "url": domain,
+                "output": "json",
+                "fl": "timestamp,original,mimetype,statuscode",
+                "collapse": "timestamp:8",  # Collapse to daily snapshots
+                "limit": "100"
+            }
+
+            response = requests.get(self.base_url, params=params, timeout=15)
+
+            if response.status_code == 200:
+                data = response.json()
+
+                # First row is header, rest are data
+                if len(data) > 1:
+                    captures = []
+                    timestamps = []
+
+                    for row in data[1:]:  # Skip header row
+                        timestamp, url, mimetype, statuscode = row
+                        timestamps.append(timestamp)
+                        captures.append({
+                            "timestamp": timestamp,
+                            "url": url,
+                            "mimetype": mimetype,
+                            "statuscode": statuscode
+                        })
+
+                    # Calculate first and last seen
+                    first_seen = min(timestamps) if timestamps else ""
+                    last_seen = max(timestamps) if timestamps else ""
+
+                    result = {
+                        "source": "wayback",
+                        "domain": domain,
+                        "total_captures": len(captures),
+                        "first_seen": first_seen,
+                        "last_seen": last_seen,
+                        "recent_captures": captures[:10],  # Most recent 10
+                        "link": f"https://web.archive.org/web/*/{domain}"
+                    }
+                    return result
+                else:
+                    return {"source": "wayback", "domain": domain, "total_captures": 0, "message": "No captures found"}
+            else:
+                return {"source": "wayback", "error": f"HTTP {response.status_code}"}
+        except Exception as e:
+            return {"source": "wayback", "error": str(e)}
+
+
+class CommonCrawlEnricher:
+    """Common Crawl Index enrichment"""
+
+    def __init__(self):
+        # No API key required - public API
+        self.base_url = "https://index.commoncrawl.org"
+        self.collections = []
+
+    def _get_latest_collections(self, limit=3):
+        """Get the latest Common Crawl collections"""
+        try:
+            response = requests.get(f"{self.base_url}/collinfo.json", timeout=10)
+            if response.status_code == 200:
+                all_collections = response.json()
+                # Return the latest N collections
+                return [c["id"] for c in all_collections[:limit]]
+            return []
+        except:
+            # Fallback to hardcoded recent collections if API fails
+            return ["CC-MAIN-2024-51", "CC-MAIN-2024-46", "CC-MAIN-2024-42"]
+
+    def enrich_domain(self, domain: str) -> Dict[str, Any]:
+        """Enrich domain with Common Crawl index data"""
+        try:
+            # Get latest collections
+            collections = self._get_latest_collections(limit=2)
+
+            all_urls = []
+            total_results = 0
+
+            for collection in collections:
+                try:
+                    # Query the index for this domain
+                    url = f"{self.base_url}/{collection}-index"
+                    params = {
+                        "url": f"{domain}/*",
+                        "output": "json",
+                        "limit": "50"
+                    }
+
+                    response = requests.get(url, params=params, timeout=10)
+
+                    if response.status_code == 200:
+                        # Response is NDJSON (newline-delimited JSON)
+                        for line in response.text.strip().split('\n'):
+                            if line:
+                                try:
+                                    record = json.loads(line)
+                                    all_urls.append({
+                                        "url": record.get("url", ""),
+                                        "timestamp": record.get("timestamp", ""),
+                                        "mime": record.get("mime", ""),
+                                        "status": record.get("status", ""),
+                                        "collection": collection
+                                    })
+                                    total_results += 1
+                                except:
+                                    continue
+                except Exception:
+                    continue
+
+            if all_urls:
+                # Deduplicate URLs
+                unique_urls = list({u["url"]: u for u in all_urls}.values())
+
+                result = {
+                    "source": "commoncrawl",
+                    "domain": domain,
+                    "total_urls": len(unique_urls),
+                    "collections_searched": len(collections),
+                    "urls": unique_urls[:15],  # Return top 15
+                    "link": f"{self.base_url}/CC-MAIN-2024-51-index?url={domain}/*&output=json"
+                }
+                return result
+            else:
+                return {"source": "commoncrawl", "domain": domain, "total_urls": 0, "message": "No URLs found"}
+        except Exception as e:
+            return {"source": "commoncrawl", "error": str(e)}
+
+
+class DehashedEnricher:
+    """Dehashed API enrichment for breach data"""
+
+    def __init__(self, api_email: str, api_key: str, output_dir: Optional[str] = None):
+        # Dehashed uses email:api_key format or separate credentials
+        if ":" in api_email:
+            self.api_email, self.api_key = api_email.split(":", 1)
+        else:
+            self.api_email = api_email
+            self.api_key = api_key
+        self.base_url = "https://api.dehashed.com/search"
+        self.output_dir = output_dir
+
+    def _search(self, query: str, size: int = 10000) -> Dict[str, Any]:
+        """Perform a Dehashed search
+
+        Args:
+            query: Search query
+            size: Number of results to retrieve (max 10000 per request)
+        """
+        try:
+            params = {"query": query, "size": size}
+            auth = (self.api_email, self.api_key)
+            headers = {"Accept": "application/json"}
+
+            response = requests.get(self.base_url, params=params, auth=auth, headers=headers, timeout=30)
+
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return {"error": f"HTTP {response.status_code}", "balance": 0, "entries": []}
+        except Exception as e:
+            return {"error": str(e), "balance": 0, "entries": []}
+
+    def _process_and_save_data(self, entries: List[Dict], target: str, search_type: str) -> Dict[str, Any]:
+        """Process entries and save extracted data to files
+
+        Args:
+            entries: List of Dehashed entries
+            target: The search target (domain or IP)
+            search_type: Type of search ('domain' or 'ip')
+
+        Returns:
+            Dictionary with processed statistics and file paths
+        """
+        # Extract all unique data
+        emails = set()
+        usernames = set()
+        passwords = set()
+        hashed_passwords = set()
+        ip_addresses = set()
+        databases = set()
+        names = set()
+
+        for entry in entries:
+            # Email addresses (lowercase and deduplicate)
+            if entry.get("email"):
+                emails.add(entry["email"].lower().strip())
+
+            # Usernames (lowercase and deduplicate)
+            if entry.get("username"):
+                usernames.add(entry["username"].lower().strip())
+
+            # Passwords (plaintext - as-is, no lowercase to preserve)
+            if entry.get("password"):
+                passwords.add(entry["password"].strip())
+
+            # Hashed passwords
+            if entry.get("hashed_password"):
+                hashed_passwords.add(entry["hashed_password"].strip())
+
+            # IP addresses
+            if entry.get("ip_address"):
+                ip_addresses.add(entry["ip_address"].strip())
+
+            # Database names
+            if entry.get("database_name"):
+                databases.add(entry["database_name"].strip())
+
+            # Names
+            if entry.get("name"):
+                names.add(entry["name"].strip())
+
+        # Sort all sets alphabetically (case-insensitive for proper alphabetical order)
+        # Emails and usernames are already lowercased, so normal sort is fine
+        emails_sorted = sorted(list(emails))
+        usernames_sorted = sorted(list(usernames))
+
+        # Passwords: case-insensitive sort (preserves original case but sorts alphabetically)
+        passwords_sorted = sorted(list(passwords), key=str.lower)
+
+        # Hashed passwords: case-insensitive sort
+        hashes_sorted = sorted(list(hashed_passwords), key=str.lower)
+
+        # IP addresses: special IP sorting (by octets)
+        ips_sorted = sorted(list(ip_addresses), key=lambda ip: tuple(int(part) if part.isdigit() else part for part in ip.split('.')))
+
+        # Database names and names: case-insensitive sort
+        databases_sorted = sorted(list(databases), key=str.lower)
+        names_sorted = sorted(list(names), key=str.lower)
+
+        saved_files = {}
+
+        # Save to files if output directory is specified
+        if self.output_dir:
+            from pathlib import Path
+            output_path = Path(self.output_dir)
+            output_path.mkdir(parents=True, exist_ok=True)
+
+            # Create subdirectory for this target
+            target_safe = target.replace('/', '_').replace(':', '_')
+            target_dir = output_path / f"dehashed_{target_safe}"
+            target_dir.mkdir(parents=True, exist_ok=True)
+
+            # Save emails
+            if emails_sorted:
+                emails_file = target_dir / "emails.txt"
+                emails_file.write_text('\n'.join(emails_sorted) + '\n')
+                saved_files['emails'] = str(emails_file)
+
+            # Save usernames
+            if usernames_sorted:
+                usernames_file = target_dir / "usernames.txt"
+                usernames_file.write_text('\n'.join(usernames_sorted) + '\n')
+                saved_files['usernames'] = str(usernames_file)
+
+            # Save passwords (plaintext)
+            if passwords_sorted:
+                passwords_file = target_dir / "passwords.txt"
+                passwords_file.write_text('\n'.join(passwords_sorted) + '\n')
+                saved_files['passwords'] = str(passwords_file)
+
+            # Save hashed passwords
+            if hashes_sorted:
+                hashes_file = target_dir / "hashed_passwords.txt"
+                hashes_file.write_text('\n'.join(hashes_sorted) + '\n')
+                saved_files['hashed_passwords'] = str(hashes_file)
+
+            # Save IP addresses
+            if ips_sorted:
+                ips_file = target_dir / "ip_addresses.txt"
+                ips_file.write_text('\n'.join(ips_sorted) + '\n')
+                saved_files['ip_addresses'] = str(ips_file)
+
+            # Save names
+            if names_sorted:
+                names_file = target_dir / "names.txt"
+                names_file.write_text('\n'.join(names_sorted) + '\n')
+                saved_files['names'] = str(names_file)
+
+            # Save database sources
+            if databases_sorted:
+                databases_file = target_dir / "breach_databases.txt"
+                databases_file.write_text('\n'.join(databases_sorted) + '\n')
+                saved_files['databases'] = str(databases_file)
+
+            # Save full JSON data for deeper analysis
+            full_json_file = target_dir / "full_data.json"
+            full_json_file.write_text(json.dumps(entries, indent=2))
+            saved_files['full_json'] = str(full_json_file)
+
+            # Create summary report
+            summary_file = target_dir / "summary.txt"
+            summary_content = f"""Dehashed Breach Data Summary
+{'=' * 80}
+Target: {target}
+Search Type: {search_type}
+Total Entries: {len(entries)}
+
+Statistics:
+  Unique Emails: {len(emails_sorted)}
+  Unique Usernames: {len(usernames_sorted)}
+  Unique Passwords (plaintext): {len(passwords_sorted)}
+  Unique Hashed Passwords: {len(hashes_sorted)}
+  Unique IP Addresses: {len(ips_sorted)}
+  Unique Names: {len(names_sorted)}
+  Breach Databases: {len(databases_sorted)}
+
+Files Generated:
+"""
+            for file_type, file_path in saved_files.items():
+                summary_content += f"  - {file_type}: {file_path}\n"
+
+            summary_file.write_text(summary_content)
+            saved_files['summary'] = str(summary_file)
+
+        return {
+            'emails': emails_sorted,
+            'usernames': usernames_sorted,
+            'passwords': passwords_sorted,
+            'hashed_passwords': hashes_sorted,
+            'ip_addresses': ips_sorted,
+            'names': names_sorted,
+            'databases': databases_sorted,
+            'saved_files': saved_files,
+            'stats': {
+                'total_emails': len(emails_sorted),
+                'total_usernames': len(usernames_sorted),
+                'total_passwords': len(passwords_sorted),
+                'total_hashes': len(hashes_sorted),
+                'total_ips': len(ips_sorted),
+                'total_names': len(names_sorted),
+                'total_databases': len(databases_sorted)
+            }
+        }
+
+    def enrich_domain(self, domain: str) -> Dict[str, Any]:
+        """Enrich domain with Dehashed breach data"""
+        try:
+            data = self._search(f"email:@{domain}", size=10000)
+
+            if "error" in data:
+                return {"source": "dehashed", "error": data["error"]}
+
+            entries = data.get("entries", [])
+            balance = data.get("balance", 0)
+            total = data.get("total", 0)
+
+            # Process and save data
+            processed_data = self._process_and_save_data(entries, domain, "domain")
+
+            result = {
+                "source": "dehashed",
+                "domain": domain,
+                "total_entries": total,
+                "retrieved_entries": len(entries),
+                "unique_emails": processed_data['stats']['total_emails'],
+                "unique_usernames": processed_data['stats']['total_usernames'],
+                "unique_passwords": processed_data['stats']['total_passwords'],
+                "unique_hashes": processed_data['stats']['total_hashes'],
+                "unique_ips": processed_data['stats']['total_ips'],
+                "unique_names": processed_data['stats']['total_names'],
+                "unique_databases": processed_data['stats']['total_databases'],
+                "breach_databases": processed_data['databases'][:10],  # Top 10 for display
+                "sample_emails": processed_data['emails'][:10],  # Top 10 for display
+                "sample_usernames": processed_data['usernames'][:10],  # Top 10 for display
+                "saved_files": processed_data['saved_files'],
+                "api_balance": balance,
+                "link": f"https://dehashed.com/search?query=email:@{domain}"
+            }
+            return result
+        except Exception as e:
+            return {"source": "dehashed", "error": str(e)}
+
+    def enrich_ip(self, ip: str) -> Dict[str, Any]:
+        """Enrich IP with Dehashed breach data"""
+        try:
+            data = self._search(f"ip_address:{ip}", size=10000)
+
+            if "error" in data:
+                return {"source": "dehashed", "error": data["error"]}
+
+            entries = data.get("entries", [])
+            balance = data.get("balance", 0)
+            total = data.get("total", 0)
+
+            # Process and save data
+            processed_data = self._process_and_save_data(entries, ip, "ip")
+
+            result = {
+                "source": "dehashed",
+                "ip": ip,
+                "total_entries": total,
+                "retrieved_entries": len(entries),
+                "unique_emails": processed_data['stats']['total_emails'],
+                "unique_usernames": processed_data['stats']['total_usernames'],
+                "unique_passwords": processed_data['stats']['total_passwords'],
+                "unique_hashes": processed_data['stats']['total_hashes'],
+                "unique_databases": processed_data['stats']['total_databases'],
+                "breach_databases": processed_data['databases'][:10],  # Top 10 for display
+                "sample_emails": processed_data['emails'][:10],  # Top 10 for display
+                "sample_usernames": processed_data['usernames'][:10],  # Top 10 for display
+                "saved_files": processed_data['saved_files'],
+                "api_balance": balance,
+                "link": f"https://dehashed.com/search?query=ip_address:{ip}"
+            }
+            return result
+        except Exception as e:
+            return {"source": "dehashed", "error": str(e)}
+
+
+def enrich_ioc(ioc: str, config: EnrichmentConfig, sources: Optional[List[str]] = None, output_dir: Optional[str] = None) -> Dict[str, Any]:
     """Enrich a single IOC with specified or all available sources
 
     Args:
         ioc: The IOC to enrich
         config: Configuration with API keys
         sources: List of sources to use (e.g., ['shodan', 'virustotal']). If None, use all configured sources.
+        output_dir: Optional output directory for saving processed data (used by Dehashed)
     """
     ioc = refang(ioc)
     ioc_type = classify_ioc(ioc)
@@ -669,6 +1093,15 @@ def enrich_ioc(ioc: str, config: EnrichmentConfig, sources: Optional[List[str]] 
             enricher = CensysEnricher(config.get("censys"))
             result["enrichments"].append(enricher.enrich_ip(ioc))
 
+        # Dehashed
+        if 'dehashed' in sources and config.get("dehashed"):
+            api_creds = config.get("dehashed")
+            # Split email:api_key format
+            if ":" in api_creds:
+                api_email, api_key = api_creds.split(":", 1)
+                enricher = DehashedEnricher(api_email, api_key, output_dir=output_dir)
+                result["enrichments"].append(enricher.enrich_ip(ioc))
+
     elif ioc_type == "domain":
         # Shodan
         if 'shodan' in sources and config.get("shodan"):
@@ -694,6 +1127,25 @@ def enrich_ioc(ioc: str, config: EnrichmentConfig, sources: Optional[List[str]] 
         if 'censys' in sources and config.get("censys"):
             enricher = CensysEnricher(config.get("censys"))
             result["enrichments"].append(enricher.enrich_domain(ioc))
+
+        # Wayback Machine (no API key required)
+        if 'wayback' in sources or 'all' in sources:
+            enricher = WaybackMachineEnricher()
+            result["enrichments"].append(enricher.enrich_domain(ioc))
+
+        # Common Crawl (no API key required)
+        if 'commoncrawl' in sources or 'all' in sources:
+            enricher = CommonCrawlEnricher()
+            result["enrichments"].append(enricher.enrich_domain(ioc))
+
+        # Dehashed
+        if 'dehashed' in sources and config.get("dehashed"):
+            api_creds = config.get("dehashed")
+            # Split email:api_key format
+            if ":" in api_creds:
+                api_email, api_key = api_creds.split(":", 1)
+                enricher = DehashedEnricher(api_email, api_key, output_dir=output_dir)
+                result["enrichments"].append(enricher.enrich_domain(ioc))
 
     return result
 
@@ -1001,6 +1453,108 @@ def print_enrichment_result(result: Dict[str, Any], format_type: str = "text"):
             if enrichment.get("link"):
                 print(f"  Link: {enrichment['link']}")
 
+        elif source == "wayback":
+            # Special formatting for Wayback Machine
+            print(f"  Total Captures: {enrichment.get('total_captures', 0)}")
+
+            if enrichment.get("first_seen"):
+                first_seen = enrichment["first_seen"]
+                # Format timestamp: YYYYMMDDhhmmss -> YYYY-MM-DD
+                formatted_first = f"{first_seen[:4]}-{first_seen[4:6]}-{first_seen[6:8]}"
+                print(f"  First Seen: {formatted_first}")
+
+            if enrichment.get("last_seen"):
+                last_seen = enrichment["last_seen"]
+                formatted_last = f"{last_seen[:4]}-{last_seen[4:6]}-{last_seen[6:8]}"
+                print(f"  Last Seen: {formatted_last}")
+
+            if enrichment.get("recent_captures"):
+                print(f"\n  {Fore.CYAN}Recent Captures:{Style.RESET_ALL}")
+                for capture in enrichment["recent_captures"][:5]:
+                    timestamp = capture.get("timestamp", "")
+                    formatted_ts = f"{timestamp[:4]}-{timestamp[4:6]}-{timestamp[6:8]}"
+                    mime = capture.get("mimetype", "unknown")
+                    status = capture.get("statuscode", "?")
+                    print(f"    {formatted_ts}: {mime} (HTTP {status})")
+
+            if enrichment.get("link"):
+                print(f"  Link: {enrichment['link']}")
+
+        elif source == "commoncrawl":
+            # Special formatting for Common Crawl
+            print(f"  Total URLs: {enrichment.get('total_urls', 0)}")
+            print(f"  Collections Searched: {enrichment.get('collections_searched', 0)}")
+
+            if enrichment.get("urls"):
+                print(f"\n  {Fore.CYAN}Sample URLs:{Style.RESET_ALL}")
+                for url_data in enrichment["urls"][:10]:
+                    url = url_data.get("url", "")
+                    mime = url_data.get("mime", "unknown")
+                    print(f"    {url} ({mime})")
+
+            if enrichment.get("link"):
+                print(f"  Link: {enrichment['link']}")
+
+        elif source == "dehashed":
+            # Special formatting for Dehashed
+            print(f"  {Fore.YELLOW}Total Entries:{Style.RESET_ALL} {enrichment.get('total_entries', 0)}")
+            print(f"  Retrieved Entries: {enrichment.get('retrieved_entries', 0)}")
+            print(f"  API Balance: {enrichment.get('api_balance', 'N/A')} credits")
+
+            # Statistics
+            print(f"\n  {Fore.CYAN}Unique Data Found:{Style.RESET_ALL}")
+            print(f"    Emails: {enrichment.get('unique_emails', 0)}")
+            print(f"    Usernames: {enrichment.get('unique_usernames', 0)}")
+            print(f"    Passwords (plaintext): {enrichment.get('unique_passwords', 0)}")
+            print(f"    Hashed Passwords: {enrichment.get('unique_hashes', 0)}")
+            if enrichment.get('unique_ips'):
+                print(f"    IP Addresses: {enrichment.get('unique_ips', 0)}")
+            if enrichment.get('unique_names'):
+                print(f"    Names: {enrichment.get('unique_names', 0)}")
+            print(f"    Breach Databases: {enrichment.get('unique_databases', 0)}")
+
+            # Saved files
+            if enrichment.get("saved_files"):
+                print(f"\n  {Fore.GREEN}Processed Data Saved:{Style.RESET_ALL}")
+                saved_files = enrichment["saved_files"]
+                if 'summary' in saved_files:
+                    print(f"    Summary: {saved_files['summary']}")
+                if 'emails' in saved_files:
+                    print(f"    Emails: {saved_files['emails']}")
+                if 'usernames' in saved_files:
+                    print(f"    Usernames: {saved_files['usernames']}")
+                if 'passwords' in saved_files:
+                    print(f"    Passwords: {saved_files['passwords']}")
+                if 'hashed_passwords' in saved_files:
+                    print(f"    Hashed Passwords: {saved_files['hashed_passwords']}")
+                if 'ip_addresses' in saved_files:
+                    print(f"    IP Addresses: {saved_files['ip_addresses']}")
+                if 'names' in saved_files:
+                    print(f"    Names: {saved_files['names']}")
+                if 'databases' in saved_files:
+                    print(f"    Breach Databases: {saved_files['databases']}")
+                if 'full_json' in saved_files:
+                    print(f"    Full JSON Data: {saved_files['full_json']}")
+
+            # Sample data
+            if enrichment.get("breach_databases"):
+                print(f"\n  {Fore.CYAN}Top Breach Databases:{Style.RESET_ALL}")
+                for db in enrichment["breach_databases"][:10]:
+                    print(f"    - {db}")
+
+            if enrichment.get("sample_emails"):
+                print(f"\n  {Fore.CYAN}Sample Emails:{Style.RESET_ALL}")
+                for email in enrichment["sample_emails"][:5]:
+                    print(f"    - {email}")
+
+            if enrichment.get("sample_usernames"):
+                print(f"\n  {Fore.CYAN}Sample Usernames:{Style.RESET_ALL}")
+                for username in enrichment["sample_usernames"][:5]:
+                    print(f"    - {username}")
+
+            if enrichment.get("link"):
+                print(f"\n  Link: {enrichment['link']}")
+
         else:
             # Default formatting for other sources
             for key, value in enrichment.items():
@@ -1039,14 +1593,17 @@ API Key Management:
   cygor enrich config-manager --help                # Show config management help
 
 Available sources:
-  shodan      - Shodan (requires SHODAN_API_KEY)
-  vt          - VirusTotal (requires VIRUSTOTAL_API_KEY or VT_API_KEY)
-  virustotal  - VirusTotal (alias for 'vt')
-  abuseipdb   - AbuseIPDB (requires ABUSEIPDB_API_KEY)
-  otx         - AlienVault OTX (requires OTX_API_KEY)
-  urlscan     - URLScan.io (requires URLSCAN_API_KEY)
-  censys      - Censys (requires CENSYS_API_ID in format API_ID:SECRET)
-  all         - Use all configured sources (default)
+  shodan       - Shodan (requires SHODAN_API_KEY)
+  vt           - VirusTotal (requires VIRUSTOTAL_API_KEY or VT_API_KEY)
+  virustotal   - VirusTotal (alias for 'vt')
+  abuseipdb    - AbuseIPDB (requires ABUSEIPDB_API_KEY)
+  otx          - AlienVault OTX (requires OTX_API_KEY)
+  urlscan      - URLScan.io (requires URLSCAN_API_KEY)
+  censys       - Censys (requires CENSYS_API_ID in format API_ID:SECRET)
+  wayback      - Wayback Machine (no API key required)
+  commoncrawl  - Common Crawl (no API key required)
+  dehashed     - Dehashed (requires DEHASHED_API_KEY in format email:api_key)
+  all          - Use all configured sources (default)
         """
     )
 
@@ -1055,7 +1612,7 @@ Available sources:
     parser.add_argument("-o", "--output", dest="output", help="Output file for results")
     parser.add_argument("--format", choices=["text", "json", "csv", "xml"], default="text", help="Output format (default: text)")
     parser.add_argument("--config", dest="config", help="Path to config file with API keys")
-    parser.add_argument("--sources", nargs="+", choices=["shodan", "vt", "virustotal", "abuseipdb", "otx", "urlscan", "all"],
+    parser.add_argument("--sources", nargs="+", choices=["shodan", "vt", "virustotal", "abuseipdb", "otx", "urlscan", "censys", "wayback", "commoncrawl", "dehashed", "all"],
                         help="Enrichment sources to use (default: all configured sources)")
 
     args = parser.parse_args(argv)
@@ -1120,6 +1677,11 @@ Available sources:
         if sources is not None:
             sources = normalized_sources
 
+    # Determine output directory for Dehashed processed files
+    output_dir = None
+    if args.output:
+        output_dir = str(Path(args.output).parent)
+
     # Enrich IOCs
     results = []
     for ioc in iocs:
@@ -1128,7 +1690,7 @@ Available sources:
 
         sources_str = ", ".join(sources) if sources else "all configured sources"
         print(f"{Fore.YELLOW}[*] Enriching: {ioc} (using {sources_str}){Style.RESET_ALL}")
-        result = enrich_ioc(ioc, config, sources)
+        result = enrich_ioc(ioc, config, sources, output_dir=output_dir)
         results.append(result)
 
         if args.format == "text":

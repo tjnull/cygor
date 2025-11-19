@@ -151,6 +151,28 @@
               <div id="censysStatus" class="mt-2"></div>
             </div>
 
+            <!-- Dehashed API Credentials -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                <i class="bi bi-key me-2"></i>Dehashed API Credentials
+              </label>
+              <div class="input-group">
+                <input type="password" class="form-control" id="dehashedKey" placeholder="email:api_key">
+                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('dehashedKey')">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn btn-outline-info" type="button" onclick="testKey('dehashed')">
+                  <i class="bi bi-check-circle me-1"></i>Test
+                </button>
+              </div>
+              <div class="form-text">
+                Get your API credentials from <a href="https://dehashed.com/profile" target="_blank">https://dehashed.com/profile</a>
+                <br><strong>Format:</strong> email:api_key (e.g., user@example.com:your_api_key)
+                <br><strong>Note:</strong> Requires paid API credits to use
+              </div>
+              <div id="dehashedStatus" class="mt-2"></div>
+            </div>
+
             <!-- Action Buttons -->
             <div class="d-flex gap-3 mt-4">
               <button type="button" class="btn btn-secondary" onclick="window.location.href='/tasks'">
@@ -184,7 +206,8 @@ document.addEventListener('DOMContentLoaded', function() {
       abuseipdb: document.getElementById('abuseipdbKey').value,
       otx: document.getElementById('otxKey').value,
       urlscan: document.getElementById('urlscanKey').value,
-      censys: document.getElementById('censysKey').value
+      censys: document.getElementById('censysKey').value,
+      dehashed: document.getElementById('dehashedKey').value
     };
 
     try {
@@ -248,6 +271,16 @@ async function loadApiKeys() {
             document.getElementById('censysKey').placeholder = '••••••••' + data.api_keys.censys.slice(-4);
           }
         }
+        if (data.api_keys.dehashed) {
+          document.getElementById('dehashedKey').value = data.api_keys.dehashed;
+          // For Dehashed, mask the api_key part (after the colon)
+          const parts = data.api_keys.dehashed.split(':');
+          if (parts.length === 2) {
+            document.getElementById('dehashedKey').placeholder = parts[0] + ':••••' + parts[1].slice(-4);
+          } else {
+            document.getElementById('dehashedKey').placeholder = '••••••••' + data.api_keys.dehashed.slice(-4);
+          }
+        }
       }
     }
   } catch (error) {
@@ -275,7 +308,8 @@ async function testKey(source) {
     'abuseipdb': 'abuseipdbKey',
     'otx': 'otxKey',
     'urlscan': 'urlscanKey',
-    'censys': 'censysKey'
+    'censys': 'censysKey',
+    'dehashed': 'dehashedKey'
   };
 
   const fieldId = keyMap[source];

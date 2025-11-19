@@ -51,6 +51,12 @@ SOURCES = {
         "env_var": "CENSYS_API_ID",
         "url": "https://censys.io/account/api",
         "test_url": "https://search.censys.io/api/v2/hosts/8.8.8.8"
+    },
+    "dehashed": {
+        "name": "Dehashed",
+        "env_var": "DEHASHED_API_KEY",
+        "url": "https://dehashed.com/profile",
+        "test_url": "https://api.dehashed.com/search?query=email:test@example.com"
     }
 }
 
@@ -178,6 +184,28 @@ def test_api_key(source: str, api_key: str) -> tuple[bool, Optional[str]]:
             try:
                 error_data = response.json()
                 return False, error_data.get("error", f"HTTP {response.status_code}")
+            except:
+                return False, f"HTTP {response.status_code}"
+
+        elif source == "dehashed":
+            # Dehashed requires email:api_key format
+            if ":" not in api_key:
+                return False, "API key must be in format email:api_key (e.g., user@example.com:your_api_key)"
+
+            api_email, api_secret = api_key.split(":", 1)
+            url = "https://api.dehashed.com/search"
+            params = {"query": "email:test@example.com", "size": 1}
+            headers = {"Accept": "application/json"}
+            response = requests.get(url, params=params, auth=(api_email, api_secret), headers=headers, timeout=10)
+            if response.status_code == 200:
+                return True, None
+            elif response.status_code == 401:
+                return False, "Invalid credentials (401 Unauthorized)"
+            elif response.status_code == 402:
+                return False, "Insufficient credits (402 Payment Required)"
+            try:
+                error_data = response.json()
+                return False, error_data.get("message", f"HTTP {response.status_code}")
             except:
                 return False, f"HTTP {response.status_code}"
 
