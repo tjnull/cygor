@@ -5,15 +5,19 @@
 <div class="container-fluid py-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="mb-0 display-6">
-      <i class="bi bi-list-task me-3"></i>On-Demand Scan
+      <i class="bi bi-list-task me-3"></i>Tasks
     </h1>
-    <div class="btn-group">
-      <a href="/tasks/scan/new" class="btn btn-primary btn-lg px-4">
-        <i class="bi bi-radar me-2 fs-5"></i>New Scan
-      </a>
-      <a href="/tasks/module/new" class="btn btn-success btn-lg px-4">
-        <i class="bi bi-gear-fill me-2 fs-5"></i>Run Module
-      </a>
+    <div class="dropdown">
+      <button class="btn btn-primary btn-lg px-4 dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <i class="bi bi-plus-circle me-2 fs-5"></i>New Task
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark">
+        <li><a class="dropdown-item" href="/tasks/scan/new"><i class="bi bi-radar me-2"></i>Port Discovery Scan</a></li>
+        <li><a class="dropdown-item" href="/credrecon/new"><i class="bi bi-shield-check me-2"></i>Credential Test</a></li>
+        <li><a class="dropdown-item" href="/tasks/parse/new"><i class="bi bi-file-earmark-code me-2"></i>Parse Scan Results</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="/tasks/module/new"><i class="bi bi-gear-fill me-2"></i>Run Module</a></li>
+      </ul>
     </div>
   </div>
 
@@ -27,6 +31,65 @@
         If you don't see new results immediately, use the <strong>Sync Database</strong> button in the sidebar or visit the
         <a href="/sync-status" class="alert-link">Sync Status</a> page.
       </p>
+    </div>
+  </div>
+
+  <!-- Task Type Filters -->
+  <div class="row g-2 mb-4" id="taskTypeFilters">
+    <div class="col-lg-2 col-md-4 col-sm-6">
+      <div class="filter-card active" data-filter="all" onclick="filterTasks('all')">
+        <div class="filter-card-icon">
+          <i class="bi bi-list-ul"></i>
+        </div>
+        <div class="filter-card-content">
+          <h6 class="filter-card-title">All Tasks</h6>
+          <p class="filter-card-count" id="filter-count-all">0</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6">
+      <div class="filter-card" data-filter="port_scan" onclick="filterTasks('port_scan')">
+        <div class="filter-card-icon">
+          <i class="bi bi-radar"></i>
+        </div>
+        <div class="filter-card-content">
+          <h6 class="filter-card-title">Port Scans</h6>
+          <p class="filter-card-count" id="filter-count-port_scan">0</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6">
+      <div class="filter-card" data-filter="credential_test" onclick="filterTasks('credential_test')">
+        <div class="filter-card-icon">
+          <i class="bi bi-shield-check"></i>
+        </div>
+        <div class="filter-card-content">
+          <h6 class="filter-card-title">Credentials</h6>
+          <p class="filter-card-count" id="filter-count-credential_test">0</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6">
+      <div class="filter-card" data-filter="parse" onclick="filterTasks('parse')">
+        <div class="filter-card-icon">
+          <i class="bi bi-file-earmark-code"></i>
+        </div>
+        <div class="filter-card-content">
+          <h6 class="filter-card-title">Parsed</h6>
+          <p class="filter-card-count" id="filter-count-parse">0</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6">
+      <div class="filter-card" data-filter="module" onclick="filterTasks('module')">
+        <div class="filter-card-icon">
+          <i class="bi bi-gear-fill"></i>
+        </div>
+        <div class="filter-card-content">
+          <h6 class="filter-card-title">Modules</h6>
+          <p class="filter-card-count" id="filter-count-module">0</p>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -141,6 +204,59 @@
 </div>
 
 <style>
+/* Filter Card Styles */
+.filter-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 100%;
+  min-height: 60px;
+}
+
+.filter-card:hover {
+  background: rgba(13, 110, 253, 0.1);
+  border-color: rgba(13, 110, 253, 0.5);
+  transform: translateY(-2px);
+}
+
+.filter-card.active {
+  background: rgba(13, 110, 253, 0.2);
+  border-color: #0d6efd;
+}
+
+.filter-card-icon {
+  font-size: 1.5rem;
+  color: #0d6efd;
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-card-content {
+  flex: 1;
+}
+
+.filter-card-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.filter-card-count {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0d6efd;
+}
+
 /* Enhanced stats card styling */
 .stat-icon-container {
   display: inline-flex;
@@ -277,12 +393,30 @@
 
 <script>
 let refreshInterval = null;
+let currentFilter = 'all';
+let allTasks = [];
+
+function filterTasks(filterType) {
+  currentFilter = filterType;
+
+  // Update active state on filter cards
+  document.querySelectorAll('.filter-card').forEach(card => {
+    card.classList.remove('active');
+  });
+  document.querySelector(`[data-filter="${filterType}"]`).classList.add('active');
+
+  // Re-render tasks with current filter
+  renderTasks(allTasks);
+}
 
 async function fetchTasks() {
   try {
     const response = await fetch('/api/tasks');
     if (!response.ok) throw new Error('Failed to fetch tasks');
     const tasks = await response.json();
+
+    // Store tasks globally for filtering
+    allTasks = tasks;
 
     // Update stats
     const stats = {
@@ -297,15 +431,43 @@ async function fetchTasks() {
     document.getElementById('stat-completed').textContent = stats.completed;
     document.getElementById('stat-failed').textContent = stats.failed;
 
-    // Update table
-    const tbody = document.getElementById('tasks-tbody');
+    // Update filter counts
+    const filterCounts = {
+      all: tasks.length,
+      port_scan: tasks.filter(t => t.task_type === 'port_scan').length,
+      credential_test: tasks.filter(t => t.task_type === 'credential_test').length,
+      parse: tasks.filter(t => t.task_type === 'parse').length,
+      module: tasks.filter(t => t.task_type === 'module').length
+    };
 
-    if (tasks.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5"><i class="bi bi-inbox me-2 fs-4"></i><div class="mt-2 fs-5">No tasks found</div></td></tr>';
-      return;
-    }
+    Object.keys(filterCounts).forEach(key => {
+      const elem = document.getElementById(`filter-count-${key}`);
+      if (elem) elem.textContent = filterCounts[key];
+    });
 
-    tbody.innerHTML = tasks.map(task => {
+    // Render filtered tasks
+    renderTasks(tasks);
+
+  } catch (error) {
+    console.error('Error fetching tasks:', error);
+  }
+}
+
+function renderTasks(tasks) {
+  const tbody = document.getElementById('tasks-tbody');
+
+  // Apply filter
+  let filteredTasks = tasks;
+  if (currentFilter !== 'all') {
+    filteredTasks = tasks.filter(t => t.task_type === currentFilter);
+  }
+
+  if (filteredTasks.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5"><i class="bi bi-inbox me-2 fs-4"></i><div class="mt-2 fs-5">No tasks found</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filteredTasks.map(task => {
       const statusClass = `status-${task.status}`;
       const statusIcon = {
         pending: 'clock-history',
@@ -354,12 +516,6 @@ async function fetchTasks() {
         </tr>
       `;
     }).join('');
-
-  } catch (error) {
-    console.error('Error fetching tasks:', error);
-    document.getElementById('tasks-tbody').innerHTML =
-      '<tr><td colspan="7" class="text-center text-danger py-5"><i class="bi bi-exclamation-triangle-fill me-2 fs-4"></i><div class="mt-2 fs-5">Error loading tasks</div></td></tr>';
-  }
 }
 
 function formatTime(isoString) {

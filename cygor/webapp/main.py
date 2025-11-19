@@ -1,9 +1,9 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-import os, argparse, asyncio, pkgutil, shutil, json, re, gzip, uvicorn, sys, subprocess
+import os, argparse, asyncio, pkgutil, shutil, json, re, gzip, uvicorn, sys, subprocess, logging
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from fastapi import FastAPI, Request, Depends, Query, Form, HTTPException
+from fastapi import FastAPI, Request, Depends, Query, Form, HTTPException, File, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -35,6 +35,8 @@ from .config import settings
 from .tasks import task_manager, TaskStatus
 from .credrecon_tasks import credrecon_manager
 
+
+logger = logging.getLogger(__name__)
 
 templates = None  # will be initialized in lifespan
 DISCOVERED_MODULES = []  # filled during startup
@@ -1492,6 +1494,11 @@ async def new_scan_page(request: Request):
     """New scan form page."""
     return templates.TemplateResponse("scan_new.html", {"request": request})
 
+@app.get("/tasks/parse/new", response_class=HTMLResponse)
+async def new_parse_page(request: Request):
+    """New parse task form page."""
+    return templates.TemplateResponse("parse_new.html", {"request": request})
+
 @app.get("/sync-status", response_class=HTMLResponse)
 async def sync_status_page(request: Request):
     """Sync status and history page."""
@@ -2172,6 +2179,249 @@ async def create_credrecon_task(request: Request, db_session: AsyncSession = Dep
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error creating credrecon task: {str(e)}")
+
+@app.get("/api/browse")
+async def browse_server_directory(path: str = Query("")):
+    """
+    Browse server filesystem for selecting input/output directories.
+    Returns list of directories and scan files.
+    """
+    try:
+        logger.info(f"Browse request received with path: '{path}'")
+
+        # Default to current working directory if no path provided
+        if not path or path == "/":
+            browse_path = Path.cwd()
+            logger.info(f"Using current working directory: {browse_path}")
+        else:
+            browse_path = Path(path)
+            logger.info(f"Using provided path: {browse_path}")
+
+        # Security: Prevent directory traversal attacks
+        # Only allow browsing within certain safe directories
+        safe_roots = []
+
+        # Build safe_roots list, skipping any invalid paths
+        for root_path in [
+            Path.home(),
+            Path("/workspace"),
+            Path("/tmp"),
+            Path(settings.RESULTS_DIR) if settings.RESULTS_DIR else None,
+            Path.cwd()
+        ]:
+            if root_path:
+                try:
+                    # Test if we can resolve the path
+                    _ = root_path.resolve()
+                    safe_roots.append(root_path)
+                except Exception as e:
+                    logger.warning(f"Skipping invalid safe root: {root_path} - {e}")
+                    continue
+
+        # Check if path is within allowed roots
+        is_safe = False
+        try:
+            resolved_path = browse_path.resolve()
+            for safe_root in safe_roots:
+                try:
+                    safe_root_resolved = safe_root.resolve()
+                    if resolved_path == safe_root_resolved or safe_root_resolved in resolved_path.parents:
+                        is_safe = True
+                        break
+                except Exception as e:
+                    logger.warning(f"Error checking safe root {safe_root}: {e}")
+                    continue
+        except Exception as e:
+            logger.error(f"Error resolving browse path {browse_path}: {e}")
+            is_safe = False
+
+        if not is_safe:
+            # Default to home directory if path is unsafe
+            browse_path = Path.home()
+
+        if not browse_path.exists() or not browse_path.is_dir():
+            browse_path = Path.home()
+
+        items = []
+
+        # Add parent directory link if not at root
+        if browse_path.parent != browse_path:
+            items.append({
+                "name": "..",
+                "path": str(browse_path.parent),
+                "type": "parent",
+                "size": 0
+            })
+
+        # List directories and scan files
+        try:
+            for item in sorted(browse_path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+                try:
+                    if item.is_dir():
+                        items.append({
+                            "name": item.name,
+                            "path": str(item),
+                            "type": "directory",
+                            "size": 0
+                        })
+                    elif item.suffix.lower() in ['.xml', '.nmap', '.gnmap', '.zip']:
+                        items.append({
+                            "name": item.name,
+                            "path": str(item),
+                            "type": "file",
+                            "size": item.stat().st_size
+                        })
+                except (PermissionError, OSError):
+                    continue
+        except PermissionError:
+            pass
+
+        logger.info(f"Returning {len(items)} items for path: {browse_path}")
+        return JSONResponse({
+            "current_path": str(browse_path),
+            "items": items
+        })
+
+    except Exception as e:
+        logger.error(f"Error browsing directory: {e}", exc_info=True)
+        return JSONResponse({
+            "current_path": str(Path.home()),
+            "items": [],
+            "error": str(e)
+        }, status_code=500)
+
+@app.post("/api/parse")
+async def create_parse_task(req: Dict[str, Any]):
+    """Create a new parse task from server path."""
+    try:
+        input_path = req.get("input_path", "").strip()
+        output_dir = req.get("output_dir", "").strip()
+        format_type = req.get("format", "txt")
+        path_type = req.get("path_type", "file")
+
+        if not input_path:
+            raise HTTPException(status_code=400, detail="Input path is required")
+
+        # Validate input path exists
+        input_path_obj = Path(input_path)
+        if not input_path_obj.exists():
+            raise HTTPException(status_code=400, detail=f"Input path does not exist: {input_path}")
+
+        # Determine output directory
+        if not output_dir:
+            # Default to input file's parent directory for files, or the directory itself
+            if input_path_obj.is_file():
+                output_dir = str(input_path_obj.parent)
+            else:
+                output_dir = str(input_path_obj)
+
+        # Build parse command
+        cmd = ["cygor", "parse", input_path]
+
+        if output_dir:
+            cmd.extend(["-o", output_dir])
+
+        if format_type and format_type != "txt":
+            cmd.extend(["--format", format_type])
+
+        # Create task
+        task_id = await task_manager.create_generic_task(
+            task_name="parse",
+            command=cmd,
+            description=f"Parse scan results: {input_path}",
+            output_dir=output_dir
+        )
+
+        return JSONResponse({"task_id": task_id, "status": "created"})
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating parse task: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/parse/upload")
+async def create_parse_task_from_upload(
+    files: List[UploadFile] = File(...),
+    output_dir: str = Form(""),
+    format: str = Form("txt")
+):
+    """Create a new parse task from uploaded files."""
+    import tempfile
+    import zipfile
+
+    try:
+        if not files:
+            raise HTTPException(status_code=400, detail="No files uploaded")
+
+        # Create temporary directory for uploads
+        temp_dir = Path(tempfile.mkdtemp(prefix="cygor_parse_"))
+        logger.info(f"Created temp directory: {temp_dir}")
+
+        uploaded_files = []
+
+        for file in files:
+            file_path = temp_dir / file.filename
+
+            # Save uploaded file
+            with open(file_path, 'wb') as f:
+                content = await file.read()
+                f.write(content)
+
+            # If it's a zip file, extract it
+            if file.filename.endswith('.zip'):
+                logger.info(f"Extracting zip file: {file.filename}")
+                try:
+                    with zipfile.ZipFile(file_path, 'r') as zip_ref:
+                        zip_ref.extractall(temp_dir)
+                    # Remove the zip file after extraction
+                    file_path.unlink()
+                    # Add all extracted files
+                    for extracted_file in temp_dir.rglob('*'):
+                        if extracted_file.is_file() and extracted_file.suffix.lower() in ['.xml', '.nmap', '.gnmap']:
+                            uploaded_files.append(str(extracted_file))
+                except zipfile.BadZipFile:
+                    logger.error(f"Invalid zip file: {file.filename}")
+                    raise HTTPException(status_code=400, detail=f"Invalid zip file: {file.filename}")
+            else:
+                uploaded_files.append(str(file_path))
+
+        if not uploaded_files:
+            raise HTTPException(status_code=400, detail="No valid scan files found")
+
+        # Determine output directory
+        if not output_dir:
+            output_dir = str(temp_dir)
+
+        # Build parse command - parse the temp directory
+        cmd = ["cygor", "parse", str(temp_dir)]
+
+        if output_dir:
+            cmd.extend(["-o", output_dir])
+
+        if format and format != "txt":
+            cmd.extend(["--format", format])
+
+        # Create task
+        task_id = await task_manager.create_generic_task(
+            task_name="parse-upload",
+            command=cmd,
+            description=f"Parse uploaded files ({len(uploaded_files)} files)",
+            output_dir=output_dir
+        )
+
+        return JSONResponse({
+            "task_id": task_id,
+            "status": "created",
+            "files_uploaded": len(uploaded_files),
+            "temp_dir": str(temp_dir)
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating parse task from upload: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/credrecon/stats")
 async def get_credrecon_stats(session: AsyncSession = Depends(get_session)):
@@ -2967,9 +3217,29 @@ async def cancel_credrecon_scan(scan_id: str):
 
 @app.get("/api/tasks")
 async def list_tasks():
-    """List all tasks."""
-    tasks = await task_manager.list_tasks()
-    return JSONResponse(tasks)
+    """List all tasks with unified task types."""
+    # Get raw tasks from task manager
+    raw_tasks = await task_manager.list_tasks()
+
+    # Convert task types for better categorization
+    unified_tasks = []
+    for task_dict in raw_tasks:
+        # Make a copy to avoid modifying original
+        task = task_dict.copy()
+
+        # Detect parse tasks by command
+        if task.get('task_type') == 'generic':
+            cmd_str = task.get('command', '')
+            if 'cygor parse' in cmd_str:
+                task['task_type'] = 'parse'
+            else:
+                task['task_type'] = 'module'
+        elif task.get('task_type') == 'scan':
+            task['task_type'] = 'port_scan'
+
+        unified_tasks.append(task)
+
+    return JSONResponse(unified_tasks)
 
 @app.get("/api/ondemand-scans")
 async def list_ondemand_scans():
