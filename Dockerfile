@@ -57,7 +57,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.8.22 /uv /uvx /bin/
 
 # Install the latest (stable) version of naabu:
 # Use a specific version to avoid GitHub API rate limits and ensure reproducible builds
-RUN wget https://github.com/projectdiscovery/naabu/releases/download/v2.3.2/naabu_2.3.2_linux_amd64.zip -O /tmp/naabu.zip && \
+RUN wget https://github.com/projectdiscovery/naabu/releases/download/v2.3.6/naabu_2.3.6_linux_amd64.zip -O /tmp/naabu.zip && \
     unzip /tmp/naabu.zip -d /usr/local/bin && \
     chmod +x /usr/local/bin/naabu && \
     rm /tmp/naabu.zip

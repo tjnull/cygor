@@ -1932,14 +1932,22 @@ Available sources:
         except Exception as e:
             print(f"{Fore.RED}[!] Error saving results: {e}{Style.RESET_ALL}")
 
-    # Always print results to stdout (unless format is text, which already printed during enrichment)
-    if args.format != "text":
-        if args.format == "json":
-            print(json.dumps(results, indent=2))
-        elif args.format == "csv":
-            print(format_results_as_csv(results))
-        elif args.format == "xml":
-            print(format_results_as_xml(results))
+    # Always print results to stdout
+    # For text format: if output file was specified, print again so web UI can capture complete output
+    # For other formats: always print to stdout
+    if args.format == "json":
+        print(json.dumps(results, indent=2))
+    elif args.format == "csv":
+        print(format_results_as_csv(results))
+    elif args.format == "xml":
+        print(format_results_as_xml(results))
+    elif args.format == "text" and args.output:
+        # Re-print text results to stdout for web UI capture when output file is specified
+        for result in results:
+            print(f"\n{'='*80}")
+            print(f"IOC: {result.get('ioc', '')} ({result.get('type', '')})")
+            print(f"{'='*80}")
+            print_enrichment_result(result, "text")
 
 
 if __name__ == "__main__":
