@@ -1052,6 +1052,16 @@ async def dashboard(request: Request, session: AsyncSession = Depends(get_sessio
         key = extract_host_key(entry.get("label") or entry.get("path"))
         entry["host_id"] = ip_to_id.get(key)
 
+    # Also gather ondemand scan times for the API endpoint
+    try:
+        ondemand_scan_times = gather_ondemand_scan_times(settings.RESULTS_DIR)
+        # Add host_id mapping for ondemand scans too
+        for entry in ondemand_scan_times:
+            key = extract_host_key(entry.get("label") or entry.get("path"))
+            entry["host_id"] = ip_to_id.get(key)
+    except Exception:
+        ondemand_scan_times = []
+
     # ==========================================================
     # Render
     # ==========================================================
@@ -1080,9 +1090,24 @@ async def hosts_view(
     per_page: int = Query(settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE, description="Items per page"),
     session: AsyncSession = Depends(get_session)
 ):
-    # Always fetch all hosts + related data for filtering
+    # Filter to only show hosts with Ports or OSGuesses (real Nmap/Masscan data)
+    # This excludes enrichment results and script-only hosts
+    from sqlalchemy import exists
+    base_host_filter = exists().where(Port.host_id == Host.id) | exists().where(OSGuess.host_id == Host.id)
+    
+    # Also explicitly exclude any host with "enrichment" in address or hostname
+    from sqlalchemy import or_
+    enrichment_filter = ~(
+        Host.address.ilike('%enrichment%') | 
+        (Host.hostname.isnot(None) & Host.hostname.ilike('%enrichment%'))
+    )
+    
+    # Always fetch filtered hosts + related data for filtering
     all_hosts = (await session.execute(
-        select(Host).options(
+        select(Host)
+        .where(base_host_filter)
+        .where(enrichment_filter)
+        .options(
             selectinload(Host.ports),
             selectinload(Host.scripts),
             selectinload(Host.os_guesses)
@@ -2157,6 +2182,16 @@ async def create_scan(req: ScanRequest):
     )
 
     return JSONResponse({"task_id": task_id, "status": "created"})
+
+@app.get("/api/ondemand-scans")
+async def get_ondemand_scans():
+    """Get ondemand scan times for the timeline."""
+    try:
+        ondemand_scan_times = gather_ondemand_scan_times(settings.RESULTS_DIR)
+        return JSONResponse(ondemand_scan_times)
+    except Exception as e:
+        logger.error(f"Error gathering ondemand scans: {e}", exc_info=True)
+        return JSONResponse([])
 
 @app.post("/api/modules")
 async def create_module_task(req: ModuleRequest):

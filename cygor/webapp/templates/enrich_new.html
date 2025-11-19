@@ -18,30 +18,30 @@
       <!-- About Enrichment & Quick Guide -->
       <div class="card bg-dark mb-4">
         <div class="card-header" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#enrichGuide">
-          <h5 class="mb-0 d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-info-circle me-2"></i>About IOC Enrichment & Quick Guide</span>
+          <h5 class="mb-0 d-flex justify-content-between align-items-center" style="font-size: 1.25rem;">
+            <span><i class="bi bi-info-circle me-2 fs-5"></i>About IOC Enrichment & Quick Guide</span>
             <i class="bi bi-chevron-down"></i>
           </h5>
         </div>
         <div id="enrichGuide" class="collapse">
           <div class="card-body">
-            <p class="text-light mb-3">
+            <p class="text-light mb-4" style="font-size: 1.05rem; line-height: 1.7;">
               IOC Enrichment uses passive reconnaissance and threat intelligence APIs to gather information about IPs, domains, and file hashes.
               This helps identify malicious infrastructure, track threat actors, and understand attack patterns without active scanning.
             </p>
-            <h6 class="text-secondary mb-2">Supported Data Sources:</h6>
-            <ul class="mb-3 text-light small">
-              <li><strong>Shodan:</strong> Discover exposed services, vulnerabilities, and infrastructure details</li>
-              <li><strong>VirusTotal:</strong> Check malware detection scores, relationships, and community comments</li>
-              <li><strong>AbuseIPDB:</strong> View abuse reports, confidence scores, and threat categories</li>
-              <li><strong>AlienVault OTX:</strong> Access threat intelligence pulses and related indicators</li>
-              <li><strong>URLScan.io:</strong> Analyze domain reputation and screenshots</li>
+            <h5 class="text-secondary mb-3" style="font-size: 1.15rem; font-weight: 600;">Supported Data Sources:</h5>
+            <ul class="mb-4 text-light" style="font-size: 1rem; line-height: 1.8; padding-left: 1.5rem;">
+              <li class="mb-2"><strong>Shodan:</strong> Discover exposed services, vulnerabilities, and infrastructure details</li>
+              <li class="mb-2"><strong>VirusTotal:</strong> Check malware detection scores, relationships, and community comments</li>
+              <li class="mb-2"><strong>AbuseIPDB:</strong> View abuse reports, confidence scores, and threat categories</li>
+              <li class="mb-2"><strong>AlienVault OTX:</strong> Access threat intelligence pulses and related indicators</li>
+              <li class="mb-2"><strong>URLScan.io:</strong> Analyze domain reputation and screenshots</li>
             </ul>
-            <h6 class="text-secondary mb-2">Supported IOC Types:</h6>
-            <ul class="mb-0 small text-light">
-              <li><strong>IP Addresses:</strong> IPv4 addresses (e.g., 192.168.1.1)</li>
-              <li><strong>Domains:</strong> Domain names (e.g., example.com)</li>
-              <li><strong>File Hashes:</strong> MD5, SHA1, or SHA256 hashes</li>
+            <h5 class="text-secondary mb-3" style="font-size: 1.15rem; font-weight: 600;">Supported IOC Types:</h5>
+            <ul class="mb-0 text-light" style="font-size: 1rem; line-height: 1.8; padding-left: 1.5rem;">
+              <li class="mb-2"><strong>IP Addresses:</strong> IPv4 addresses (e.g., 192.168.1.1)</li>
+              <li class="mb-2"><strong>Domains:</strong> Domain names (e.g., example.com)</li>
+              <li class="mb-2"><strong>File Hashes:</strong> MD5, SHA1, or SHA256 hashes</li>
             </ul>
           </div>
         </div>
@@ -81,7 +81,7 @@
                   placeholder="Enter IOCs (one per line):&#10;192.168.1.1&#10;example.com&#10;malware-domain.com&#10;44d88612fea8a8f36de82e1278abb02f"
                   style="font-size: 1rem;"
                 ></textarea>
-                <div class="form-text" style="font-size: 0.925rem;">
+                <div class="form-text" style="font-size: 1rem; line-height: 1.6; color: #a1a1aa; margin-top: 0.5rem;">
                   Supports IP addresses, domains, and file hashes (MD5, SHA1, SHA256). Defanged IOCs will be automatically refanged.
                 </div>
               </div>
@@ -108,65 +108,65 @@
             <!-- Enrichment Sources -->
             <div class="mb-4">
               <label class="form-label fw-bold fs-5">
-                <i class="bi bi-database me-2"></i>Enrichment Sources
+                <i class="bi bi-database me-2 fs-5"></i>Enrichment Sources
               </label>
-              <div class="form-text mb-2" style="font-size: 0.925rem;">
+              <div class="form-text mb-3" style="font-size: 1rem; line-height: 1.6; color: #a1a1aa;">
                 Select which threat intelligence sources to query. Only sources with configured API keys will be used.
               </div>
-              <div class="row g-2">
+              <div class="row g-3">
                 <div class="col-md-6">
                   <div class="form-check form-check-inline w-100">
                     <input class="form-check-input" type="checkbox" id="sourceAll" value="all" checked>
-                    <label class="form-check-label fw-bold" for="sourceAll">
-                      <i class="bi bi-globe me-1"></i>All Available Sources
+                    <label class="form-check-label fw-bold" for="sourceAll" style="font-size: 1rem;">
+                      <i class="bi bi-globe me-2 fs-5"></i>All Available Sources
                     </label>
                   </div>
                 </div>
                 <div class="col-md-6">
                   <div class="form-check">
                     <input class="form-check-input source-checkbox" type="checkbox" id="sourceShodan" value="shodan">
-                    <label class="form-check-label" for="sourceShodan">
-                      <i class="bi bi-radar me-1"></i>Shodan
+                    <label class="form-check-label" for="sourceShodan" style="font-size: 1rem;">
+                      <i class="bi bi-radar me-2 fs-5"></i>Shodan
                     </label>
                   </div>
                 </div>
                 <div class="col-md-6">
                   <div class="form-check">
                     <input class="form-check-input source-checkbox" type="checkbox" id="sourceVT" value="vt">
-                    <label class="form-check-label" for="sourceVT">
-                      <i class="bi bi-shield-check me-1"></i>VirusTotal
+                    <label class="form-check-label" for="sourceVT" style="font-size: 1rem;">
+                      <i class="bi bi-shield-check me-2 fs-5"></i>VirusTotal
                     </label>
                   </div>
                 </div>
                 <div class="col-md-6">
                   <div class="form-check">
                     <input class="form-check-input source-checkbox" type="checkbox" id="sourceAbuseIPDB" value="abuseipdb">
-                    <label class="form-check-label" for="sourceAbuseIPDB">
-                      <i class="bi bi-exclamation-triangle me-1"></i>AbuseIPDB
+                    <label class="form-check-label" for="sourceAbuseIPDB" style="font-size: 1rem;">
+                      <i class="bi bi-exclamation-triangle me-2 fs-5"></i>AbuseIPDB
                     </label>
                   </div>
                 </div>
                 <div class="col-md-6">
                   <div class="form-check">
                     <input class="form-check-input source-checkbox" type="checkbox" id="sourceOTX" value="otx">
-                    <label class="form-check-label" for="sourceOTX">
-                      <i class="bi bi-eye me-1"></i>AlienVault OTX
+                    <label class="form-check-label" for="sourceOTX" style="font-size: 1rem;">
+                      <i class="bi bi-eye me-2 fs-5"></i>AlienVault OTX
                     </label>
                   </div>
                 </div>
                 <div class="col-md-6">
                   <div class="form-check">
                     <input class="form-check-input source-checkbox" type="checkbox" id="sourceURLScan" value="urlscan">
-                    <label class="form-check-label" for="sourceURLScan">
-                      <i class="bi bi-link-45deg me-1"></i>URLScan.io
+                    <label class="form-check-label" for="sourceURLScan" style="font-size: 1rem;">
+                      <i class="bi bi-link-45deg me-2 fs-5"></i>URLScan.io
                     </label>
                   </div>
                 </div>
                 <div class="col-md-6">
                   <div class="form-check">
                     <input class="form-check-input source-checkbox" type="checkbox" id="sourceCensys" value="censys">
-                    <label class="form-check-label" for="sourceCensys">
-                      <i class="bi bi-search me-1"></i>Censys
+                    <label class="form-check-label" for="sourceCensys" style="font-size: 1rem;">
+                      <i class="bi bi-search me-2 fs-5"></i>Censys
                     </label>
                   </div>
                 </div>
@@ -176,7 +176,7 @@
             <!-- Output Format -->
             <div class="mb-4">
               <label class="form-label fw-bold fs-5">
-                <i class="bi bi-file-text me-2"></i>Output Format
+                <i class="bi bi-file-text me-2 fs-5"></i>Output Format
               </label>
               <select class="form-select form-select-lg" id="outputFormat" style="font-size: 1rem;">
                 <option value="json">JSON (Structured data with all enrichments)</option>
@@ -184,22 +184,22 @@
                 <option value="xml">XML (Hierarchical markup format)</option>
                 <option value="text">Text (Human-readable summary)</option>
               </select>
-              <div class="form-text" style="font-size: 0.925rem;">
+              <div class="form-text" style="font-size: 1rem; line-height: 1.6; color: #a1a1aa; margin-top: 0.5rem;">
                 Choose output format: JSON for APIs, CSV for Excel/spreadsheets, XML for parsing, or Text for readability.
               </div>
             </div>
 
             <!-- API Configuration Notice -->
             <div class="alert alert-info d-flex align-items-start mb-4" role="alert">
-              <i class="bi bi-info-circle-fill fs-5 me-3 mt-1"></i>
+              <i class="bi bi-info-circle-fill fs-4 me-3 mt-1"></i>
               <div class="flex-grow-1">
-                <h6 class="alert-heading mb-1">API Keys Required</h6>
-                <p class="mb-2 small">
+                <h6 class="alert-heading mb-2" style="font-size: 1.1rem; font-weight: 600;">API Keys Required</h6>
+                <p class="mb-3" style="font-size: 1rem; line-height: 1.6;">
                   Enrichment requires API keys for threat intelligence sources.
                   Configure your API keys in the settings page.
                 </p>
                 <a href="/settings/enrich" class="btn btn-sm btn-outline-primary">
-                  <i class="bi bi-key me-1"></i>Configure API Keys
+                  <i class="bi bi-key me-2"></i>Configure API Keys
                 </a>
               </div>
             </div>

@@ -7,7 +7,7 @@
 
 (function() {
   // --- internal config ---
-  const MARGIN = { top: 25, right: 80, bottom: 50, left: 60 };
+  const MARGIN = { top: 25, right: 80, bottom: 70, left: 60 };
   const MIN_HEIGHT = 300;
   const MAX_HEIGHT = 500;
   const COLOR_STARTED = "#0d6efd";
@@ -58,6 +58,21 @@
 
   function getScanData() {
     let data = [];
+    
+    // Try to use the global _getScanTimesFromPage function if available (from index.html)
+    // This function properly filters based on the source selection (CLI, ondemand, or all)
+    if (typeof window._getScanTimesFromPage === 'function') {
+      try {
+        data = window._getScanTimesFromPage();
+        if (Array.isArray(data) && data.length > 0) {
+          return data;
+        }
+      } catch (e) {
+        console.warn("Failed to get scan times from _getScanTimesFromPage:", e);
+      }
+    }
+    
+    // Fallback: try to get base scan times from canvas dataset
     try {
       const canvas = document.getElementById("scanTimeline");
       if (canvas?.dataset?.scantimes) {
@@ -66,6 +81,27 @@
     } catch (e) {
       console.warn("Failed to load scan times:", e);
     }
+    
+    // If we have base scans, check if we should include ondemand scans
+    const scanSourceFilter = document.getElementById('scanSourceFilter')?.value || 'all';
+    if (scanSourceFilter === 'ondemand' || scanSourceFilter === 'all') {
+      // Try to get ondemand scans from window
+      const onDemandScans = (typeof window.onDemandScans !== 'undefined' && Array.isArray(window.onDemandScans))
+        ? window.onDemandScans
+        : [];
+      
+      if (scanSourceFilter === 'ondemand') {
+        // Only ondemand scans
+        return onDemandScans;
+      } else if (scanSourceFilter === 'all') {
+        // Combine both
+        return [...(Array.isArray(data) ? data : []), ...onDemandScans];
+      }
+    } else if (scanSourceFilter === 'cli') {
+      // Only CLI scans
+      return Array.isArray(data) ? data : [];
+    }
+    
     return Array.isArray(data) ? data : [];
   }
 
@@ -110,11 +146,15 @@
     }
 
     const scanTimes = filterData(getScanData(), getFilter());
+    
+    // Clear any existing content
     const oldSvg = container.querySelector("svg");
+    const oldMessage = container.querySelector("div");
     if (oldSvg) oldSvg.remove();
+    if (oldMessage) oldMessage.remove();
 
     if (!scanTimes.length) {
-      container.innerHTML = "<div class='text-secondary text-center py-5 small'>No scan timeline data available.</div>";
+      container.innerHTML = "<div style='color: #a1a1aa; text-align: center; padding: 3rem 1rem; font-size: 1rem; line-height: 1.6;'>No scan timeline data available.</div>";
       return;
     }
 
@@ -125,7 +165,7 @@
     })).filter(d => d.start && d.end);
 
     if (!parsed.length) {
-      container.innerHTML = "<div class='text-secondary text-center py-5 small'>Invalid scan data.</div>";
+      container.innerHTML = "<div style='color: #a1a1aa; text-align: center; padding: 3rem 1rem; font-size: 1rem; line-height: 1.6;'>No valid scan data found.</div>";
       return;
     }
 
@@ -143,7 +183,6 @@
       height = 280; // Even smaller datasets get reasonable height
     }
 
-    console.log(`[Timeline] Container width: ${containerWidth}px, Chart width: ${width}px, Height: ${height}px, Scans: ${parsed.length}`);
 
     // Performance optimization: For very large datasets, reduce visual complexity
     const isLargeDataset = parsed.length > 1000;
@@ -200,17 +239,18 @@
           .attr("y", 9)
           .attr("dy", "0.71em")
           .attr("text-anchor", "middle")
-          .style("font-size", "10px")
-          .style("font-weight", "500")
+          .style("font-size", "12px")
+          .style("font-weight", "600")
           .text(d3.timeFormat("%m/%d/%Y")(d));
 
         // Add time (bottom line)
         tick.append("text")
           .attr("fill", theme.text)
-          .attr("y", 24)
+          .attr("y", 28)
           .attr("dy", "0.71em")
           .attr("text-anchor", "middle")
-          .style("font-size", "10px")
+          .style("font-size", "12px")
+          .style("font-weight", "500")
           .text(d3.timeFormat("%I:%M %p")(d));
       });
 
@@ -220,7 +260,8 @@
       .call(yAxis)
       .selectAll("text")
       .attr("fill", theme.text)
-      .style("font-size", "11px");
+      .style("font-size", "13px")
+      .style("font-weight", "500");
 
     // Add Y-axis label
     g.append("text")
@@ -229,7 +270,7 @@
       .attr("y", -45)
       .attr("text-anchor", "middle")
       .attr("fill", theme.text)
-      .style("font-size", "12px")
+      .style("font-size", "14px")
       .style("font-weight", "600")
       .text("Completed Scans");
 
@@ -256,15 +297,17 @@
       .append("div")
       .attr("class", "d3-tooltip")
       .style("position", "absolute")
-      .style("background", "rgba(0,0,0,0.9)")
+      .style("background", "rgba(0,0,0,0.95)")
       .style("color", "#fff")
-      .style("padding", "8px 12px")
-      .style("border-radius", "4px")
-      .style("font-size", "12px")
+      .style("padding", "10px 14px")
+      .style("border-radius", "6px")
+      .style("font-size", "13px")
+      .style("font-weight", "500")
+      .style("line-height", "1.6")
       .style("pointer-events", "none")
       .style("opacity", 0)
       .style("z-index", "10000")
-      .style("box-shadow", "0 2px 8px rgba(0,0,0,0.3)");
+      .style("box-shadow", "0 4px 12px rgba(0,0,0,0.4)");
 
     // Line connecting scans (cumulative)
     // Start from the earliest scan start time (beginning of timeline)
@@ -316,7 +359,7 @@
             .attr("r", completeMarkerHoverSize);
         }
         tooltip.transition().duration(100).style("opacity", 0.95);
-        tooltip.html(`<b>${d.label}</b><br>Started: ${d.start.toLocaleString()}<br>Completed: ${d.end.toLocaleString()}`)
+        tooltip.html(`<div style="font-weight: 600; margin-bottom: 4px;">${d.label}</div><div style="font-size: 12px; opacity: 0.9;">Started: ${d.start.toLocaleString()}</div><div style="font-size: 12px; opacity: 0.9;">Completed: ${d.end.toLocaleString()}</div>`)
           .style("left", (evt.pageX + 12) + "px")
           .style("top", (evt.pageY - 24) + "px");
       })
@@ -336,13 +379,13 @@
         window.open(targetUrl, "_blank", "noopener,noreferrer");
       });
 
-    // X-axis label
+    // X-axis label - positioned below the time labels with adequate spacing
     g.append("text")
       .attr("x", width / 2)
-      .attr("y", height + 40)
+      .attr("y", height + 58)
       .attr("text-anchor", "middle")
       .attr("fill", theme.text)
-      .style("font-size", "12px")
+      .style("font-size", "13px")
       .style("font-weight", "600")
       .text("Scan Completion Time");
 

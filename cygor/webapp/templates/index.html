@@ -428,23 +428,23 @@ body.light-theme hr {
         <!-- header with title (left) and legend + popup (right) -->
         <div class="card-header border-0 d-flex align-items-start justify-content-between">
           <div>
-            <h6 class="text-uppercase text-secondary fw-bold mb-1">Scan Timeline</h6>
-            <div class="small text-secondary mb-2">Shows cumulative completed scans over time</div>
+            <h6 class="text-uppercase text-secondary fw-bold mb-1" style="font-size: 0.95rem;">Scan Timeline</h6>
+            <div class="text-secondary mb-2" style="font-size: 0.875rem;">Cumulative completed scans over time</div>
             <!-- Timeline Filter Dropdown -->
             <div class="d-flex align-items-center mt-1 flex-wrap">
-              <label for="scanSourceFilter" class="me-2 small text-secondary mb-0">Source:</label>
-              <select id="scanSourceFilter" class="form-select form-select-sm bg-dark text-light border-secondary" style="width:auto; min-width:200px;">
+              <label for="scanSourceFilter" class="me-2 text-secondary mb-0" style="font-size: 0.875rem;">Source:</label>
+              <select id="scanSourceFilter" class="form-select form-select-sm bg-dark text-light border-secondary" style="width:auto; min-width:200px; font-size: 0.875rem;">
                 <option value="all" selected>All Scans</option>
                 <option value="cli">CLI Scans Only</option>
                 <option value="ondemand">On-Demand Scans Only</option>
               </select>
 
-              <label for="timelineFilter" class="ms-3 me-2 small text-secondary mb-0">View:</label>
-              <select id="timelineFilter" class="form-select form-select-sm bg-dark text-light border-secondary" style="width:auto; min-width:180px;">
-                <option value="all" selected>All scans (100%)</option>
-                <option value="first">First 25% of scans</option>
-                <option value="latest">Latest 25% of scans</option>
-                <option value="middle">Middle 50% of scans</option>
+              <label for="timelineFilter" class="ms-3 me-2 text-secondary mb-0" style="font-size: 0.875rem;">View:</label>
+              <select id="timelineFilter" class="form-select form-select-sm bg-dark text-light border-secondary" style="width:auto; min-width:180px; font-size: 0.875rem;">
+                <option value="all" selected>All scans</option>
+                <option value="first">First 25%</option>
+                <option value="latest">Latest 25%</option>
+                <option value="middle">Middle 50%</option>
               </select>
             </div>
           </div>
@@ -453,12 +453,12 @@ body.light-theme hr {
             <!-- html legend (top-right) -->
             <div class="custom-legend" id="scanTimelineLegend" role="list" aria-label="Scan timeline legend" style="margin-right:10px;">
               <span class="legend-item" data-group="started" role="listitem" title="Scan started" style="margin-right:15px;">
-                <span class="legend-swatch" style="background:#0d6efd;"></span>
-                <span class="legend-text">Scan started</span>
+                <span class="legend-swatch" style="background:#0d6efd; width: 14px; height: 14px; display: inline-block; border-radius: 2px; margin-right: 6px;"></span>
+                <span class="legend-text" style="font-size: 0.875rem; font-weight: 500;">Scan started</span>
               </span>
               <span class="legend-item" data-group="completed" role="listitem" title="Scan completed">
-                <span class="legend-swatch" style="background:#ffc107;"></span>
-                <span class="legend-text">Scan completed</span>
+                <span class="legend-swatch" style="background:#ffc107; width: 14px; height: 14px; display: inline-block; border-radius: 2px; margin-right: 6px;"></span>
+                <span class="legend-text" style="font-size: 0.875rem; font-weight: 500;">Scan completed</span>
               </span>
             </div>
 
@@ -474,13 +474,9 @@ body.light-theme hr {
           </div>
         </div>
 
-        <div class="card-body" style="min-height: 420px;">
-          <div id="scanTimelineWrap" class="chart-canvas-wrap">
+        <div class="card-body" style="min-height: 420px; padding-bottom: 1.5rem;">
+          <div id="scanTimelineWrap" class="chart-canvas-wrap" style="padding-bottom: 0.5rem; overflow: visible;">
             <div id="scanTimeline" data-scantimes='{{ scan_times | tojson | safe }}'></div>
-          </div>
-
-          <div class="mt-3 small text-secondary">
-            Parsed from collected nmap data. Other files were used as fallback to forecast scan times.
           </div>
         </div>
       </div>
@@ -772,7 +768,8 @@ function computeTimelineCanvasWidth(durationMs) {
 }
 
 /* Robust retrieval of the templated scan_times variable (client-side) */
-function _getScanTimesFromPage() {
+// Make this function globally available for the D3 timeline script
+window._getScanTimesFromPage = function _getScanTimesFromPage() {
   let baseScanTimes = [];
 
   // Get base scan times from the page
@@ -813,15 +810,28 @@ function _getScanTimesFromPage() {
     // All scans (both CLI and on-demand)
     return [...baseScanTimes, ...onDemandScans];
   }
-}
+};
 
 /* Extract host key (IPv4 preferred, otherwise base filename w/o extensions) */
 function _extractHostKey(label) {
   if (!label) return null;
-  const ipv4 = String(label).match(/(\d{1,3}(?:\.\d{1,3}){3})/);
-  if (ipv4 && ipv4[1]) return ipv4[1];
+  // First try to extract IPv4 address from anywhere in the string
+  const ipv4 = String(label).match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
+  if (ipv4 && ipv4[1]) {
+    // Validate it's a proper IP (each octet 0-255)
+    const parts = ipv4[1].split('.');
+    if (parts.length === 4 && parts.every(p => {
+      const num = parseInt(p, 10);
+      return !isNaN(num) && num >= 0 && num <= 255;
+    })) {
+      return ipv4[1];
+    }
+  }
+  // Fallback: extract base filename without extension
   let base = String(label).split('/').pop();
   base = base.replace(/\.(xml|nmap|gnmap|xml\.gz|nmap\.gz|gnmap\.gz)$/i, '');
+  // Remove timestamp prefix if present (e.g., "2024-01-15_10-30-45 - ")
+  base = base.replace(/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\s*-\s*/, '');
   return base || label;
 }
 
@@ -829,33 +839,83 @@ function _extractHostKey(label) {
 function adjustTilesToUniqueHosts() {
   try {
     const scanTimes = _getScanTimesFromPage();
+    const totalEl = document.getElementById('hostsTotalValue');
+    const scannedEl = document.getElementById('hostsScannedValue');
+    const note = document.getElementById('hostsAdjustedNote');
+    
+    // Store original values if not already stored (only once on page load)
+    if (totalEl && !totalEl.dataset.originalValue) {
+      totalEl.dataset.originalValue = totalEl.textContent;
+    }
+    if (scannedEl && !scannedEl.dataset.originalValue) {
+      scannedEl.dataset.originalValue = scannedEl.textContent;
+    }
+
     if (!Array.isArray(scanTimes) || scanTimes.length === 0) {
-      // no scan files found; leave server values intact
-      return;
-    }
-
-    const hostSet = new Set();
-    for (const s of scanTimes) {
-      const key = _extractHostKey(s.label || s.path || '');
-      if (key) hostSet.add(key);
-    }
-
-    const uniqueCount = hostSet.size || 0;
-
-    if (uniqueCount > 0) {
-      const totalEl = document.getElementById('hostsTotalValue');
-      const scannedEl = document.getElementById('hostsScannedValue');
+      // no scan files found for current filter; show 0
       if (totalEl) {
-        totalEl.textContent = uniqueCount;
-        const note = document.getElementById('hostsAdjustedNote');
+        totalEl.textContent = '0';
         if (note) note.style.display = 'block';
       }
       if (scannedEl) {
-        scannedEl.textContent = uniqueCount;
+        scannedEl.textContent = '0';
       }
+      return;
+    }
+
+    // Extract unique hosts from the filtered scans only
+    const hostSet = new Set();
+    
+    for (const s of scanTimes) {
+      // Skip enrichment scans
+      const label = s.label || s.path || '';
+      if (label.toLowerCase().includes('enrichment')) {
+        continue;
+      }
+      
+      // Extract host key from label/path to get unique hosts
+      // Try both label and path
+      const labelKey = _extractHostKey(label);
+      const pathKey = s.path ? _extractHostKey(s.path) : null;
+      
+      // Use whichever gives us a valid IP
+      const key = labelKey || pathKey;
+      
+      if (key && key !== 'enrichment' && !key.toLowerCase().includes('enrichment')) {
+        // Only add valid IP addresses (validate format)
+        const ipRegex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+        const ipMatch = key.match(ipRegex);
+        if (ipMatch) {
+          // Validate each octet is 0-255
+          const isValid = ipMatch.slice(1, 5).every(octet => {
+            const num = parseInt(octet, 10);
+            return !isNaN(num) && num >= 0 && num <= 255;
+          });
+          if (isValid) {
+            hostSet.add(key);
+          }
+        }
+      }
+    }
+
+    // Use unique host count from the filtered scans
+    const uniqueCount = hostSet.size;
+
+    // Always update the count, even if 0
+    if (totalEl) {
+      totalEl.textContent = uniqueCount;
+      if (note) note.style.display = 'block';
+    }
+    if (scannedEl) {
+      scannedEl.textContent = uniqueCount;
     }
   } catch (e) {
     console.warn("adjustTilesToUniqueHosts:", e);
+    // On error, at least try to show 0
+    const totalEl = document.getElementById('hostsTotalValue');
+    const scannedEl = document.getElementById('hostsScannedValue');
+    if (totalEl) totalEl.textContent = '0';
+    if (scannedEl) scannedEl.textContent = '0';
   }
 }
 
@@ -987,18 +1047,44 @@ document.addEventListener('DOMContentLoaded', () => {
     scanSourceFilterSel.addEventListener("change", async () => {
       // Fetch on-demand scans if selecting on-demand or all, and not already loaded
       const selectedValue = scanSourceFilterSel.value;
-      if ((selectedValue === 'ondemand' || selectedValue === 'all') && window.onDemandScans.length === 0) {
+      if ((selectedValue === 'ondemand' || selectedValue === 'all') && (!window.onDemandScans || window.onDemandScans.length === 0)) {
         await fetchOnDemandScans();
       }
-      // Re-render timeline with filtered scans
-      try { renderScanTimelineD3(); } catch (e) { console.error(e); }
-      // Also update tile counts
-      try { adjustTilesToUniqueHosts(); } catch (e) { console.warn(e); }
+      // Re-render timeline with filtered scans - use a small delay to ensure data is ready
+      setTimeout(() => {
+        try { 
+          if (typeof renderScanTimelineD3 === 'function') {
+            renderScanTimelineD3(); 
+          }
+        } catch (e) { 
+          console.error("Error rendering timeline:", e); 
+        }
+      }, 100);
+      // Also update tile counts - force update immediately
+      try { 
+        adjustTilesToUniqueHosts(); 
+      } catch (e) { 
+        console.warn("Error updating host counts:", e); 
+      }
     });
   }
 
-  // Fetch on-demand scans in the background on page load
-  fetchOnDemandScans().catch(e => console.error('Background fetch failed:', e));
+  // Fetch on-demand scans in the background on page load, then re-render timeline if needed
+  fetchOnDemandScans().then(() => {
+    // Re-render timeline after ondemand scans are loaded to include them if "All Scans" is selected
+    const scanSourceFilter = document.getElementById('scanSourceFilter')?.value || 'all';
+    if (scanSourceFilter === 'all' || scanSourceFilter === 'ondemand') {
+      setTimeout(() => {
+        try {
+          if (typeof renderScanTimelineD3 === 'function') {
+            renderScanTimelineD3();
+          }
+        } catch (e) {
+          console.warn('Error re-rendering timeline after ondemand scans loaded:', e);
+        }
+      }, 200);
+    }
+  }).catch(e => console.error('Background fetch failed:', e));
 
   // Helper to get scan count from data
   function getScanCountFromData() {

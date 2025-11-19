@@ -72,6 +72,16 @@ async def ingest_directory(path, session, dedupe=True, verbose=0):
         if not file.is_file():
             continue
 
+        # Skip enrichment files and directories - enrichment results should not be ingested
+        if "enrichment" in file.parts:
+            log(f"[i] Skipping enrichment file: {file}", level=2, verbose=verbose)
+            continue
+
+        # Skip files that are enrichment results (check filename pattern)
+        if file.name.startswith("enrichment-") or "enrichment" in file.name.lower():
+            log(f"[i] Skipping enrichment result file: {file}", level=2, verbose=verbose)
+            continue
+
         # Skip workspace metadata files and hidden files
         if file.name.startswith(".") or file.name == ".cygor-workspace.json":
             log(f"[i] Skipping hidden or workspace metadata file: {file}", level=2, verbose=verbose)
@@ -157,6 +167,11 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
     log(f"[*] Processing file: {file}", level=2, verbose=verbose)
     if not file.exists():
         log(f"[!] File not found: {file}", level=0, verbose=verbose)
+        return
+
+    # Skip enrichment files - enrichment results should not be ingested into the database
+    if "enrichment" in file.parts or file.name.startswith("enrichment-") or "enrichment" in file.name.lower():
+        log(f"[i] Skipping enrichment file (not ingesting): {file}", level=2, verbose=verbose)
         return
 
     # ---------------------------------------------------
@@ -264,6 +279,19 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
         except Exception as e:
             log(f"[!] Failed to parse JSON {file}: {e}", level=0, verbose=verbose)
             return
+
+        # Skip enrichment JSON files - they have a specific structure with "ioc", "type", and "enrichments"
+        if isinstance(data, list) and len(data) > 0:
+            # Check if first item has enrichment structure
+            first_item = data[0] if isinstance(data[0], dict) else {}
+            if "ioc" in first_item and "enrichments" in first_item:
+                log(f"[i] Skipping enrichment JSON file: {file}", level=2, verbose=verbose)
+                return
+        elif isinstance(data, dict):
+            # Check if it's a single enrichment result
+            if "ioc" in data and "enrichments" in data:
+                log(f"[i] Skipping enrichment JSON file: {file}", level=2, verbose=verbose)
+                return
 
         # ---------- LOCKON ----------
         if module_hint == "lockon" or (
