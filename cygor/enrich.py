@@ -619,62 +619,234 @@ class CensysEnricher:
 
 
 class WaybackMachineEnricher:
-    """Wayback Machine CDX API enrichment"""
+    """Wayback Machine CDX API enrichment with response download capability"""
 
-    def __init__(self):
+    def __init__(self, output_dir: Optional[str] = None, download_responses: bool = False):
         # No API key required - public API
         self.base_url = "http://web.archive.org/cdx/search/cdx"
+        self.wayback_base = "https://web.archive.org/web"
+        self.output_dir = output_dir
+        self.download_responses = download_responses
 
-    def enrich_domain(self, domain: str) -> Dict[str, Any]:
-        """Enrich domain with Wayback Machine historical data"""
+    def _get_total_count(self, domain: str) -> int:
+        """Get the total count of captures for a domain (fast query)"""
         try:
-            # Query for domain captures with JSON output
             params = {
                 "url": domain,
+                "matchType": "domain",  # Include all subdomains
+                "showNumPages": "true",
+                "pageSize": "1"
+            }
+            response = requests.get(self.base_url, params=params, timeout=10)
+            if response.status_code == 200:
+                # The response is just a number
+                try:
+                    num_pages = int(response.text.strip())
+                    # Each page has multiple items, estimate total (conservative)
+                    # CDX typically returns ~3000 items per page
+                    return num_pages * 3000
+                except:
+                    return 0
+            return 0
+        except:
+            return 0
+
+    def _download_archived_response(self, url: str, timestamp: str, output_path: Path) -> bool:
+        """Download an archived response from Wayback Machine
+
+        Args:
+            url: The original URL
+            timestamp: The timestamp of the capture
+            output_path: Where to save the response
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Construct Wayback URL with 'id_' flag to get raw response without Wayback headers
+            wayback_url = f"{self.wayback_base}/{timestamp}id_/{url}"
+
+            response = requests.get(wayback_url, timeout=30, stream=True)
+            if response.status_code == 200:
+                output_path.write_bytes(response.content)
+                return True
+            return False
+        except Exception as e:
+            print(f"{Fore.YELLOW}[!] Failed to download {url}: {e}{Style.RESET_ALL}")
+            return False
+
+    def enrich_domain(self, domain: str) -> Dict[str, Any]:
+        """Enrich domain with Wayback Machine historical data
+
+        This method:
+        1. Gets the total count of archived snapshots
+        2. Retrieves a sample of unique URLs across time
+        3. Optionally downloads archived responses for analysis
+        """
+        try:
+            # First, get the total count (fast query)
+            total_count = self._get_total_count(domain)
+
+            # Try multiple query strategies to get data
+            # Strategy 1: Try with wildcard for all pages
+            params = {
+                "url": f"*.{domain}/*",
                 "output": "json",
-                "fl": "timestamp,original,mimetype,statuscode",
-                "collapse": "timestamp:8",  # Collapse to daily snapshots
-                "limit": "100"
+                "fl": "timestamp,original,mimetype,statuscode,digest",
+                "collapse": "urlkey",  # One result per unique URL
+                "filter": "statuscode:200",
+                "limit": "1000"
             }
 
-            response = requests.get(self.base_url, params=params, timeout=15)
+            response = requests.get(self.base_url, params=params, timeout=30)
+
+            # If no results, try without wildcard subdomain
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    if len(data) <= 1:  # Only header or empty
+                        # Try strategy 2: exact domain match
+                        params["url"] = f"{domain}/*"
+                        response = requests.get(self.base_url, params=params, timeout=30)
+                        data = response.json()
+                except:
+                    # Try strategy 2 if parsing failed
+                    params["url"] = f"{domain}/*"
+                    response = requests.get(self.base_url, params=params, timeout=30)
+                    data = response.json()
+            else:
+                # Try strategy 2 if first request failed
+                params["url"] = f"{domain}/*"
+                response = requests.get(self.base_url, params=params, timeout=30)
+                data = response.json()
 
             if response.status_code == 200:
-                data = response.json()
 
                 # First row is header, rest are data
                 if len(data) > 1:
                     captures = []
                     timestamps = []
+                    unique_urls = set()
+                    file_extensions = {}
+                    paths = set()
+                    parameters = set()
+                    subdomains = set()
 
                     for row in data[1:]:  # Skip header row
-                        timestamp, url, mimetype, statuscode = row
+                        timestamp, url, mimetype, statuscode, digest = row
                         timestamps.append(timestamp)
+                        unique_urls.add(url)
                         captures.append({
                             "timestamp": timestamp,
                             "url": url,
                             "mimetype": mimetype,
-                            "statuscode": statuscode
+                            "statuscode": statuscode,
+                            "digest": digest
                         })
+
+                        # Extract additional intelligence from URLs
+                        try:
+                            from urllib.parse import urlparse, parse_qs
+                            parsed = urlparse(url)
+
+                            # Extract subdomain
+                            if parsed.hostname:
+                                subdomain = parsed.hostname
+                                if subdomain != domain and domain in subdomain:
+                                    subdomains.add(subdomain)
+
+                            # Extract path
+                            if parsed.path and parsed.path != '/':
+                                paths.add(parsed.path)
+
+                            # Extract file extension
+                            path = parsed.path
+                            if '.' in path:
+                                ext = path.rsplit('.', 1)[-1].split('/')[0].lower()
+                                if ext and len(ext) <= 10:  # Reasonable extension length
+                                    file_extensions[ext] = file_extensions.get(ext, 0) + 1
+
+                            # Extract parameters
+                            if parsed.query:
+                                params = parse_qs(parsed.query)
+                                for param in params.keys():
+                                    parameters.add(param)
+                        except:
+                            pass
 
                     # Calculate first and last seen
                     first_seen = min(timestamps) if timestamps else ""
                     last_seen = max(timestamps) if timestamps else ""
 
+                    # Get top file extensions
+                    top_extensions = sorted(file_extensions.items(), key=lambda x: x[1], reverse=True)[:10]
+
+                    # Download archived responses if requested
+                    downloaded_files = []
+                    if self.download_responses and self.output_dir:
+                        from pathlib import Path
+                        import hashlib
+
+                        output_path = Path(self.output_dir)
+                        wayback_dir = output_path / f"wayback_{domain.replace('/', '_')}"
+                        wayback_dir.mkdir(parents=True, exist_ok=True)
+
+                        print(f"{Fore.CYAN}[*] Downloading archived responses for {domain}...{Style.RESET_ALL}")
+
+                        # Download a sample of responses (limit to avoid overwhelming)
+                        download_limit = min(50, len(captures))
+                        for i, capture in enumerate(captures[:download_limit]):
+                            # Create filename from URL and timestamp
+                            url_hash = hashlib.md5(capture['url'].encode()).hexdigest()[:8]
+                            filename = f"{capture['timestamp']}_{url_hash}.html"
+                            file_path = wayback_dir / filename
+
+                            if self._download_archived_response(capture['url'], capture['timestamp'], file_path):
+                                downloaded_files.append(str(file_path))
+
+                            # Progress indicator
+                            if (i + 1) % 10 == 0:
+                                print(f"{Fore.CYAN}[*] Downloaded {i + 1}/{download_limit} responses...{Style.RESET_ALL}")
+
+                        if downloaded_files:
+                            print(f"{Fore.GREEN}[+] Downloaded {len(downloaded_files)} archived responses to {wayback_dir}{Style.RESET_ALL}")
+
+                            # Create index file
+                            index_file = wayback_dir / "index.txt"
+                            index_content = []
+                            for capture in captures[:download_limit]:
+                                url_hash = hashlib.md5(capture['url'].encode()).hexdigest()[:8]
+                                filename = f"{capture['timestamp']}_{url_hash}.html"
+                                index_content.append(f"{filename}|{capture['url']}|{capture['timestamp']}")
+
+                            index_file.write_text('\n'.join(index_content))
+
                     result = {
                         "source": "wayback",
                         "domain": domain,
-                        "total_captures": len(captures),
+                        "total_snapshots_estimated": total_count,
+                        "unique_urls_found": len(unique_urls),
+                        "sample_size": len(captures),
                         "first_seen": first_seen,
                         "last_seen": last_seen,
+                        "subdomains_found": sorted(list(subdomains))[:20],
+                        "unique_paths": len(paths),
+                        "unique_parameters": sorted(list(parameters))[:30],
+                        "file_extensions": dict(top_extensions),
                         "recent_captures": captures[:10],  # Most recent 10
+                        "downloaded_responses": len(downloaded_files) if downloaded_files else 0,
+                        "download_directory": str(wayback_dir) if downloaded_files else None,
                         "link": f"https://web.archive.org/web/*/{domain}"
                     }
                     return result
                 else:
-                    return {"source": "wayback", "domain": domain, "total_captures": 0, "message": "No captures found"}
+                    return {"source": "wayback", "domain": domain, "total_snapshots_estimated": total_count, "unique_urls_found": 0, "message": "No captures found"}
             else:
-                return {"source": "wayback", "error": f"HTTP {response.status_code}"}
+                return {"source": "wayback", "error": f"HTTP {response.status_code}", "total_snapshots_estimated": total_count}
+        except requests.exceptions.Timeout:
+            return {"source": "wayback", "error": "Request timed out - domain may have too many captures. Try a more specific subdomain."}
+        except requests.exceptions.RequestException as e:
+            return {"source": "wayback", "error": f"Connection error: {str(e)}"}
         except Exception as e:
             return {"source": "wayback", "error": str(e)}
 
@@ -1130,7 +1302,9 @@ def enrich_ioc(ioc: str, config: EnrichmentConfig, sources: Optional[List[str]] 
 
         # Wayback Machine (no API key required)
         if 'wayback' in sources or 'all' in sources:
-            enricher = WaybackMachineEnricher()
+            # Enable response downloads if output_dir is specified
+            download_responses = output_dir is not None
+            enricher = WaybackMachineEnricher(output_dir=output_dir, download_responses=download_responses)
             result["enrichments"].append(enricher.enrich_domain(ioc))
 
         # Common Crawl (no API key required)
@@ -1455,7 +1629,10 @@ def print_enrichment_result(result: Dict[str, Any], format_type: str = "text"):
 
         elif source == "wayback":
             # Special formatting for Wayback Machine
-            print(f"  Total Captures: {enrichment.get('total_captures', 0)}")
+            print(f"  {Fore.YELLOW}Total Snapshots (Estimated):{Style.RESET_ALL} {enrichment.get('total_snapshots_estimated', 0):,}")
+            print(f"  Unique URLs Found: {enrichment.get('unique_urls_found', 0):,}")
+            print(f"  Unique Paths: {enrichment.get('unique_paths', 0):,}")
+            print(f"  Sample Size: {enrichment.get('sample_size', 0)}")
 
             if enrichment.get("first_seen"):
                 first_seen = enrichment["first_seen"]
@@ -1468,17 +1645,46 @@ def print_enrichment_result(result: Dict[str, Any], format_type: str = "text"):
                 formatted_last = f"{last_seen[:4]}-{last_seen[4:6]}-{last_seen[6:8]}"
                 print(f"  Last Seen: {formatted_last}")
 
+            # Subdomains
+            if enrichment.get("subdomains_found"):
+                print(f"\n  {Fore.CYAN}Subdomains Discovered:{Style.RESET_ALL}")
+                for subdomain in enrichment["subdomains_found"][:10]:
+                    print(f"    - {subdomain}")
+                if len(enrichment["subdomains_found"]) > 10:
+                    print(f"    ... and {len(enrichment['subdomains_found']) - 10} more")
+
+            # File extensions
+            if enrichment.get("file_extensions"):
+                print(f"\n  {Fore.CYAN}File Extensions:{Style.RESET_ALL}")
+                for ext, count in list(enrichment["file_extensions"].items())[:10]:
+                    print(f"    .{ext}: {count} URLs")
+
+            # Parameters
+            if enrichment.get("unique_parameters"):
+                print(f"\n  {Fore.CYAN}URL Parameters Found:{Style.RESET_ALL}")
+                params = enrichment["unique_parameters"][:15]
+                print(f"    {', '.join(params)}")
+                if len(enrichment.get("unique_parameters", [])) > 15:
+                    print(f"    ... and {len(enrichment['unique_parameters']) - 15} more")
+
+            # Downloaded responses info
+            if enrichment.get("downloaded_responses", 0) > 0:
+                print(f"\n  {Fore.GREEN}Downloaded Archived Responses:{Style.RESET_ALL}")
+                print(f"    Count: {enrichment['downloaded_responses']}")
+                print(f"    Directory: {enrichment['download_directory']}")
+
             if enrichment.get("recent_captures"):
-                print(f"\n  {Fore.CYAN}Recent Captures:{Style.RESET_ALL}")
+                print(f"\n  {Fore.CYAN}Sample URLs:{Style.RESET_ALL}")
                 for capture in enrichment["recent_captures"][:5]:
                     timestamp = capture.get("timestamp", "")
                     formatted_ts = f"{timestamp[:4]}-{timestamp[4:6]}-{timestamp[6:8]}"
-                    mime = capture.get("mimetype", "unknown")
-                    status = capture.get("statuscode", "?")
-                    print(f"    {formatted_ts}: {mime} (HTTP {status})")
+                    url = capture.get("url", "")
+                    # Truncate URL for display
+                    url_display = url if len(url) <= 70 else url[:67] + "..."
+                    print(f"    {formatted_ts}: {url_display}")
 
             if enrichment.get("link"):
-                print(f"  Link: {enrichment['link']}")
+                print(f"\n  Link: {enrichment['link']}")
 
         elif source == "commoncrawl":
             # Special formatting for Common Crawl
@@ -1666,15 +1872,20 @@ Available sources:
     if args.sources:
         # Normalize source names (vt -> virustotal)
         normalized_sources = []
+        use_all = False
         for src in args.sources:
             if src == 'all':
-                sources = None  # Use all configured sources
+                use_all = True
                 break
             elif src == 'vt':
                 normalized_sources.append('virustotal')
             else:
                 normalized_sources.append(src)
-        if sources is not None:
+
+        # Set sources based on what was specified
+        if use_all:
+            sources = None  # Use all configured sources
+        else:
             sources = normalized_sources
 
     # Determine output directory for Dehashed processed files
