@@ -130,6 +130,27 @@
               <div id="urlscanStatus" class="mt-2"></div>
             </div>
 
+            <!-- Censys API Credentials -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                <i class="bi bi-search me-2"></i>Censys API Credentials
+              </label>
+              <div class="input-group">
+                <input type="password" class="form-control" id="censysKey" placeholder="API_ID:SECRET">
+                <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('censysKey')">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn btn-outline-info" type="button" onclick="testKey('censys')">
+                  <i class="bi bi-check-circle me-1"></i>Test
+                </button>
+              </div>
+              <div class="form-text">
+                Get your API credentials from <a href="https://censys.io/account/api" target="_blank">https://censys.io/account/api</a>
+                <br><strong>Format:</strong> API_ID:SECRET (e.g., xxxxx-xxxx-xxxx-xxxx:yyyyyyyyyyyyyyyy)
+              </div>
+              <div id="censysStatus" class="mt-2"></div>
+            </div>
+
             <!-- Action Buttons -->
             <div class="d-flex gap-3 mt-4">
               <button type="button" class="btn btn-secondary" onclick="window.location.href='/tasks'">
@@ -162,7 +183,8 @@ document.addEventListener('DOMContentLoaded', function() {
       virustotal: document.getElementById('virustotalKey').value,
       abuseipdb: document.getElementById('abuseipdbKey').value,
       otx: document.getElementById('otxKey').value,
-      urlscan: document.getElementById('urlscanKey').value
+      urlscan: document.getElementById('urlscanKey').value,
+      censys: document.getElementById('censysKey').value
     };
 
     try {
@@ -216,6 +238,16 @@ async function loadApiKeys() {
           document.getElementById('urlscanKey').value = data.api_keys.urlscan;
           document.getElementById('urlscanKey').placeholder = '••••••••' + data.api_keys.urlscan.slice(-4);
         }
+        if (data.api_keys.censys) {
+          document.getElementById('censysKey').value = data.api_keys.censys;
+          // For Censys, mask the secret part (after the colon)
+          const parts = data.api_keys.censys.split(':');
+          if (parts.length === 2) {
+            document.getElementById('censysKey').placeholder = parts[0] + ':••••' + parts[1].slice(-4);
+          } else {
+            document.getElementById('censysKey').placeholder = '••••••••' + data.api_keys.censys.slice(-4);
+          }
+        }
       }
     }
   } catch (error) {
@@ -242,7 +274,8 @@ async function testKey(source) {
     'virustotal': 'virustotalKey',
     'abuseipdb': 'abuseipdbKey',
     'otx': 'otxKey',
-    'urlscan': 'urlscanKey'
+    'urlscan': 'urlscanKey',
+    'censys': 'censysKey'
   };
 
   const fieldId = keyMap[source];

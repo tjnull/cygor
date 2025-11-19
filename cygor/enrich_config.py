@@ -45,6 +45,12 @@ SOURCES = {
         "env_var": "URLSCAN_API_KEY",
         "url": "https://urlscan.io/user/profile/",
         "test_url": "https://urlscan.io/api/v1/search/?q=domain:google.com"
+    },
+    "censys": {
+        "name": "Censys",
+        "env_var": "CENSYS_API_ID",
+        "url": "https://censys.io/account/api",
+        "test_url": "https://search.censys.io/api/v2/hosts/8.8.8.8"
     }
 }
 
@@ -156,6 +162,22 @@ def test_api_key(source: str, api_key: str) -> tuple[bool, Optional[str]]:
             try:
                 error_data = response.json()
                 return False, error_data.get("message", f"HTTP {response.status_code}")
+            except:
+                return False, f"HTTP {response.status_code}"
+
+        elif source == "censys":
+            # Censys requires API ID:SECRET format
+            if ":" not in api_key:
+                return False, "API key must be in format API_ID:SECRET (e.g., xxxxx-xxxx-xxxx-xxxx:yyyyyyyyyyyyyyyy)"
+
+            api_id, api_secret = api_key.split(":", 1)
+            url = "https://search.censys.io/api/v2/hosts/8.8.8.8"
+            response = requests.get(url, auth=(api_id, api_secret), timeout=10)
+            if response.status_code == 200:
+                return True, None
+            try:
+                error_data = response.json()
+                return False, error_data.get("error", f"HTTP {response.status_code}")
             except:
                 return False, f"HTTP {response.status_code}"
 
@@ -403,7 +425,9 @@ Examples:
   # Show info about a specific source
   cygor enrich config-manager info virustotal
 
-Available sources: shodan, virustotal, abuseipdb, otx, urlscan
+Available sources: shodan, virustotal, abuseipdb, otx, urlscan, censys
+
+Note: Censys requires API ID:SECRET format (e.g., xxxxx-xxxx-xxxx-xxxx:yyyyyyyyyyyyyyyy)
         """
     )
 

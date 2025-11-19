@@ -11,13 +11,45 @@
       <button class="btn btn-primary btn-lg px-4 dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
         <i class="bi bi-plus-circle me-2 fs-5"></i>New Task
       </button>
-      <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark">
-        <li><a class="dropdown-item" href="/tasks/scan/new"><i class="bi bi-radar me-2"></i>Port Discovery Scan</a></li>
-        <li><a class="dropdown-item" href="/credrecon/new"><i class="bi bi-shield-check me-2"></i>Credential Test</a></li>
-        <li><a class="dropdown-item" href="/tasks/parse/new"><i class="bi bi-file-earmark-code me-2"></i>Parse Scan Results</a></li>
-        <li><a class="dropdown-item" href="/tasks/enrich/new"><i class="bi bi-search me-2"></i>Enrich IOCs</a></li>
-        <li><hr class="dropdown-divider"></li>
-        <li><a class="dropdown-item" href="/tasks/module/new"><i class="bi bi-gear-fill me-2"></i>Run Module</a></li>
+      <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark" style="min-width: 280px;">
+        <!-- Scanning & Discovery -->
+        <li class="dropdown-header px-3 py-2" style="font-weight: 600; font-size: 0.85rem; color: #6c757d; letter-spacing: 0.5px;">
+          <i class="bi bi-search me-1"></i>SCANNING & DISCOVERY
+        </li>
+        <li><a class="dropdown-item py-2 px-3" href="/tasks/scan/new">
+          <i class="bi bi-radar me-2 fs-5"></i>
+          <span class="fw-semibold">Port Discovery Scan</span>
+        </a></li>
+        <li><a class="dropdown-item py-2 px-3" href="/tasks/enrich/new">
+          <i class="bi bi-binoculars me-2 fs-5"></i>
+          <span class="fw-semibold">Enrich IOCs</span>
+        </a></li>
+
+        <li><hr class="dropdown-divider my-2"></li>
+
+        <!-- Authentication & Credentials -->
+        <li class="dropdown-header px-3 py-2" style="font-weight: 600; font-size: 0.85rem; color: #6c757d; letter-spacing: 0.5px;">
+          <i class="bi bi-shield-lock me-1"></i>AUTHENTICATION
+        </li>
+        <li><a class="dropdown-item py-2 px-3" href="/credrecon/new">
+          <i class="bi bi-shield-check me-2 fs-5"></i>
+          <span class="fw-semibold">Credential Test</span>
+        </a></li>
+
+        <li><hr class="dropdown-divider my-2"></li>
+
+        <!-- Data Processing -->
+        <li class="dropdown-header px-3 py-2" style="font-weight: 600; font-size: 0.85rem; color: #6c757d; letter-spacing: 0.5px;">
+          <i class="bi bi-code-square me-1"></i>DATA PROCESSING
+        </li>
+        <li><a class="dropdown-item py-2 px-3" href="/tasks/parse/new">
+          <i class="bi bi-file-earmark-code me-2 fs-5"></i>
+          <span class="fw-semibold">Parse Scan Results</span>
+        </a></li>
+        <li><a class="dropdown-item py-2 px-3" href="/tasks/module/new">
+          <i class="bi bi-gear-fill me-2 fs-5"></i>
+          <span class="fw-semibold">Run Module</span>
+        </a></li>
       </ul>
     </div>
   </div>

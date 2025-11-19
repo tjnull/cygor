@@ -57,7 +57,8 @@ class EnrichmentConfig:
             'VT_API_KEY': 'virustotal',
             'OTX_API_KEY': 'otx',
             'ABUSEIPDB_API_KEY': 'abuseipdb',
-            'URLSCAN_API_KEY': 'urlscan'
+            'URLSCAN_API_KEY': 'urlscan',
+            'CENSYS_API_ID': 'censys'  # Format: API_ID:SECRET
         }
 
         for env_key, config_key in env_keys.items():
@@ -489,6 +490,133 @@ class URLScanEnricher:
             return {"source": "urlscan", "error": str(e)}
 
 
+class CensysEnricher:
+    """Censys API enrichment"""
+
+    def __init__(self, api_key: str):
+        # Censys uses API_ID:SECRET format
+        if ":" in api_key:
+            self.api_id, self.api_secret = api_key.split(":", 1)
+        else:
+            raise ValueError("Censys API key must be in format API_ID:SECRET")
+        self.base_url = "https://search.censys.io/api/v2"
+
+    def enrich_ip(self, ip: str) -> Dict[str, Any]:
+        """Enrich IP with Censys data"""
+        url = f"{self.base_url}/hosts/{ip}"
+
+        try:
+            response = requests.get(url, auth=(self.api_id, self.api_secret), timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                result_data = data.get("result", {})
+
+                # Extract services
+                services = []
+                for service_data in result_data.get("services", []):
+                    service_info = {
+                        "port": service_data.get("port"),
+                        "transport": service_data.get("transport_protocol", "tcp"),
+                        "service_name": service_data.get("service_name", ""),
+                        "extended_service_name": service_data.get("extended_service_name", ""),
+                        "banner": service_data.get("banner", "")[:500],
+                        "timestamp": service_data.get("observed_at", ""),
+                    }
+
+                    # Extract software/version info
+                    software = service_data.get("software", [])
+                    if software:
+                        service_info["software"] = [
+                            {"vendor": s.get("vendor"), "product": s.get("product"), "version": s.get("version")}
+                            for s in software
+                        ]
+
+                    # Extract TLS/SSL info
+                    if "tls" in service_data:
+                        tls_info = service_data["tls"]
+                        cert = tls_info.get("certificates", {}).get("leaf_data", {})
+                        if cert:
+                            service_info["tls_subject"] = cert.get("subject", {}).get("common_name", [""])[0]
+                            service_info["tls_issuer"] = cert.get("issuer", {}).get("common_name", [""])[0]
+                            service_info["tls_not_after"] = cert.get("validity", {}).get("end", "")
+
+                    # Extract HTTP info
+                    if "http" in service_data:
+                        http_info = service_data["http"]
+                        if "response" in http_info:
+                            service_info["http_status"] = http_info["response"].get("status_code")
+                            service_info["http_title"] = http_info["response"].get("body_html_title", "")
+                            service_info["http_server"] = http_info["response"].get("headers", {}).get("Server", "")
+
+                    services.append(service_info)
+
+                result = {
+                    "source": "censys",
+                    "ip": ip,
+                    "autonomous_system": result_data.get("autonomous_system", {}),
+                    "location": result_data.get("location", {}),
+                    "operating_system": result_data.get("operating_system", {}).get("product", ""),
+                    "dns": result_data.get("dns", {}),
+                    "services": services,
+                    "num_services": len(services),
+                    "last_updated": result_data.get("last_updated_at", ""),
+                    "link": f"https://search.censys.io/hosts/{ip}"
+                }
+                return result
+            else:
+                try:
+                    error_data = response.json()
+                    return {"source": "censys", "error": error_data.get("error", f"HTTP {response.status_code}")}
+                except:
+                    return {"source": "censys", "error": f"HTTP {response.status_code}"}
+        except Exception as e:
+            return {"source": "censys", "error": str(e)}
+
+    def enrich_domain(self, domain: str) -> Dict[str, Any]:
+        """Enrich domain with Censys data"""
+        # Search for hosts by domain name
+        url = f"{self.base_url}/hosts/search"
+        params = {"q": f"dns.names:{domain}", "per_page": 10}
+
+        try:
+            response = requests.get(url, auth=(self.api_id, self.api_secret), params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                hits = data.get("result", {}).get("hits", [])
+
+                # Extract IPs and basic info
+                resolved_ips = []
+                hosts_info = []
+                for hit in hits:
+                    ip = hit.get("ip", "")
+                    if ip:
+                        resolved_ips.append(ip)
+                        hosts_info.append({
+                            "ip": ip,
+                            "location": hit.get("location", {}),
+                            "autonomous_system": hit.get("autonomous_system", {}),
+                            "services": [s.get("port") for s in hit.get("services", [])]
+                        })
+
+                result = {
+                    "source": "censys",
+                    "domain": domain,
+                    "total_hosts": data.get("result", {}).get("total", 0),
+                    "resolved_ips": resolved_ips[:10],
+                    "hosts": hosts_info[:5],
+                    "link": f"https://search.censys.io/search?resource=hosts&q=dns.names%3A{domain}"
+                }
+                return result
+            else:
+                try:
+                    error_data = response.json()
+                    return {"source": "censys", "error": error_data.get("error", f"HTTP {response.status_code}")}
+                except:
+                    return {"source": "censys", "error": f"HTTP {response.status_code}"}
+        except Exception as e:
+            return {"source": "censys", "error": str(e)}
+
+
 def enrich_ioc(ioc: str, config: EnrichmentConfig, sources: Optional[List[str]] = None) -> Dict[str, Any]:
     """Enrich a single IOC with specified or all available sources
 
@@ -536,6 +664,11 @@ def enrich_ioc(ioc: str, config: EnrichmentConfig, sources: Optional[List[str]] 
             enricher = URLScanEnricher(config.get("urlscan"))
             result["enrichments"].append(enricher.enrich_ip(ioc))
 
+        # Censys
+        if 'censys' in sources and config.get("censys"):
+            enricher = CensysEnricher(config.get("censys"))
+            result["enrichments"].append(enricher.enrich_ip(ioc))
+
     elif ioc_type == "domain":
         # Shodan
         if 'shodan' in sources and config.get("shodan"):
@@ -555,6 +688,11 @@ def enrich_ioc(ioc: str, config: EnrichmentConfig, sources: Optional[List[str]] 
         # URLScan
         if 'urlscan' in sources and config.get("urlscan"):
             enricher = URLScanEnricher(config.get("urlscan"))
+            result["enrichments"].append(enricher.enrich_domain(ioc))
+
+        # Censys
+        if 'censys' in sources and config.get("censys"):
+            enricher = CensysEnricher(config.get("censys"))
             result["enrichments"].append(enricher.enrich_domain(ioc))
 
     return result
@@ -817,6 +955,52 @@ def print_enrichment_result(result: Dict[str, Any], format_type: str = "text"):
             if enrichment.get("link"):
                 print(f"  Link: {enrichment['link']}")
 
+        elif source == "censys":
+            # Special formatting for Censys
+            if "ip" in enrichment:
+                # IP enrichment
+                if enrichment.get("autonomous_system"):
+                    asn_info = enrichment["autonomous_system"]
+                    print(f"  ASN: {asn_info.get('asn', 'N/A')}")
+                    if asn_info.get("name"):
+                        print(f"  AS Name: {asn_info['name']}")
+
+                if enrichment.get("location"):
+                    loc = enrichment["location"]
+                    print(f"  Location: {loc.get('city', '')}, {loc.get('country', '')}")
+
+                if enrichment.get("operating_system"):
+                    print(f"  OS: {enrichment['operating_system']}")
+
+                if enrichment.get("services"):
+                    print(f"\n  {Fore.CYAN}Services ({enrichment.get('num_services', 0)}):{Style.RESET_ALL}")
+                    for svc in enrichment["services"][:5]:
+                        port = svc.get("port", "?")
+                        transport = svc.get("transport", "tcp")
+                        service_name = svc.get("service_name", "unknown")
+                        print(f"    Port {port}/{transport}: {service_name}")
+
+                        if svc.get("software"):
+                            for sw in svc["software"][:2]:
+                                print(f"      Software: {sw.get('vendor', '')} {sw.get('product', '')} {sw.get('version', '')}")
+
+                        if svc.get("http_title"):
+                            print(f"      HTTP Title: {svc['http_title']}")
+
+                        if svc.get("tls_subject"):
+                            print(f"      TLS Subject: {svc['tls_subject']}")
+
+            elif "domain" in enrichment:
+                # Domain enrichment
+                print(f"  Total Hosts: {enrichment.get('total_hosts', 0)}")
+                if enrichment.get("resolved_ips"):
+                    print(f"  Resolved IPs: {', '.join(enrichment['resolved_ips'][:5])}")
+                    if len(enrichment['resolved_ips']) > 5:
+                        print(f"    ... and {len(enrichment['resolved_ips']) - 5} more")
+
+            if enrichment.get("link"):
+                print(f"  Link: {enrichment['link']}")
+
         else:
             # Default formatting for other sources
             for key, value in enrichment.items():
@@ -861,6 +1045,7 @@ Available sources:
   abuseipdb   - AbuseIPDB (requires ABUSEIPDB_API_KEY)
   otx         - AlienVault OTX (requires OTX_API_KEY)
   urlscan     - URLScan.io (requires URLSCAN_API_KEY)
+  censys      - Censys (requires CENSYS_API_ID in format API_ID:SECRET)
   all         - Use all configured sources (default)
         """
     )
