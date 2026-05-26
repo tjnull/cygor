@@ -393,41 +393,40 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_set_default(args: argparse.Namespace) -> int:
-    """Deprecated alias for `switch` (kept for back-compat)."""
-    print("[i] 'set-default' is deprecated; use: cygor workspace switch <name|path>",
-          file=sys.stderr)
-    args.name_or_path = args.path
-    return cmd_switch(args)
 
 
-def cmd_show(args: argparse.Namespace) -> int:
-    """Deprecated alias for `current` (kept for back-compat)."""
-    print("[i] 'show' is deprecated; use: cygor workspace current", file=sys.stderr)
-    if not hasattr(args, "verbose"):
-        args.verbose = False
-    return cmd_current(args)
+def _print_no_workspace_guidance() -> None:
+    """Tell the user how to make data persist again after they end up with no
+    active workspace. Called from `unset` and `remove` (and anywhere else
+    that could leave the user in free-mode)."""
+    print()
+    print("[!] No active workspace is set.")
+    print("    Scan / module data won't be saved to a known location until")
+    print("    you do one of:")
+    print("      - cygor workspace switch <name|path>     (pick an existing one)")
+    print("      - cygor workspace init <path>            (create + activate a new one)")
+    print("      - pass -o /path/to/output                (per-command override)")
+    print("      - export CYGOR_WORKSPACE=/path/to/dir    (env override for this shell)")
 
 
 def cmd_unset(args: argparse.Namespace) -> int:
-    """Unset active workspace."""
+    """Stop using any active workspace (return to free mode)."""
     cfg = _load_config()
     cfg = _migrate_old_config(cfg)
-    
+
     if cfg.get("active_workspace") or cfg.get("default_workspace"):
         old_active = cfg.get("active_workspace")
-        old_default = cfg.get("default_workspace")
         cfg.pop("active_workspace", None)
         cfg.pop("default_workspace", None)
         _save_config(cfg)
         print(f"[✓] Active workspace unset")
         if old_active:
-            print(f"[i] Was: {old_active}")
-        print("[i] Cygor will now operate without a global workspace.")
-        print("    Each scan or module can freely specify its own output location.")
+            print(f"[i] Was: {old_active} (still registered, files untouched)")
+        _print_no_workspace_guidance()
         return 0
     else:
         print("[i] No active workspace is currently set.")
+        _print_no_workspace_guidance()
         return 0
 
 
@@ -546,35 +545,49 @@ def cmd_switch(args: argparse.Namespace) -> int:
 
 
 def cmd_remove(args: argparse.Namespace) -> int:
-    """Remove a workspace from the registry (does not delete files)."""
+    """Remove a workspace from the registry (does not delete files).
+
+    If the target is the active workspace, deactivate it first (the user's
+    intent is almost always 'stop tracking this; files stay'). After the
+    removal, surface clear guidance about how to make data persist again.
+    """
     cfg = _load_config()
     cfg = _migrate_old_config(cfg)
-    
+
     result = _get_workspace_by_name_or_path(args.name_or_path, cfg)
     if not result:
         print(f"[!] Workspace not found: {args.name_or_path}", file=sys.stderr)
         return 2
-    
+
     name, ws_data = result
-    
-    # Check if it's the active workspace
-    if name == cfg.get("active_workspace"):
-        print(f"[!] Cannot remove active workspace: {name}", file=sys.stderr)
-        print(f"[i] Switch to another workspace first:", file=sys.stderr)
-        for other_name in cfg.get("workspaces", {}).keys():
-            if other_name != name:
-                print(f"    cygor workspace switch \"{other_name}\"", file=sys.stderr)
-                break
-        return 2
-    
-    # Remove from registry
-    cfg["workspaces"].pop(name)
-    if cfg.get("default_workspace") == name:
+    was_active = (name == cfg.get("active_workspace") or
+                  name == cfg.get("default_workspace"))
+
+    # Auto-deactivate if this is the active workspace.
+    if was_active:
+        cfg.pop("active_workspace", None)
         cfg.pop("default_workspace", None)
-    
+
+    # Remove from registry. _validate_workspace earlier doesn't allow
+    # removing the last reference to the default field if it was a bare path,
+    # but our _migrate_old_config() promotes any legacy bare path into the
+    # workspaces dict before we land here.
+    cfg["workspaces"].pop(name, None)
     _save_config(cfg)
+
     print(f"[✓] Workspace removed from registry: {name}")
     print(f"[i] Files remain at: {ws_data['path']}")
+
+    if was_active:
+        remaining = list(cfg.get("workspaces", {}).keys())
+        if remaining:
+            print()
+            print("[i] That was the active workspace. Pick one of the remaining:")
+            for other in remaining:
+                print(f"    cygor workspace switch \"{other}\"")
+        else:
+            _print_no_workspace_guidance()
+
     return 0
 
 
@@ -770,17 +783,10 @@ Examples:
     pi.add_argument("--no-activate", action="store_true", help="Do not set the new workspace as active")
     pi.set_defaults(func=cmd_init)
 
-    # Set-default (deprecated alias of switch)
-    ps = sub.add_parser("set-default", help="Deprecated: use 'switch'.")
-    ps.add_argument("path", help="Existing workspace name or path")
-    ps.set_defaults(func=cmd_set_default)
 
-    # Show (deprecated alias of current)
-    pg = sub.add_parser("show", help="Deprecated: use 'current'.")
-    pg.set_defaults(func=cmd_show)
 
     # Unset
-    pu = sub.add_parser("unset", help="Unset/remove the current active workspace (return to free mode).")
+    pu = sub.add_parser("unset", help="Stop using any active workspace (no name argument; works on the current active one).")
     pu.set_defaults(func=cmd_unset)
 
     # List

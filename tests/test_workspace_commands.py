@@ -79,11 +79,36 @@ def test_switch_unknown_name_errors(cfg, tmp_path):
     assert _run("switch", "does-not-exist") == 2
 
 
-def test_set_default_is_switch_alias(cfg, tmp_path):
-    _run("init", str(tmp_path / "alpha"))
-    _run("init", str(tmp_path / "beta"), "--no-activate")
-    assert _run("set-default", "beta") == 0
-    assert _active(cfg) == "beta"
+def test_remove_active_workspace_auto_deactivates(cfg, tmp_path):
+    """Removing the active workspace should deactivate it and remove it from
+    the registry — not error out. The user's files stay; the registry entry
+    and 'active' pointer go away."""
+    base_alpha = tmp_path / "alpha"
+    base_beta = tmp_path / "beta"
+    _run("init", str(base_alpha))                  # activates alpha
+    _run("init", str(base_beta), "--no-activate")
+    assert _active(cfg) == "alpha"
+    # Remove the active workspace by name.
+    assert _run("remove", "alpha") == 0
+    cfg_now = _config(cfg)
+    assert "alpha" not in cfg_now["workspaces"]
+    assert cfg_now.get("active_workspace") is None
+    # beta is untouched and still in the registry.
+    assert "beta" in cfg_now["workspaces"]
+    # The directory on disk MUST still exist — removal doesn't delete files.
+    assert base_alpha.exists()
+
+
+def test_remove_last_workspace_clears_active(cfg, tmp_path):
+    """If removing the last registered workspace, the active pointer also
+    goes away and the user falls back to free mode."""
+    base = tmp_path / "alpha"
+    _run("init", str(base))
+    assert _run("remove", "alpha") == 0
+    cfg_now = _config(cfg)
+    assert cfg_now.get("workspaces", {}) == {}
+    assert cfg_now.get("active_workspace") is None
+    assert base.exists()
 
 
 def test_clean_keep_last(cfg, tmp_path, capsys):
