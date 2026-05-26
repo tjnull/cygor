@@ -13,44 +13,53 @@ A workspace is a directory that contains:
 
 ## Workspace Commands
 
-### Initialize a Workspace
+Running `cygor workspace` with no arguments shows the active workspace, any
+others you've registered, and the commands available -- start there.
+
+### Create a Workspace
 
 ```bash
-# Create a new workspace
-cygor workspace init ~/cygor-workspace
+# Create a new workspace (the first one becomes active automatically)
+cygor workspace create ~/cygor-workspace
 
 # Or specify a custom path
-cygor workspace init /opt/cygor/project-alpha
+cygor workspace create /opt/cygor/project-alpha
 ```
 
 This creates the directory structure:
 ```
 workspace/
-├── nmap/              # Nmap scan results
-├── discovery/         # Discovery results
-├── parsed-hostlists/   # Parsed hostlists by service
-├── enum/              # Enumeration module outputs
-└── cygor.db           # SQLite database (if used)
+├── nmap/                       # Nmap scan results
+├── parsed-hostlists/           # Parsed hostlists by service
+├── credrecon/                  # Credential reconnaissance output
+├── schedule-scans/             # Scheduled / automated scans
+├── cygor-enumeration-modules/  # Per-module output (lockon, smbexplorer, ...)
+├── logs/                       # Runtime logs
+└── cygor.db                    # SQLite database (if used)
 ```
 
-### Set Default Workspace
+### Switch the Active Workspace
 
 ```bash
-# Set workspace as default
-cygor workspace set-default ~/cygor-workspace
+# Activate one by name
+cygor workspace use project-alpha
 
-# This workspace will be used automatically for all commands
+# Or point at any directory -- if it isn't registered yet, cygor
+# registers it on the fly (initializing the layout if needed)
+cygor workspace use ~/engagements/acme
 ```
 
-### View Current Workspace
+### View the Active Workspace
 
 ```bash
-# Show current workspace
-cygor workspace show
+# Status overview: active + others + available commands
+cygor workspace
 
-# Output example:
-# Current workspace: /home/user/cygor-workspace
-# Default workspace: /home/user/cygor-workspace
+# Just the active path (designed for shell substitution)
+cd "$(cygor workspace path)"
+
+# Detail view of one workspace (size, subdirectory file counts, timestamps)
+cygor workspace info project-alpha
 ```
 
 ## Using Workspaces
@@ -97,9 +106,9 @@ echo 'export CYGOR_WORKSPACE=~/cygor-workspace' >> ~/.bashrc
 Create separate workspaces for different projects:
 
 ```bash
-cygor workspace init ~/workspaces/client-alpha
-cygor workspace init ~/workspaces/client-beta
-cygor workspace init ~/workspaces/internal-pentest
+cygor workspace create ~/workspaces/client-alpha
+cygor workspace create ~/workspaces/client-beta
+cygor workspace create ~/workspaces/internal-pentest
 ```
 
 ### 2. Shared vs. Personal Workspaces
@@ -170,7 +179,14 @@ Edit the config file directly:
 
 ```json
 {
-  "default_workspace": "/home/user/cygor-workspace"
+  "active_workspace": "cygor-workspace",
+  "workspaces": {
+    "cygor-workspace": {
+      "path": "/home/user/cygor-workspace",
+      "created_at": "2026-01-01T00:00:00Z",
+      "last_used":  "2026-01-01T00:00:00Z"
+    }
+  }
 }
 ```
 
@@ -182,8 +198,8 @@ Edit the config file directly:
 # Check if workspace exists
 ls -la ~/cygor-workspace
 
-# Reinitialize if needed
-cygor workspace init ~/cygor-workspace
+# Re-create if needed (also re-registers and re-activates)
+cygor workspace create ~/cygor-workspace
 ```
 
 ### Permission Issues

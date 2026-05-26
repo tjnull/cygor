@@ -170,7 +170,7 @@ Plugins written without the base class can emit `module_info` + write `cygor-res
 
 Two ways the directory gets picked:
 
-- **Workspace-aware default** — every module writes under the active workspace (set via `cygor workspace set-default` or `CYGOR_WORKSPACE`). See [Setting Up Workspaces](Setting-Up-Workspaces.md).
+- **Workspace-aware default** — every module writes under the active workspace (set via `cygor workspace use` or `CYGOR_WORKSPACE`). See [Setting Up Workspaces](Setting-Up-Workspaces.md).
 - **Explicit override** — pass `-o /custom/path` to any module. The schema is the same; the location changes.
 
 The Web UI follows the same convention, so the moment a module finishes writing, the file is in the right place to be ingested.

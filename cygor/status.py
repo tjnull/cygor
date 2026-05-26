@@ -197,7 +197,7 @@ def _section_workspace(lines: list[str], issues: list[str]) -> None:
     if active is None:
         lines.append("  " + _warn("no active workspace"))
         issues.append("Set a workspace so scan/module output gets saved to a known place:")
-        issues.append(f"      {Fore.CYAN}cygor workspace init <path>{Style.RESET_ALL}")
+        issues.append(f"      {Fore.CYAN}cygor workspace create <path>{Style.RESET_ALL}")
         return
     exists = active.exists()
     if exists:
@@ -205,8 +205,8 @@ def _section_workspace(lines: list[str], issues: list[str]) -> None:
     else:
         lines.append("  " + _miss(f"active path does not exist: {active}"))
         issues.append(f"Active workspace points at a missing directory: {active}")
-        issues.append(f"      {Fore.CYAN}cygor workspace init \"{active}\"{Style.RESET_ALL}  (re-create)")
-        issues.append(f"      {Fore.CYAN}cygor workspace switch <name|path>{Style.RESET_ALL}  (pick another)")
+        issues.append(f"      {Fore.CYAN}cygor workspace create \"{active}\"{Style.RESET_ALL}  (re-create)")
+        issues.append(f"      {Fore.CYAN}cygor workspace use <name|path>{Style.RESET_ALL}  (pick another)")
 
 
 def _section_db(lines: list[str]) -> None:

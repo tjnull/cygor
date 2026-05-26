@@ -116,9 +116,12 @@ cygor web start --help             # web UI options
 Workspaces keep per-engagement results, scan files, and databases isolated.
 
 ```bash
-cygor workspace init ~/cygor-workspace
-cygor workspace set-default ~/cygor-workspace
-cygor workspace show
+# Creates the directory, registers it, and activates it (first one always
+# becomes active automatically)
+cygor workspace create ~/cygor-workspace
+
+# `cygor workspace` with no args shows the active workspace + commands
+cygor workspace
 ```
 
 ## Test the Install

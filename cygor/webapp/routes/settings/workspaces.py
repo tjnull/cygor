@@ -365,7 +365,7 @@ async def add_workspace(req: Dict[str, Any]):
         if not _validate_workspace(ws):
             return JSONResponse({
                 "error": f"Path is not a valid workspace: {ws}",
-                "hint": f"Initialize it first with: cygor workspace init \"{ws}\""
+                "hint": f"Initialize it first with: cygor workspace create \"{ws}\""
             }, status_code=400)
 
         cfg = _load_config()

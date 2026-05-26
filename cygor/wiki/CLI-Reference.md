@@ -133,17 +133,22 @@ Workspaces keep per-engagement results, scan files, and databases isolated.
 
 | Subcommand | Action |
 |---|---|
-| `cygor workspace init <path>` | Create a workspace at `<path>` |
-| `cygor workspace set-default <path>` | Make `<path>` the default workspace |
-| `cygor workspace show` | Print the active workspace |
-| `cygor workspace list` | List known workspaces |
+| `cygor workspace` *(no args)* | Show the active workspace, other registered ones, and the available commands |
+| `cygor workspace create <path>` | Create a workspace at `<path>` (activates the first one automatically) |
+| `cygor workspace use <name\|path>` | Switch to one — by name, or any directory path (registers it on the fly) |
+| `cygor workspace info <name>` | Show subdirectories, size breakdown, timestamps |
+| `cygor workspace clean` | Trim old scan output (use `--keep-last N` / `--dry-run`) |
+| `cygor workspace remove <name>` | Unregister; files preserved |
+| `cygor workspace none` | Deactivate (stop writing to any workspace) |
+| `cygor workspace path` | Print the active path on stdout (designed for shell scripts) |
 
 Full guide: [Setting Up Workspaces](Setting-Up-Workspaces.md).
 
 ```bash
-cygor workspace init ~/cygor-pentest-acme
-cygor workspace set-default ~/cygor-pentest-acme
-cygor workspace show
+cygor workspace create ~/cygor-pentest-acme
+cygor workspace use acme
+cygor workspace            # status dashboard
+cd "$(cygor workspace path)"
 ```
 
 ---
