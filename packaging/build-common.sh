@@ -22,7 +22,6 @@ CYGOR_LONG_DESC="Automated scanner and enumeration framework"
 PYINSTALLER_COLLECT_SUBMODULES=(
   # Core application
   --collect-submodules cygor
-  # Package resources (appdirs is vendored inside pkg_resources)
   --collect-submodules pkg_resources
   # Web framework
   --collect-submodules fastapi
@@ -30,37 +29,24 @@ PYINSTALLER_COLLECT_SUBMODULES=(
   --collect-submodules starlette
   # Database / ORM
   --collect-submodules sqlalchemy
-  --collect-submodules alembic
   --collect-all pydantic_core
   --collect-all pydantic
-  --collect-submodules aioodbc
-  --collect-submodules asyncmy
-  --collect-submodules oracledb
   # Auth / crypto / certs
   # Templating / reports
   --collect-submodules jinja2
   # Scheduling
   --collect-submodules apscheduler
   # CredRecon protocol libraries
-  --collect-submodules impacket
   --collect-submodules winrm
   --collect-submodules paramiko
   --collect-submodules ldap3
-  --collect-submodules cassandra
-  --collect-submodules neo4j
   --collect-submodules aardwolf
-  --collect-submodules paho
-  --collect-submodules scapy
-  --collect-submodules pysnmp
 )
 
 PYINSTALLER_HIDDEN_IMPORTS=(
   # Scanning / parsing
   --hidden-import libnmap.parser
-  --hidden-import smbmap
   --hidden-import bs4
-  --hidden-import scapy
-  --hidden-import scapy.all
   # Web framework
   --hidden-import sqlmodel
   --hidden-import starlette
@@ -71,21 +57,8 @@ PYINSTALLER_HIDDEN_IMPORTS=(
   --hidden-import requests
   # Database drivers
   --hidden-import psycopg
-  --hidden-import psycopg2
   --hidden-import aiosqlite
-  --hidden-import aioodbc
-  --hidden-import asyncmy
-  --hidden-import oracledb
-  --hidden-import pymysql
-  --hidden-import pymssql
-  --hidden-import pymongo
-  --hidden-import bson
-  --hidden-import redis
-  --hidden-import pyodbc
   # Database migrations
-  --hidden-import alembic
-  --hidden-import alembic.config
-  --hidden-import alembic.command
   # Reporting / data
   --hidden-import rich
   --hidden-import PIL
@@ -93,7 +66,7 @@ PYINSTALLER_HIDDEN_IMPORTS=(
   # Crypto / auth
   --hidden-import cryptography
   --hidden-import gssapi
-  --hidden-import pyOpenSSL
+  --hidden-import OpenSSL
   # System / utilities
   --hidden-import paramiko
   --hidden-import psutil
@@ -101,46 +74,21 @@ PYINSTALLER_HIDDEN_IMPORTS=(
   --hidden-import watchfiles
   --hidden-import lxml
   --hidden-import platformdirs
-  --hidden-import appdirs
   --hidden-import pydantic_core._pydantic_core
   --hidden-import colorama
   --hidden-import yaml
   --hidden-import packaging
   --hidden-import packaging.version
-  --hidden-import dateutil
-  --hidden-import dateutil.parser
   # CredRecon protocol libraries
-  --hidden-import impacket
-  --hidden-import impacket.smbconnection
   --hidden-import winrm
-  --hidden-import pysnmp
-  --hidden-import pysnmp.hlapi
-  --hidden-import pyghmi
-  --hidden-import pyghmi.ipmi
-  --hidden-import pyghmi.ipmi.command
-  --hidden-import paho
-  --hidden-import paho.mqtt
-  --hidden-import paho.mqtt.client
-  --hidden-import vncdotool
-  --hidden-import vncdotool.api
-  --hidden-import cassandra
-  --hidden-import cassandra.cluster
-  --hidden-import cassandra.auth
-  --hidden-import neo4j
   --hidden-import aardwolf
   --hidden-import aardwolf.connection
-  --hidden-import rdpy
-  --hidden-import twisted
   --hidden-import pyNfsClient
-  --hidden-import pyVmomi
-  --hidden-import pyVim
-  --hidden-import pyVim.connect
 )
 
 PYINSTALLER_ADD_DATA=(
   --add-data "cygor/webapp/templates:cygor/webapp/templates"
   --add-data "cygor/credrecon:cygor/credrecon"
-  --add-data "cygor/webapp/alembic:cygor/webapp/alembic"
   --add-data "cygor/banner.txt:cygor"
 )
 
