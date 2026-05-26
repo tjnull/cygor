@@ -32,6 +32,12 @@ _FAIL_MARKERS = ("NT_STATUS_LOGON_FAILURE", "NT_STATUS_ACCESS_DENIED",
                  "NT_STATUS_CONNECTION_REFUSED", "Cannot connect", "NT_STATUS_IO_TIMEOUT",
                  "NT_STATUS_HOST_UNREACHABLE")
 
+# 100-nanosecond ticks per day (Windows FILETIME-style duration encoding).
+_TICKS_PER_DAY    = 86400 * 10_000_000
+_TICKS_PER_MINUTE = 60     * 10_000_000
+# Sentinel used by Windows for "never" / "no upper bound" durations.
+_NEVER_AGE = 0x8000000000000000
+
 # RID ranges for the RID-cycling fallback (matches enum4linux-ng's defaults).
 DEFAULT_RID_RANGES = "500-550,1000-1050"
 _MAX_RIDS = 4000  # safety cap on how many RIDs we'll look up in one pass
@@ -83,34 +89,110 @@ def _parse_rpcclient(out: str) -> Dict[str, Any]:
     return row
 
 
-def _polenum(host: str, user: str, password: str, timeout: int) -> Dict[str, Any]:
-    """Full domain password policy via polenum (lockout threshold / max age /
-    history) -- the bits getdompwinfo doesn't return. Empty dict if unavailable."""
-    if not shutil.which("polenum"):
-        return {}
-    cmd = ["polenum", "--username", user or "", "--password", password or "", host]
+def _largeint_to_int(li) -> int:
+    """Decode an impacket OLD_LARGE_INTEGER/LARGE_INTEGER (LowPart/HighPart) into
+    a signed 64-bit Python int. These fields encode a duration in 100-ns ticks;
+    durations come back as negative (relative time) so callers usually want abs()."""
+    high = int(li['HighPart']) & 0xFFFFFFFF
+    low  = int(li['LowPart'])  & 0xFFFFFFFF
+    val  = (high << 32) | low
+    # Sign-extend 64-bit so Long.MIN_VALUE ("never") stays recognisable.
+    if val & (1 << 63):
+        val -= 1 << 64
+    return val
+
+
+def _fmt_days(ticks: int) -> str:
+    """'42 days' / 'never' / '' depending on the field's raw value. Windows uses
+    Long.MIN_VALUE to mean 'no upper bound' (passwords never expire)."""
+    if ticks in (0, _NEVER_AGE) or ticks == -(_NEVER_AGE):
+        return "never"
+    days = abs(ticks) // _TICKS_PER_DAY
+    if days == 0:
+        # Sub-day duration -- show minutes so the table still says something useful.
+        mins = max(1, abs(ticks) // _TICKS_PER_MINUTE)
+        return f"{mins} min"
+    return f"{days} days"
+
+
+def _fmt_lockout_threshold(n: int) -> str:
+    if n <= 0:
+        return "none"
+    return f"{n} attempts"
+
+
+def _samr_password_policy(host: str, user: str, password: str, timeout: int) -> Dict[str, Any]:
+    """Full domain password policy via impacket SAMR (replaces the polenum
+    subprocess). Pulls min length, history length, complexity, max/min age,
+    and lockout threshold/duration without forking. Empty dict on any error
+    (unreachable, auth denied, SAMR closed off, etc.) -- the caller treats
+    that the same way it treated 'polenum not installed'."""
     try:
-        proc = wrap_external(cmd, timeout=timeout + 15)
+        from impacket.dcerpc.v5 import samr, transport
+        from impacket.dcerpc.v5.samr import DOMAIN_INFORMATION_CLASS
     except Exception:
         return {}
-    out = (proc.stdout or "") + "\n" + (proc.stderr or "")
 
-    def g(label):
-        m = re.search(rf"{re.escape(label)}\s*:\s*(.+)", out)
-        return m.group(1).strip() if m else ""
+    # SMBTransport drives the connection on \\PIPE\samr; user="" / password=""
+    # gives a null session, matching what _polenum did with an empty -U/-p.
+    rpctransport = transport.SMBTransport(host, 445, r'\samr',
+                                           username=user or "",
+                                           password=password or "")
+    try:
+        # Connect timeout applies to the underlying socket; later RPC calls
+        # inherit it. Add a small head-room for slow boxes.
+        rpctransport.set_connect_timeout(timeout + 5)
+    except Exception:
+        pass
 
-    pol: Dict[str, Any] = {}
-    for key, label in (("min_length", "Minimum password length"),
-                       ("lockout", "Account Lockout Threshold"),
-                       ("max_age", "Maximum password age"),
-                       ("history", "Password history length")):
-        v = g(label)
-        if v:
-            pol[key] = v
-    m = re.search(r"Domain Password Complex\s*:\s*(\d)", out)
-    if m:
-        pol["complexity"] = "yes" if m.group(1) == "1" else "no"
-    return pol
+    dce = None
+    try:
+        dce = rpctransport.get_dce_rpc()
+        dce.connect()
+        dce.bind(samr.MSRPC_UUID_SAMR)
+
+        server  = samr.hSamrConnect(dce)['ServerHandle']
+        domains = samr.hSamrEnumerateDomainsInSamServer(dce, server)['Buffer']['Buffer']
+        # Skip "Builtin" -- the real domain is the first non-builtin entry.
+        target = next((d for d in domains
+                       if str(d['Name']).lower() != "builtin"), domains[0])
+        sid    = samr.hSamrLookupDomainInSamServer(dce, server, target['Name'])['DomainId']
+        domain = samr.hSamrOpenDomain(dce, server, domainId=sid)['DomainHandle']
+
+        pw_info = samr.hSamrQueryInformationDomain(
+            dce, domain,
+            domainInformationClass=DOMAIN_INFORMATION_CLASS.DomainPasswordInformation
+        )['Buffer']['Password']
+
+        pol: Dict[str, Any] = {
+            "min_length": str(int(pw_info['MinPasswordLength'])),
+            "history":    str(int(pw_info['PasswordHistoryLength'])),
+            "complexity": "yes" if (int(pw_info['PasswordProperties']) & 0x1) else "no",
+            "max_age":    _fmt_days(_largeint_to_int(pw_info['MaxPasswordAge'])),
+            "min_age":    _fmt_days(_largeint_to_int(pw_info['MinPasswordAge'])),
+        }
+
+        # Lockout info is a separate query (level 12). On standalone NT4-era
+        # servers this can ERROR_INVALID_INFO_CLASS -- the password policy is
+        # still useful, so swallow it and move on.
+        try:
+            lk_info = samr.hSamrQueryInformationDomain(
+                dce, domain,
+                domainInformationClass=DOMAIN_INFORMATION_CLASS.DomainLockoutInformation
+            )['Buffer']['Lockout']
+            pol["lockout"] = _fmt_lockout_threshold(int(lk_info['LockoutThreshold']))
+        except Exception:
+            pass
+
+        return pol
+    except Exception:
+        return {}
+    finally:
+        if dce is not None:
+            try:
+                dce.disconnect()
+            except Exception:
+                pass
 
 
 def _parse_rid_ranges(spec: str) -> List[int]:
@@ -202,8 +284,8 @@ class RPCExplorer(CygorModule):
 
     def run(self, targets: List[str], **kwargs) -> None:
         if not shutil.which("rpcclient"):
-            print(f"{Fore.RED}[!] rpcclient not found in PATH. Install samba-client/"
-                  f"samba-common-bin (Debian/Kali: apt install smbclient).{Style.RESET_ALL}",
+            print(f"{Fore.RED}[!] rpcclient not found in PATH. Install samba-client "
+                  f"(Debian/Kali: apt install smbclient).{Style.RESET_ALL}",
                   file=sys.stderr)
             sys.exit(2)
 
@@ -232,8 +314,9 @@ class RPCExplorer(CygorModule):
             if got_data:
                 row.update(parsed)
                 row["null_session"] = "n/a (auth)" if authed else "yes"
-                # Full policy (lockout/max age) via polenum, supplementing getdompwinfo.
-                pol = _polenum(host, username or "", password, timeout)
+                # Full policy (lockout / max age / history) via impacket SAMR,
+                # supplementing the bits getdompwinfo doesn't return.
+                pol = _samr_password_policy(host, username or "", password, timeout)
                 if pol.get("min_length") and not row["pw_min_length"]:
                     row["pw_min_length"] = pol["min_length"]
                 if pol.get("complexity") and not row["pw_complexity"]:

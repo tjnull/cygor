@@ -38,7 +38,8 @@ TOOL_GROUPS: list[Tuple[str, list[Tuple[str, str]]]] = [
     ]),
     ("Enumeration modules", [
         ("rpcclient",       "rpcexplorer (MSRPC enumeration)"),
-        ("polenum",         "rpcexplorer (password policy)"),
+        # Password policy now comes from native impacket SAMR -- no external
+        # polenum binary required.
         ("ldapsearch",      "ldapexplorer (anonymous / authenticated queries)"),
         ("ldapdomaindump",  "ldapexplorer (authenticated dump)"),
         ("snmpwalk",        "snmpexplorer (MIB walk)"),

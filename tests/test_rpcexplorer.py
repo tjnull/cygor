@@ -1,9 +1,12 @@
 """Tests for rpcexplorer: rpcclient output parsing, null-session/auth row
-assembly, password-policy surfacing (getdompwinfo + polenum), RID-range parsing
-and RID cycling via lookupsids. External tools are mocked -- no network/samba.
+assembly, password-policy surfacing (getdompwinfo + native impacket SAMR),
+RID-range parsing and RID cycling via lookupsids. External tools and the
+SAMR transport are mocked -- no network/samba.
 Also covers the nextsteps weak-password-policy findings driven by these fields.
 """
 import types
+
+import pytest
 
 from cygor.modules import rpcexplorer as rpc
 from cygor import nextsteps as N
@@ -50,7 +53,7 @@ def test_run_null_session(monkeypatch, tmp_path):
     monkeypatch.setattr(rpc.shutil, "which", lambda x: "/usr/bin/rpcclient")
     monkeypatch.setattr(rpc, "_rpcclient",
                         lambda *a, **k: "Domain Name: CORP\nuser:[a] rid:[0x1]\n")
-    monkeypatch.setattr(rpc, "_polenum", lambda *a, **k: {})
+    monkeypatch.setattr(rpc, "_samr_password_policy", lambda *a, **k: {})
     m = rpc.RPCExplorer(output_dir=str(tmp_path / "o"))
     m.run(["10.0.0.1"], timeout=2)
     r = m.results[0]
@@ -73,7 +76,7 @@ def test_run_access_denied(monkeypatch, tmp_path):
 def test_run_authenticated_label(monkeypatch, tmp_path):
     monkeypatch.setattr(rpc.shutil, "which", lambda x: "/usr/bin/rpcclient")
     monkeypatch.setattr(rpc, "_rpcclient", lambda *a, **k: "Domain Name: CORP\n")
-    monkeypatch.setattr(rpc, "_polenum", lambda *a, **k: {})
+    monkeypatch.setattr(rpc, "_samr_password_policy", lambda *a, **k: {})
     m = rpc.RPCExplorer(output_dir=str(tmp_path / "o"))
     m.run(["10.0.0.1"], username="CORP\\user", password="pw", timeout=2)
     assert m.results[0]["null_session"] == "n/a (auth)"
@@ -85,15 +88,16 @@ def test_run_surfaces_policy_and_summary(monkeypatch, tmp_path):
         rpc, "_rpcclient",
         lambda *a, **k: ("Domain Name: CORP\nuser:[a] rid:[0x1]\n"
                          "min_password_length: 7\npassword_properties: 0x00000000\n"))
-    monkeypatch.setattr(rpc, "_polenum",
-                        lambda *a, **k: {"lockout": "None", "max_age": "42 days"})
+    monkeypatch.setattr(
+        rpc, "_samr_password_policy",
+        lambda *a, **k: {"lockout": "none", "max_age": "42 days"})
     m = rpc.RPCExplorer(output_dir=str(tmp_path / "o"))
     m.run(["10.0.0.1"], timeout=2)
     r = m.results[0]
-    assert r["pw_lockout"] == "None"
+    assert r["pw_lockout"] == "none"
     assert r["pw_max_age"] == "42 days"
     assert "minlen=7" in r["pw_policy"] and "complex=no" in r["pw_policy"]
-    assert "lockout=None" in r["pw_policy"]
+    assert "lockout=none" in r["pw_policy"]
 
 
 def test_run_rid_cycles_when_user_enum_blocked(monkeypatch, tmp_path):
@@ -102,7 +106,7 @@ def test_run_rid_cycles_when_user_enum_blocked(monkeypatch, tmp_path):
     monkeypatch.setattr(
         rpc, "_rpcclient",
         lambda *a, **k: "Domain Name: CORP\nDomain Sid: S-1-5-21-1-2-3\n")
-    monkeypatch.setattr(rpc, "_polenum", lambda *a, **k: {})
+    monkeypatch.setattr(rpc, "_samr_password_policy", lambda *a, **k: {})
     monkeypatch.setattr(rpc, "_rid_cycle", lambda *a, **k: ["jsmith", "admin"])
     m = rpc.RPCExplorer(output_dir=str(tmp_path / "o"))
     m.run(["10.0.0.1"], timeout=2)
@@ -111,36 +115,166 @@ def test_run_rid_cycles_when_user_enum_blocked(monkeypatch, tmp_path):
     assert "RID-cycled" in r["info"] and "jsmith" in r["info"]
 
 
-# ---- _polenum -------------------------------------------------------------
-def test_polenum_parses_full_policy(monkeypatch):
-    monkeypatch.setattr(rpc.shutil, "which", lambda t: "/usr/bin/polenum")
-    out = ("Minimum password length: 8\n"
-           "Password history length: 24\n"
-           "Maximum password age: 42 days\n"
-           "Account Lockout Threshold: None\n"
-           "Domain Password Complex: 1\n")
-    monkeypatch.setattr(rpc, "wrap_external", lambda *a, **k: _fake_proc(out))
-    pol = rpc._polenum("h", "", "", 10)
+# ---- LARGE_INTEGER + formatter helpers -----------------------------------
+class _LI:
+    """Stand-in for an impacket OLD_LARGE_INTEGER / LARGE_INTEGER struct."""
+    def __init__(self, ticks: int):
+        # Pack a signed 64-bit value into LowPart/HighPart the way impacket does.
+        unsigned = ticks & 0xFFFFFFFFFFFFFFFF
+        self._d = {"LowPart": unsigned & 0xFFFFFFFF,
+                   "HighPart": (unsigned >> 32) & 0xFFFFFFFF}
+    def __getitem__(self, k): return self._d[k]
+
+
+def _days_to_ticks(days: int) -> int:
+    return days * 86400 * 10_000_000
+
+
+def test_largeint_decodes_negative_duration():
+    # Windows stores durations as negative 100-ns deltas.
+    li = _LI(-_days_to_ticks(42))
+    assert rpc._largeint_to_int(li) == -_days_to_ticks(42)
+
+
+def test_fmt_days_renders_duration_or_never():
+    assert rpc._fmt_days(-_days_to_ticks(42)) == "42 days"
+    assert rpc._fmt_days(_days_to_ticks(7)) == "7 days"     # positive too
+    assert rpc._fmt_days(0x8000000000000000) == "never"     # MIN_VALUE sentinel
+    assert rpc._fmt_days(0) == "never"
+    # Sub-day duration: fall back to minutes.
+    assert rpc._fmt_days(-(15 * 60 * 10_000_000)) == "15 min"
+
+
+def test_fmt_lockout_threshold():
+    assert rpc._fmt_lockout_threshold(0) == "none"
+    assert rpc._fmt_lockout_threshold(5) == "5 attempts"
+
+
+# ---- _samr_password_policy (native impacket SAMR) ------------------------
+
+def _stub_samr_query(level_to_struct):
+    """Return a callable that mimics impacket.samr.hSamrQueryInformationDomain
+    by looking up the requested DOMAIN_INFORMATION_CLASS level."""
+    def _impl(dce, domainHandle, domainInformationClass):
+        try:
+            level = int(domainInformationClass)
+        except (TypeError, ValueError):
+            level = int(getattr(domainInformationClass, "Data", domainInformationClass))
+        if level not in level_to_struct:
+            raise RuntimeError(f"unexpected info class {level}")
+        return level_to_struct[level]
+    return _impl
+
+
+@pytest.fixture
+def _fake_samr(monkeypatch):
+    """Patch the impacket modules the helper imports so we never touch the
+    network. Yields a dict the test can mutate to control the response."""
+    from impacket.dcerpc.v5 import samr as real_samr
+    from impacket.dcerpc.v5 import transport as real_transport
+
+    # The fake dce just needs to look like an object; impacket calls
+    # connect/bind/disconnect on it which we make no-ops.
+    class _DCE:
+        def connect(self): pass
+        def bind(self, *a, **k): pass
+        def disconnect(self): pass
+
+    class _Trans:
+        def __init__(self, *a, **k): pass
+        def set_connect_timeout(self, t): pass
+        def get_dce_rpc(self): return _DCE()
+
+    # Default response: password level (1) + lockout level (12), matching
+    # Win Server 2019 defaults except we make lockout=5 / maxage=42d / minlen=8.
+    state = {
+        "responses": {
+            1:  {"Buffer": {"Password": {
+                    "MinPasswordLength":     8,
+                    "PasswordHistoryLength": 24,
+                    "PasswordProperties":    1,                # complex
+                    "MaxPasswordAge":        _LI(-_days_to_ticks(42)),
+                    "MinPasswordAge":        _LI(-_days_to_ticks(1)),
+                }}},
+            12: {"Buffer": {"Lockout": {"LockoutThreshold": 5}}},
+        },
+    }
+
+    def _fake_connect(dce):                  return {"ServerHandle": "S"}
+    def _fake_enum(dce, h):                  return {"Buffer": {"Buffer": [
+                                                    {"Name": "Builtin"},
+                                                    {"Name": "CORP"}]}}
+    def _fake_lookup(dce, h, name):          return {"DomainId": "SID"}
+    def _fake_opendomain(dce, h, domainId):  return {"DomainHandle": "D"}
+
+    monkeypatch.setattr(real_transport, "SMBTransport", _Trans)
+    monkeypatch.setattr(real_samr, "hSamrConnect", _fake_connect)
+    monkeypatch.setattr(real_samr, "hSamrEnumerateDomainsInSamServer", _fake_enum)
+    monkeypatch.setattr(real_samr, "hSamrLookupDomainInSamServer", _fake_lookup)
+    monkeypatch.setattr(real_samr, "hSamrOpenDomain", _fake_opendomain)
+    monkeypatch.setattr(real_samr, "hSamrQueryInformationDomain",
+                        _stub_samr_query(state["responses"]))
+    return state
+
+
+def test_samr_password_policy_happy_path(_fake_samr):
+    pol = rpc._samr_password_policy("10.0.0.1", "", "", timeout=2)
     assert pol["min_length"] == "8"
-    assert pol["history"] == "24"
-    assert pol["max_age"] == "42 days"
-    assert pol["lockout"] == "None"
+    assert pol["history"]    == "24"
     assert pol["complexity"] == "yes"
+    assert pol["max_age"]    == "42 days"
+    assert pol["min_age"]    == "1 days"
+    assert pol["lockout"]    == "5 attempts"
 
 
-def test_polenum_absent_tool_returns_empty(monkeypatch):
-    monkeypatch.setattr(rpc.shutil, "which", lambda t: None)
-    assert rpc._polenum("h", "", "", 10) == {}
+def test_samr_password_policy_no_lockout(_fake_samr):
+    # Threshold 0 → "none" (matches the nextsteps weak-policy detector)
+    _fake_samr["responses"][12]["Buffer"]["Lockout"]["LockoutThreshold"] = 0
+    pol = rpc._samr_password_policy("10.0.0.1", "", "", timeout=2)
+    assert pol["lockout"] == "none"
 
 
-def test_polenum_handles_exception(monkeypatch):
-    monkeypatch.setattr(rpc.shutil, "which", lambda t: "/usr/bin/polenum")
+def test_samr_password_policy_complexity_off(_fake_samr):
+    _fake_samr["responses"][1]["Buffer"]["Password"]["PasswordProperties"] = 0
+    pol = rpc._samr_password_policy("10.0.0.1", "", "", timeout=2)
+    assert pol["complexity"] == "no"
 
-    def boom(*a, **k):
-        raise OSError("nope")
 
-    monkeypatch.setattr(rpc, "wrap_external", boom)
-    assert rpc._polenum("h", "", "", 10) == {}
+def test_samr_password_policy_lockout_query_failure_still_returns_password(_fake_samr, monkeypatch):
+    """When the lockout info class is rejected (NT4-era / Samba quirks), the
+    password-policy fields should still come back."""
+    from impacket.dcerpc.v5 import samr as real_samr
+
+    def _raises_on_lockout(dce, domainHandle, domainInformationClass):
+        try:
+            level = int(domainInformationClass)
+        except (TypeError, ValueError):
+            level = int(getattr(domainInformationClass, "Data", domainInformationClass))
+        if level == 12:
+            raise RuntimeError("ERROR_INVALID_INFO_CLASS")
+        return _fake_samr["responses"][level]
+
+    monkeypatch.setattr(real_samr, "hSamrQueryInformationDomain", _raises_on_lockout)
+    pol = rpc._samr_password_policy("10.0.0.1", "", "", timeout=2)
+    assert pol["min_length"] == "8"
+    assert "lockout" not in pol
+
+
+def test_samr_password_policy_returns_empty_on_network_error(monkeypatch):
+    """Unreachable host / closed pipe → empty dict (treated the same way the
+    old code treated 'polenum not installed')."""
+    from impacket.dcerpc.v5 import transport as real_transport
+
+    class _Boom:
+        def __init__(self, *a, **k): pass
+        def set_connect_timeout(self, t): pass
+        def get_dce_rpc(self):
+            class _D:
+                def connect(self): raise OSError("conn refused")
+            return _D()
+
+    monkeypatch.setattr(real_transport, "SMBTransport", _Boom)
+    assert rpc._samr_password_policy("10.0.0.1", "", "", timeout=2) == {}
 
 
 # ---- _parse_rid_ranges ----------------------------------------------------
