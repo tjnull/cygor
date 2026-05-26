@@ -219,6 +219,32 @@ def test_dashboard_lists_other_workspaces(cfg, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# list (just the inventory; no command hints)
+# ---------------------------------------------------------------------------
+def test_list_shows_workspaces_without_command_hints(cfg, tmp_path):
+    _run("create", str(tmp_path / "alpha"))
+    _run("create", str(tmp_path / "beta"), "--no-activate")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = _run("list")
+    out = buf.getvalue()
+    assert rc == 0
+    assert "alpha" in out
+    assert "beta" in out
+    assert "Active workspace" in out
+    # The Commands section is deliberately omitted from `list`.
+    assert "Commands" not in out
+
+
+def test_list_empty_registry_prints_hint(cfg, capsys):
+    rc = _run("list")
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "No workspaces registered" in out
+    assert "cygor workspace create" in out
+
+
+# ---------------------------------------------------------------------------
 # info
 # ---------------------------------------------------------------------------
 def test_info_shows_subdir_breakdown(cfg, tmp_path, capsys):

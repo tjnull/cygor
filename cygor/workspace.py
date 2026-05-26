@@ -460,6 +460,22 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_list(args: argparse.Namespace) -> int:
+    """`cygor workspace list`: the inventory, nothing else.
+
+    Same active/others layout the dashboard uses but without the trailing
+    Commands hint block -- useful when you just want to see what's
+    registered, or when piping the output. If nothing is registered yet,
+    say so clearly and point at `create`."""
+    cfg = _migrate_old_config(_load_config())
+    if not cfg.get("workspaces"):
+        print(f"{Fore.CYAN}[i]{Style.RESET_ALL} No workspaces registered yet.")
+        print(f"    Create one with: {Fore.CYAN}cygor workspace create <path>{Style.RESET_ALL}")
+        return 0
+    _print_workspaces_table(cfg)
+    return 0
+
+
 def cmd_create(args: argparse.Namespace) -> int:
     """Create a new workspace directory at PATH, lay out the standard
     subdirs, register it, and activate it (unless --no-activate). The first
@@ -764,8 +780,11 @@ def build_parser(prog="cygor workspace") -> argparse.ArgumentParser:
         ),
         epilog="""
 Examples:
-  # Show the active workspace and what else is around
+  # Show the active workspace and what else is around (also shows commands)
   cygor workspace
+
+  # Just the inventory (active + others, no command hints -- pipe-friendly)
+  cygor workspace list
 
   # Create a new workspace (the first one becomes active automatically)
   cygor workspace create ~/engagements/acme
@@ -811,6 +830,15 @@ Examples:
                     "directory to register it and activate it in one step.")
     puse.add_argument("name_or_path", help="Workspace name or directory path")
     puse.set_defaults(func=cmd_use)
+
+    # list -- inventory of registered workspaces (no Commands footer)
+    pls = sub.add_parser("list",
+        help="List registered workspaces (active + others).",
+        description="Show the active workspace and every other registered one, "
+                    "with size and last-used timestamps. Same layout as "
+                    "`cygor workspace` but without the trailing command hints, "
+                    "so it's friendly to grep/pipe.")
+    pls.set_defaults(func=cmd_list)
 
     # info -- subdirs + sizes for one workspace
     pinfo = sub.add_parser("info",

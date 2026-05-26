@@ -134,6 +134,7 @@ Workspaces keep per-engagement results, scan files, and databases isolated.
 | Subcommand | Action |
 |---|---|
 | `cygor workspace` *(no args)* | Show the active workspace, other registered ones, and the available commands |
+| `cygor workspace list` | Inventory of registered workspaces (no command hints — pipe-friendly) |
 | `cygor workspace create <path>` | Create a workspace at `<path>` (activates the first one automatically) |
 | `cygor workspace use <name\|path>` | Switch to one — by name, or any directory path (registers it on the fly) |
 | `cygor workspace info <name>` | Show subdirectories, size breakdown, timestamps |
