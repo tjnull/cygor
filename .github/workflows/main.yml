@@ -36,28 +36,16 @@ jobs:
           - arch: x64
             format: tarball
             artifact: cygor-linux-x64-tarball
-          - arch: arm64
-            format: deb
-            artifact: cygor-linux-arm64-deb
-          - arch: arm64
-            format: rpm
-            artifact: cygor-linux-arm64-rpm
-          - arch: arm64
-            format: tarball
-            artifact: cygor-linux-arm64-tarball
+
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
 
       - name: Build Package
         run: |
-          ARCH_FLAG=${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }}
+          ARCH_FLAG=amd64
           if [[ "${GITHUB_REF_TYPE:-branch}" = "tag" ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
@@ -76,13 +64,8 @@ jobs:
             VERSION="1.0.0"
           fi
 
-          if [ "$ARCH" = "x64" ]; then
-            DEB_ARCH="amd64"
-            RPM_ARCH="x86_64"
-          else
-            DEB_ARCH="arm64"
-            RPM_ARCH="aarch64"
-          fi
+          DEB_ARCH="amd64"
+          RPM_ARCH="x86_64"
 
           if [ "$FORMAT" = "deb" ]; then
             FILE="cygor_${VERSION}_${DEB_ARCH}.deb"
@@ -109,15 +92,9 @@ jobs:
             VERSION="1.0.0"
           fi
 
-          if [ "$ARCH" = "x64" ]; then
-            PLATFORM="linux/amd64"
-            DEB_ARCH="amd64"
-            RPM_ARCH="x86_64"
-          else
-            PLATFORM="linux/arm64"
-            DEB_ARCH="arm64"
-            RPM_ARCH="aarch64"
-          fi
+          PLATFORM="linux/amd64"
+          DEB_ARCH="amd64"
+          RPM_ARCH="x86_64"
 
           if [ "$FORMAT" = "deb" ]; then
             FILE="cygor_${VERSION}_${DEB_ARCH}.deb"
@@ -207,7 +184,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -239,17 +216,7 @@ jobs:
           name: cygor-linux-x64-rpm
           path: dist/cygor-linux-x64-rpm
 
-      - name: Download Linux ARM64 DEB
-        uses: actions/download-artifact@v4
-        with:
-          name: cygor-linux-arm64-deb
-          path: dist/cygor-linux-arm64-deb
 
-      - name: Download Linux ARM64 RPM
-        uses: actions/download-artifact@v4
-        with:
-          name: cygor-linux-arm64-rpm
-          path: dist/cygor-linux-arm64-rpm
 
       - name: Download Linux x64 Tarball
         uses: actions/download-artifact@v4
@@ -257,11 +224,6 @@ jobs:
           name: cygor-linux-x64-tarball
           path: dist/cygor-linux-x64-tarball
 
-      - name: Download Linux ARM64 Tarball
-        uses: actions/download-artifact@v4
-        with:
-          name: cygor-linux-arm64-tarball
-          path: dist/cygor-linux-arm64-tarball
 
       - name: Download Windows
         uses: actions/download-artifact@v4
@@ -334,34 +296,18 @@ jobs:
             # x64
             wget https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/cygor_1.0.0_amd64.deb
             sudo dpkg -i cygor_1.0.0_amd64.deb
-            
-            # ARM64
-            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/cygor_1.0.0_arm64.deb
-            sudo dpkg -i cygor_1.0.0_arm64.deb
             ```
             
             #### RHEL/Rocky/Fedora (.rpm)
             ```bash
-            # x64
             wget https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/cygor-1.0.0-1.x86_64.rpm
             sudo dnf install cygor-1.0.0-1.x86_64.rpm
-
-            # ARM64
-            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/cygor-1.0.0-1.aarch64.rpm
-            sudo dnf install cygor-1.0.0-1.aarch64.rpm
             ```
 
             #### Any Linux (portable tarball)
             ```bash
-            # x64
             tar xzf cygor-1.0.0-linux-amd64.tar.gz
             cd cygor-1.0.0-linux-amd64
-            sudo ./install-deps.sh
-            ./bin/cygor --help
-
-            # ARM64
-            tar xzf cygor-1.0.0-linux-arm64.tar.gz
-            cd cygor-1.0.0-linux-arm64
             sudo ./install-deps.sh
             ./bin/cygor --help
             ```
@@ -378,10 +324,7 @@ jobs:
             ### Packages Included
             - `cygor-windows-x64.zip` - Windows x86_64 executable
             - `cygor_1.0.0_amd64.deb` - Debian/Ubuntu x86_64 package
-            - `cygor_1.0.0_arm64.deb` - Debian/Ubuntu ARM64 package
             - `cygor-1.0.0-1.x86_64.rpm` - RHEL/Rocky/Fedora x86_64 package
-            - `cygor-1.0.0-1.aarch64.rpm` - RHEL/Rocky/Fedora ARM64 package
             - `cygor-1.0.0-linux-amd64.tar.gz` - Portable Linux x86_64 tarball
-            - `cygor-1.0.0-linux-arm64.tar.gz` - Portable Linux ARM64 tarball
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
