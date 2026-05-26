@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  /* Documentation viewer — matches cygor's dark theme. */
+  .cy-docs-wrap { display: grid; grid-template-columns: 240px 1fr; gap: 1.5rem; padding: 1rem 1.25rem 2rem; }
+  @media (max-width: 900px) { .cy-docs-wrap { grid-template-columns: 1fr; } }
+
+  .cy-docs-nav { position: sticky; top: 1rem; align-self: start; max-height: calc(100vh - 2rem); overflow: auto; }
+  .cy-docs-nav h6 { color: #9ca3af; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 .5rem .25rem; }
+  .cy-docs-nav ul { list-style: none; padding: 0; margin: 0 0 1rem 0; }
+  .cy-docs-nav li a { display: block; padding: .35rem .6rem; border-radius: 4px; color: #d1d5db; text-decoration: none; font-size: .92rem; }
+  .cy-docs-nav li a:hover { background: #1f2937; color: #fff; }
+  .cy-docs-nav li a.active { background: #3b82f6; color: #fff; font-weight: 500; }
+  .cy-docs-meta { color: #6b7280; font-size: .8rem; padding: .25rem .6rem; }
+  .cy-docs-meta a { color: #6b7280; }
+
+  /* Markdown body */
+  .cy-docs-body { max-width: 920px; color: #e5e7eb; line-height: 1.65; }
+  .cy-docs-body h1, .cy-docs-body h2, .cy-docs-body h3, .cy-docs-body h4 { color: #f9fafb; margin-top: 1.75rem; }
+  .cy-docs-body h1 { font-size: 2rem; border-bottom: 1px solid #374151; padding-bottom: .5rem; margin-top: 0; }
+  .cy-docs-body h2 { font-size: 1.5rem; border-bottom: 1px solid #374151; padding-bottom: .35rem; }
+  .cy-docs-body h3 { font-size: 1.2rem; }
+  .cy-docs-body p { margin: .75rem 0; }
+  .cy-docs-body a { color: #60a5fa; }
+  .cy-docs-body a:hover { color: #93c5fd; text-decoration: underline; }
+  .cy-docs-body code { background: #1f2937; color: #f3f4f6; padding: .12rem .35rem; border-radius: 3px; font-size: .9em; }
+  .cy-docs-body pre { background: #0f172a; border: 1px solid #1f2937; border-radius: 6px; padding: .9rem 1rem; overflow-x: auto; }
+  .cy-docs-body pre code { background: transparent; padding: 0; font-size: .85rem; }
+  .cy-docs-body table { border-collapse: collapse; margin: 1rem 0; width: 100%; font-size: .92rem; }
+  .cy-docs-body th, .cy-docs-body td { border: 1px solid #374151; padding: .5rem .75rem; text-align: left; vertical-align: top; }
+  .cy-docs-body th { background: #1f2937; color: #f9fafb; }
+  .cy-docs-body tr:nth-child(even) td { background: #111827; }
+  .cy-docs-body blockquote { border-left: 3px solid #3b82f6; background: #0f172a; padding: .5rem 1rem; margin: 1rem 0; color: #d1d5db; }
+  .cy-docs-body ul, .cy-docs-body ol { padding-left: 1.5rem; }
+  .cy-docs-body li { margin: .25rem 0; }
+  .cy-docs-body hr { border: 0; border-top: 1px solid #374151; margin: 2rem 0; }
+  .cy-docs-body img { max-width: 100%; }
+</style>
+
+<div class="cy-docs-wrap">
+  <nav class="cy-docs-nav">
+    <h6>Documentation</h6>
+    <ul>
+      {% for slug in pages %}
+        {% set label = slug.replace('-', ' ').replace('_', ' ') %}
+        {% if slug == 'README' %}{% set label = 'Overview' %}{% endif %}
+        <li><a href="/docs/{{ slug }}"{% if slug == active_page %} class="active"{% endif %}>{{ label }}</a></li>
+      {% endfor %}
+    </ul>
+    <div class="cy-docs-meta">
+      Source: <a href="https://github.com/tjnull/cygor/tree/dev/cygor/wiki" target="_blank" rel="noopener">cygor/wiki/</a>
+    </div>
+  </nav>
+
+  <article class="cy-docs-body">
+    {{ body_html | safe }}
+  </article>
+</div>
+
+{% endblock %}

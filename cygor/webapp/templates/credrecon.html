@@ -1,0 +1,3424 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container-fluid py-3">
+  <!-- Page header -->
+  <div class="cy-page-header">
+    <a href="/tasks" class="cy-btn cy-btn-icon" title="Back to Tasks">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <h1><i class="bi bi-key-fill"></i>Credential Scanner</h1>
+    <span class="cy-page-subtitle">Test default and weak credentials across services</span>
+  </div>
+
+  <!-- About Scanner & Quick Guide (Collapsible) -->
+  <div class="card bg-dark mb-4">
+    <div class="card-header" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#scannerGuide">
+      <h5 class="mb-0 d-flex justify-content-between align-items-center" style="font-size: 1.25rem;">
+        <span>
+          <svg class="me-2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          About Credential Scanner & Quick Guide
+        </span>
+        <i class="bi bi-chevron-down"></i>
+      </h5>
+    </div>
+    <div id="scannerGuide" class="collapse">
+      <div class="card-body">
+        <p class="text-light mb-4" style="font-size: 1.05rem; line-height: 1.7;">
+          The Credential Scanner automatically tests default and weak credentials across multiple protocols and services.
+          It helps identify security vulnerabilities where systems use factory default or commonly-used credentials.
+        </p>
+        <h5 class="text-secondary mb-3" style="font-size: 1.15rem; font-weight: 600;">Supported Protocols:</h5>
+        <ul class="mb-4 text-light" style="font-size: 1rem; line-height: 1.8; padding-left: 1.5rem;">
+          <li class="mb-2"><strong>Web & Shell:</strong> HTTP/HTTPS (Basic, Digest, Form auth), SSH, Telnet, FTP</li>
+          <li class="mb-2"><strong>Databases:</strong> MySQL, PostgreSQL, MS SQL Server, MongoDB, Redis</li>
+          <li class="mb-2"><strong>Directory Services:</strong> LDAP, LDAPS (Active Directory, OpenLDAP)</li>
+          <li class="mb-2"><strong>Remote Access:</strong> RDP, VNC</li>
+          <li class="mb-2"><strong>IoT/ICS:</strong> MQTT/MQTTS (message brokers), IPMI (BMC/iLO/iDRAC)</li>
+          <li class="mb-2"><strong>Network:</strong> SNMP community string testing</li>
+        </ul>
+        <h5 class="text-secondary mb-3" style="font-size: 1.15rem; font-weight: 600;">Supported Input Formats:</h5>
+        <ul class="mb-0 text-light" style="font-size: 1rem; line-height: 1.8; padding-left: 1.5rem;">
+          <li class="mb-2"><strong>IP:PORT:</strong> Standard format (e.g., 192.168.1.1:22, 10.0.0.1:3306)</li>
+          <li class="mb-2"><strong>Full URLs:</strong> For HTTP/HTTPS with paths (e.g., https://example.com/admin/login.php)</li>
+          <li class="mb-2"><strong>Auto-detection:</strong> Protocol automatically detected by port number</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <form id="credreconForm">
+    <div class="row g-4">
+      <!-- ==================== LEFT: TAB NAVIGATION ==================== -->
+      <div class="col-lg-3 col-xl-2">
+        <div class="scan-nav-container">
+          <nav class="scan-nav">
+            <button type="button" class="scan-nav-item" data-tab="info">
+              <span class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                  <line x1="8" y1="6" x2="16" y2="6"/>
+                  <line x1="8" y1="10" x2="16" y2="10"/>
+                  <line x1="8" y1="14" x2="12" y2="14"/>
+                </svg>
+              </span>
+              <span class="nav-text">Info & Help</span>
+              <span class="nav-status" id="status-info"></span>
+            </button>
+            <button type="button" class="scan-nav-item active" data-tab="targets">
+              <span class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="22" y1="12" x2="18" y2="12"/>
+                  <line x1="6" y1="12" x2="2" y2="12"/>
+                  <line x1="12" y1="6" x2="12" y2="2"/>
+                  <line x1="12" y1="22" x2="12" y2="18"/>
+                </svg>
+              </span>
+              <span class="nav-text">Targets</span>
+              <span class="nav-status" id="status-targets"></span>
+            </button>
+            <button type="button" class="scan-nav-item" data-tab="credentials">
+              <span class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+              </span>
+              <span class="nav-text">Credentials</span>
+              <span class="nav-status" id="status-credentials"></span>
+            </button>
+            <button type="button" class="scan-nav-item" data-tab="options">
+              <span class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+              </span>
+              <span class="nav-text">Options</span>
+              <span class="nav-status" id="status-options"></span>
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      <!-- ==================== RIGHT: TAB CONTENT ==================== -->
+      <div class="col-lg-9 col-xl-10">
+        <!-- TAB: Targets -->
+        <div class="scan-tab active" id="tab-targets">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="22" y1="12" x2="18" y2="12"/>
+                  <line x1="6" y1="12" x2="2" y2="12"/>
+                  <line x1="12" y1="6" x2="12" y2="2"/>
+                  <line x1="12" y1="22" x2="12" y2="18"/>
+                </svg>
+                Scan Targets
+              </h4>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Define targets manually, upload a target list, or provide a credential file with targets built in.</p>
+
+              <!-- Input Method Toggle: Manual | Upload | Credential File -->
+              <div class="input-method-toggle mb-4">
+                <button type="button" class="method-btn active" data-method="manual" data-target="targets" onclick="switchTargetMethod('manual')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/>
+                    <path d="M18 8h.01"/><path d="M6 12h.01"/><path d="M10 12h.01"/>
+                    <path d="M14 12h.01"/><path d="M18 12h.01"/><path d="M6 16h12"/>
+                  </svg>
+                  Manual Input
+                </button>
+                <button type="button" class="method-btn" data-method="file" data-target="targets" onclick="switchTargetMethod('file')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                  </svg>
+                  Upload File
+                </button>
+                <button type="button" class="method-btn" data-method="credfile" data-target="targets" onclick="switchTargetMethod('credfile')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                  Credential File
+                </button>
+              </div>
+
+              <!-- ===== METHOD: Manual Input ===== -->
+              <div id="method-manual-targets">
+                <textarea class="form-control target-input" id="targetsManual" rows="10" placeholder="Enter targets, one per line:
+
+192.168.1.100:22
+10.10.10.5:3306
+http://admin.example.com/login
+https://crm.board.htb/index.php?page=admin"></textarea>
+                <div class="target-hints">
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    IP:PORT format
+                  </div>
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    Full URLs with paths
+                  </div>
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    HTTP/HTTPS login pages
+                  </div>
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    Auto-detect by port
+                  </div>
+                </div>
+              </div>
+
+              <!-- ===== METHOD: File Upload ===== -->
+              <div id="method-file-targets" style="display:none;">
+                <div class="upload-zone" id="targetUploadZone">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  <p>Drag & drop your target list here</p>
+                  <span>or click to browse</span>
+                  <input type="file" id="targetsFileInput" accept=".txt,.list,.csv" hidden>
+                </div>
+                <div class="file-info" id="targetFileInfo" style="display:none;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                  <span id="targetFileName"></span>
+                  <button type="button" class="btn-clear" id="clearTargetFile">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- ===== METHOD: Credential File ===== -->
+              <div id="method-credfile-targets" style="display:none;">
+                <p class="text-secondary small mb-3">Each row contains the target IP, username, and password. Paste, upload, or browse for a file on the server.</p>
+
+                <!-- Credfile sub-method toggle -->
+                <div class="btn-group btn-group-sm mb-3" role="group">
+                  <button type="button" class="btn btn-outline-secondary active" data-target="credfile" data-method="paste" onclick="toggleCredfileMethod('paste')">Paste</button>
+                  <button type="button" class="btn btn-outline-secondary" data-target="credfile" data-method="upload" onclick="toggleCredfileMethod('upload')">Upload</button>
+                  <button type="button" class="btn btn-outline-secondary" data-target="credfile" data-method="path" onclick="toggleCredfileMethod('path')">Server Path</button>
+                </div>
+
+                <!-- Credfile: Paste -->
+                <div id="credfilePasteArea" class="mb-3">
+                  <textarea class="form-control target-input" id="credfilePasteInput" rows="10"
+                            placeholder="Paste credentials here, one per line:
+
+192.168.18.3,captain,constellation-asteroid726
+192.168.18.3,neo,galaxy-orbit390
+10.1.1.1,admin,password123
+
+Formats: ip,user,pass  or  ip,port,user,pass,service"></textarea>
+                  <div class="mt-2">
+                    <button type="button" class="btn btn-sm btn-outline-info" onclick="previewCredfilePaste()">
+                      <i class="bi bi-eye me-1"></i>Preview
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Credfile: Upload -->
+                <div id="credfileUploadArea" style="display:none;">
+                  <div class="upload-zone" id="credfileDropZone"
+                       ondragover="event.preventDefault(); this.classList.add('drag-over')"
+                       ondragleave="this.classList.remove('drag-over')"
+                       ondrop="event.preventDefault(); this.classList.remove('drag-over'); handleCredfileDrop(event)">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="17 8 12 3 7 8"/>
+                      <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <p class="mb-1">Drag & drop credential file here</p>
+                    <p class="text-secondary small">or <a href="#" onclick="document.getElementById('credfileInput').click(); return false;">browse</a> — CSV, TXT, JSON, XML</p>
+                    <input type="file" id="credfileInput" accept=".csv,.txt,.json,.tsv,.xml" style="display:none" onchange="handleCredfileSelect(this)">
+                  </div>
+                  <div id="credfileUploadInfo" class="mt-2" style="display:none;">
+                    <span class="badge bg-success" id="credfileFileName"></span>
+                    <button type="button" class="btn btn-sm btn-outline-danger ms-2" onclick="clearCredfileUpload()">Remove</button>
+                  </div>
+                </div>
+
+                <!-- Credfile: Server Path -->
+                <div id="credfilePathArea" style="display:none;">
+                  <label class="form-label text-secondary small">File path on server:</label>
+                  <div class="input-group">
+                    <input type="text" class="form-control bg-dark text-light border-secondary" id="credfileServerPath"
+                           placeholder="/path/to/credentials.csv">
+                    <button class="btn btn-outline-secondary" type="button" onclick="openCredfileBrowser()">
+                      <i class="bi bi-folder2-open me-1"></i>Browse
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Services to test & fallback port -->
+                <div class="row mt-4 mb-3">
+                  <div class="col-md-8">
+                    <label class="form-label text-secondary small">Services to test (select one or more):</label>
+                    <div class="credfile-service-picker">
+                      <button type="button" class="form-select bg-dark text-light border-secondary text-start d-flex justify-content-between align-items-center"
+                              id="credfileServiceToggle" onclick="toggleServicePicker()">
+                        <span id="credfileServiceLabel">Auto-detect from port</span>
+                        <i class="bi bi-chevron-down ms-2"></i>
+                      </button>
+                      <div class="credfile-service-dropdown" id="credfileServiceDropdown" style="display:none;">
+                        <div class="p-2 border-bottom border-secondary">
+                          <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="credfileSvc_auto" value="auto" checked onchange="updateServiceSelection('auto')">
+                            <label class="form-check-label text-light" for="credfileSvc_auto">Auto-detect from port</label>
+                          </div>
+                        </div>
+                        <div class="p-2" style="max-height: 250px; overflow-y: auto;">
+                          <div class="small text-secondary mb-1 fw-bold">Web & Shell</div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_ssh" value="ssh" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_ssh">SSH <small class="text-secondary">:22</small></label></div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_ftp" value="ftp" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_ftp">FTP <small class="text-secondary">:21</small></label></div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_http" value="http" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_http">HTTP <small class="text-secondary">:80/443</small></label></div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_telnet" value="telnet" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_telnet">Telnet <small class="text-secondary">:23</small></label></div>
+                          <div class="small text-secondary mb-1 mt-2 fw-bold">Remote Access</div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_smb" value="smb" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_smb">SMB <small class="text-secondary">:445</small></label></div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_rdp" value="rdp" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_rdp">RDP <small class="text-secondary">:3389</small></label></div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_vnc" value="vnc" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_vnc">VNC <small class="text-secondary">:5900</small></label></div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_winrm" value="winrm" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_winrm">WinRM <small class="text-secondary">:5985</small></label></div>
+                          <div class="small text-secondary mb-1 mt-2 fw-bold">Databases</div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_mysql" value="mysql" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_mysql">MySQL <small class="text-secondary">:3306</small></label></div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_postgres" value="postgres" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_postgres">PostgreSQL <small class="text-secondary">:5432</small></label></div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_mssql" value="mssql" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_mssql">MSSQL <small class="text-secondary">:1433</small></label></div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_mongodb" value="mongodb" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_mongodb">MongoDB <small class="text-secondary">:27017</small></label></div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_redis" value="redis" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_redis">Redis <small class="text-secondary">:6379</small></label></div>
+                          <div class="small text-secondary mb-1 mt-2 fw-bold">Directory & Mail</div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_ldap" value="ldap" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_ldap">LDAP <small class="text-secondary">:389</small></label></div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_smtp" value="smtp" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_smtp">SMTP <small class="text-secondary">:25</small></label></div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_imap" value="imap" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_imap">IMAP <small class="text-secondary">:143</small></label></div>
+                          <div class="small text-secondary mb-1 mt-2 fw-bold">IoT / Network</div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_snmp" value="snmp" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_snmp">SNMP <small class="text-secondary">:161</small></label></div>
+                          <div class="form-check"><input class="form-check-input credfile-svc-check" type="checkbox" id="credfileSvc_mqtt" value="mqtt" onchange="updateServiceSelection('svc')"><label class="form-check-label text-light" for="credfileSvc_mqtt">MQTT <small class="text-secondary">:1883</small></label></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label text-secondary small">Fallback port <small>(only if non-standard)</small>:</label>
+                    <input type="number" class="form-control bg-dark text-light border-secondary" id="credfileGlobalPort"
+                           placeholder="Default per service">
+                  </div>
+                </div>
+
+                <!-- File preview -->
+                <div id="credfilePreview" style="display:none;">
+                  <h6 class="text-secondary mb-2">Preview (first 10 rows):</h6>
+                  <div class="table-responsive">
+                    <table class="table table-dark table-sm table-bordered" id="credfilePreviewTable">
+                      <thead><tr id="credfilePreviewHeader"></tr></thead>
+                      <tbody id="credfilePreviewBody"></tbody>
+                    </table>
+                  </div>
+                  <div id="credfileValidation" class="mt-2">
+                    <span class="badge bg-info" id="credfileEntryCount"></span>
+                    <span class="badge bg-warning" id="credfileWarningCount" style="display:none;"></span>
+                  </div>
+                </div>
+
+                <!-- Format hints -->
+                <div class="target-hints mt-3">
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    CSV: <code>ip,username,password</code>
+                  </div>
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    With port/service: <code>ip,port,user,pass,service</code>
+                  </div>
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    JSON &amp; XML supported
+                  </div>
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    Tab, space, or pipe delimited
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Credentials -->
+        <div class="scan-tab" id="tab-credentials">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                Credential Testing
+              </h4>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Select an attack mode and configure credentials to test against your targets.</p>
+
+              <!-- Attack Mode Section -->
+              <div class="tool-section">
+                <div class="tool-section-header">
+                  <div class="tool-section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    Attack Mode
+                  </div>
+                  <span class="badge bg-primary">Required</span>
+                </div>
+                <p class="text-secondary small mb-3">Choose how credentials will be tested against targets.</p>
+                <div class="tool-grid">
+                  <!-- Default Credentials -->
+                  <label class="tool-card selected">
+                    <input type="radio" name="attackMode" value="default" checked>
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">Default Credentials</span>
+                        <span class="tool-badge">Recommended</span>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Test built-in vendor default passwords</li>
+                        <li>Enterprise, IoT, cloud, database defaults</li>
+                        <li>Smart selection based on fingerprinting</li>
+                        <li>Optional external sources (CIRT.net, etc.)</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <!-- Single Credential -->
+                  <label class="tool-card">
+                    <input type="radio" name="attackMode" value="single">
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">Single Credential</span>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Test one specific username/password pair</li>
+                        <li>Or test with SSH key / PEM certificate</li>
+                        <li>Quick verification of known credentials</li>
+                        <li>Enter credentials below when selected</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <!-- Password Spray -->
+                  <label class="tool-card">
+                    <input type="radio" name="attackMode" value="spray">
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">Password Spray</span>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Test one password against many users</li>
+                        <li>Or test SSH key against many users</li>
+                        <li>Avoids account lockouts</li>
+                        <li>Requires username list file</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <!-- Credential Stuffing -->
+                  <label class="tool-card">
+                    <input type="radio" name="attackMode" value="stuff">
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">Credential Stuffing</span>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Test one username against many passwords</li>
+                        <li>Brute-force style attack on single account</li>
+                        <li>Useful for high-value targets</li>
+                        <li>Requires password list file</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <!-- Key Authentication -->
+                  <label class="tool-card">
+                    <input type="radio" name="attackMode" value="key">
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">Key Authentication</span>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Test SSH private key or PEM certificate</li>
+                        <li>Supports CA-signed certificates (-cert.pub)</li>
+                        <li>RSA, Ed25519, ECDSA key formats</li>
+                        <li>Test key against one or many usernames</li>
+                      </ul>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Configuration Sections (show based on attack mode) -->
+
+              <!-- Default Credentials Settings -->
+              <div class="tool-section mt-5" id="defaultCredsSection">
+                <div class="tool-section-header">
+                  <div class="tool-section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                      <polyline points="17 21 17 13 7 13 7 21"/>
+                      <polyline points="7 3 7 8 15 8"/>
+                    </svg>
+                    Credential Sources
+                  </div>
+                  <span class="badge bg-secondary">Optional</span>
+                </div>
+                <p class="text-secondary small mb-3">Select which credential databases to use for testing.</p>
+                <div class="tool-grid">
+                  <label class="tool-card selected">
+                    <input type="checkbox" id="useBuiltinCreds" checked>
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">Built-in Database</span>
+                        <span class="tool-badge">Default</span>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Enterprise devices (Cisco, Juniper, etc.)</li>
+                        <li>IoT & embedded systems</li>
+                        <li>Cloud & DevOps tools</li>
+                        <li>Database & middleware defaults</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <label class="tool-card">
+                    <input type="checkbox" id="useExternalCreds">
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">External Sources</span>
+                        <span class="tool-badge" id="externalCredsBadge" style="display: none;">Synced</span>
+                      </div>
+                      <ul class="tool-features">
+                        <li>DefaultCreds-cheat-sheet database</li>
+                        <li>CIRT.net default passwords</li>
+                        <li>Synced from public repositories</li>
+                        <li>Broader vendor coverage</li>
+                      </ul>
+                    </div>
+                  </label>
+                </div>
+                <!-- External Credential Sync Status -->
+                <div class="alert alert-dark border-secondary mt-3 mb-0" id="credSyncStatusAlert">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center">
+                      <i class="bi bi-cloud-fill me-2 text-secondary" id="credSyncIcon"></i>
+                      <small id="credSyncStatus">Checking external sources...</small>
+                    </div>
+                    <a href="/settings#credentialSourcesTab" class="btn btn-sm btn-outline-secondary" id="credSyncSettingsLink">
+                      <i class="bi bi-gear me-1"></i>Manage
+                    </a>
+                  </div>
+                </div>
+                <div class="tool-input mt-4">
+                  <label class="form-label" style="font-size: 1.05rem; font-weight: 600;">Custom Wordlists (Optional)</label>
+                  <p class="text-secondary mb-4">Add your own username/password lists to test alongside the built-in defaults.</p>
+                  <div class="row g-4">
+                    <div class="col-md-6">
+                      <label class="form-label">
+                        <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                          <circle cx="12" cy="7" r="4"/>
+                        </svg>
+                        Usernames File
+                      </label>
+                      <div class="file-browse-group">
+                        <input type="text" class="form-control" id="defaultUsernamesFile" placeholder="/path/to/usernames.txt">
+                        <button type="button" class="btn btn-outline-secondary file-browse-btn" onclick="document.getElementById('usernamesFileBrowser').click()">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                          </svg>
+                          Browse
+                        </button>
+                        <input type="file" id="usernamesFileBrowser" accept=".txt,.list,.csv" hidden>
+                      </div>
+                      <small class="form-text text-secondary">Text file with one username per line</small>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">
+                        <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                        Passwords File
+                      </label>
+                      <div class="file-browse-group">
+                        <input type="text" class="form-control" id="defaultPasswordsFile" placeholder="/path/to/passwords.txt">
+                        <button type="button" class="btn btn-outline-secondary file-browse-btn" onclick="document.getElementById('passwordsFileBrowser').click()">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                          </svg>
+                          Browse
+                        </button>
+                        <input type="file" id="passwordsFileBrowser" accept=".txt,.list,.csv" hidden>
+                      </div>
+                      <small class="form-text text-secondary">Text file with one password per line</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Single Credential Settings -->
+              <div class="tool-section mt-5" id="singleCredsSection" style="display: none;">
+                <div class="tool-section-header">
+                  <div class="tool-section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                      <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    Single Credential
+                  </div>
+                  <span class="badge bg-primary">Required</span>
+                </div>
+                <p class="text-secondary small mb-3">Enter the username and password to test against all targets. If you provide an SSH key below, the password is optional for SSH targets.</p>
+                <div class="row g-4">
+                  <div class="col-md-6">
+                    <label class="form-label">Username <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="singleUsername" placeholder="admin">
+                    <small class="form-text text-secondary">The username to authenticate with</small>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Password <span id="singlePasswordRequired" class="text-danger">*</span></label>
+                    <input type="password" class="form-control" id="singlePassword" placeholder="Enter password">
+                    <div class="form-check mt-2">
+                      <input class="form-check-input" type="checkbox" id="showSinglePassword">
+                      <label class="form-check-label small text-secondary" for="showSinglePassword">Show password</label>
+                    </div>
+                    <small class="form-text text-secondary">Optional if SSH key is provided below</small>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Password Spray Settings -->
+              <div class="tool-section mt-5" id="spraySection" style="display: none;">
+                <div class="tool-section-header">
+                  <div class="tool-section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                      <circle cx="9" cy="7" r="4"/>
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    Password Spray Configuration
+                  </div>
+                  <span class="badge bg-primary">Required</span>
+                </div>
+                <p class="text-secondary mb-4">Configure the password to spray and the list of usernames to test.</p>
+                <div class="row g-4">
+                  <div class="col-md-6">
+                    <label class="form-label">
+                      <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                      </svg>
+                      Password to Spray <span class="text-danger">*</span>
+                    </label>
+                    <input type="text" class="form-control" id="sprayPassword" placeholder="Summer2024!">
+                    <small class="form-text text-secondary">This password will be tested against all usernames</small>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">
+                      <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                      </svg>
+                      Usernames File <span class="text-danger">*</span>
+                    </label>
+                    <div class="file-browse-group">
+                      <input type="text" class="form-control" id="sprayUsernamesFile" placeholder="/path/to/usernames.txt">
+                      <button type="button" class="btn btn-outline-secondary file-browse-btn" onclick="openServerBrowser('sprayUsernamesFile', '.txt,.list,.csv')">
+                        <i class="bi bi-folder2-open me-1"></i>Browse Server
+                      </button>
+                      <input type="file" id="sprayUsernamesBrowser" accept=".txt,.list,.csv" hidden>
+                    </div>
+                    <small class="form-text text-secondary">Text file with one username per line — browse from server or upload locally</small>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Credential Stuffing Settings -->
+              <div class="tool-section mt-5" id="stuffSection" style="display: none;">
+                <div class="tool-section-header">
+                  <div class="tool-section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                      <line x1="12" y1="15" x2="12" y2="17"/>
+                    </svg>
+                    Credential Stuffing Configuration
+                  </div>
+                  <span class="badge bg-primary">Required</span>
+                </div>
+                <p class="text-secondary mb-4">Configure the username to test and the list of passwords to try.</p>
+                <div class="row g-4">
+                  <div class="col-md-6">
+                    <label class="form-label">
+                      <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                      </svg>
+                      Username to Test <span class="text-danger">*</span>
+                    </label>
+                    <input type="text" class="form-control" id="stuffUsername" placeholder="admin">
+                    <small class="form-text text-secondary">This username will be tested with all passwords</small>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">
+                      <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                      </svg>
+                      Passwords File <span class="text-danger">*</span>
+                    </label>
+                    <div class="file-browse-group">
+                      <input type="text" class="form-control" id="stuffPasswordsFile" placeholder="/path/to/passwords.txt">
+                      <button type="button" class="btn btn-outline-secondary file-browse-btn" onclick="openServerBrowser('stuffPasswordsFile', '.txt,.list,.csv')">
+                        <i class="bi bi-folder2-open me-1"></i>Browse Server
+                      </button>
+                      <input type="file" id="stuffPasswordsBrowser" accept=".txt,.list,.csv" hidden>
+                    </div>
+                    <small class="form-text text-secondary">Text file with one password per line — browse from server or upload locally</small>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Key Authentication Settings -->
+              <div class="tool-section mt-5" id="keyAuthSection" style="display: none;">
+                <div class="tool-section-header">
+                  <div class="tool-section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+                    </svg>
+                    Key Authentication Configuration
+                  </div>
+                  <span class="badge bg-primary">Required</span>
+                </div>
+                <p class="text-secondary small mb-3">Provide an SSH private key and optionally a CA-signed certificate to test key-based authentication against SSH targets.</p>
+
+                <!-- SSH Private Key (full width) -->
+                <div class="mb-4">
+                  <label class="form-label">
+                    <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+                    </svg>
+                    SSH Private Key / PEM File <span class="text-danger">*</span>
+                  </label>
+                  <div class="input-method-toggle mb-3">
+                    <button type="button" class="method-btn active" data-method="path" data-target="sshkey">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                      </svg>
+                      File Path
+                    </button>
+                    <button type="button" class="method-btn" data-method="upload" data-target="sshkey">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                      </svg>
+                      Upload Key
+                    </button>
+                  </div>
+                  <div id="method-path-sshkey">
+                    <div class="file-browse-group">
+                      <input type="text" class="form-control" id="sshKeyPath" placeholder="/path/to/id_rsa, id_ed25519, or certificate.pem">
+                      <button type="button" class="btn btn-outline-secondary file-browse-btn" onclick="document.getElementById('sshKeyFileBrowser').click()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        Browse
+                      </button>
+                      <input type="file" id="sshKeyFileBrowser" hidden>
+                    </div>
+                  </div>
+                  <div id="method-upload-sshkey" style="display: none;">
+                    <div class="upload-zone" id="sshKeyUploadZone" style="padding: 1.5rem; min-height: auto;">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                      </svg>
+                      <p class="mb-0 mt-2">Drop SSH key or PEM file here or click to browse</p>
+                      <input type="file" id="sshKeyUploadInput" hidden>
+                    </div>
+                    <div class="file-info mt-2" id="sshKeyFileInfo" style="display: none;">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                        <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+                      </svg>
+                      <span id="sshKeyFileName"></span>
+                      <button type="button" class="btn-clear" id="clearSshKeyFile">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <small class="form-text text-secondary">Supported: RSA, Ed25519, ECDSA keys and PEM certificates</small>
+                </div>
+
+                <!-- SSH Certificate (full width) -->
+                <div class="mb-4">
+                  <label class="form-label">
+                    <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    SSH Certificate <span class="text-secondary small fw-normal">(optional, for CA-signed key auth)</span>
+                  </label>
+                  <div class="input-method-toggle mb-3">
+                    <button type="button" class="method-btn active" data-method="path" data-target="sshcert">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                      </svg>
+                      File Path
+                    </button>
+                    <button type="button" class="method-btn" data-method="upload" data-target="sshcert">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                      </svg>
+                      Upload Cert
+                    </button>
+                  </div>
+                  <div id="method-path-sshcert">
+                    <div class="file-browse-group">
+                      <input type="text" class="form-control" id="sshCertPath" placeholder="/path/to/id_rsa-cert.pub or signed certificate">
+                      <button type="button" class="btn btn-outline-secondary file-browse-btn" onclick="document.getElementById('sshCertFileBrowser').click()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        Browse
+                      </button>
+                      <input type="file" id="sshCertFileBrowser" hidden>
+                    </div>
+                  </div>
+                  <div id="method-upload-sshcert" style="display: none;">
+                    <div class="upload-zone" id="sshCertUploadZone" style="padding: 1.5rem; min-height: auto;">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                      </svg>
+                      <p class="mb-0 mt-2">Drop SSH certificate file here or click to browse</p>
+                      <input type="file" id="sshCertUploadInput" hidden>
+                    </div>
+                    <div class="file-info mt-2" id="sshCertFileInfo" style="display: none;">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                      </svg>
+                      <span id="sshCertFileName"></span>
+                      <button type="button" class="btn-clear" id="clearSshCertFile">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <small class="form-text text-secondary">The <code>-cert.pub</code> file signed by a CA. Used with the private key above for certificate-based SSH auth.</small>
+                </div>
+
+                <!-- Key Passphrase + Usernames -->
+                <div class="row g-4">
+                  <div class="col-md-6">
+                    <label class="form-label">
+                      <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                      </svg>
+                      Key Passphrase
+                    </label>
+                    <input type="password" class="form-control" id="sshKeyPassphrase" placeholder="Optional passphrase">
+                    <div class="form-check mt-2">
+                      <input class="form-check-input" type="checkbox" id="showSshKeyPassphrase">
+                      <label class="form-check-label small text-secondary" for="showSshKeyPassphrase">Show passphrase</label>
+                    </div>
+                    <small class="form-text text-secondary">Only needed if the key is encrypted</small>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">
+                      <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                      </svg>
+                      Usernames to Test
+                    </label>
+                    <input type="text" class="form-control" id="keyAuthUsername" placeholder="root, admin, deploy (comma-separated)">
+                    <small class="form-text text-secondary">Comma-separated usernames, or leave blank to use common defaults (root, admin, ubuntu, ec2-user, etc.)</small>
+                    <div class="mt-2">
+                      <label class="form-label small text-secondary mb-1">Or provide a usernames file:</label>
+                      <div class="file-browse-group">
+                        <input type="text" class="form-control form-control-sm" id="keyAuthUsernamesFile" placeholder="/path/to/usernames.txt">
+                        <button type="button" class="btn btn-outline-secondary btn-sm file-browse-btn" onclick="document.getElementById('keyAuthUsernamesBrowser').click()">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                          </svg>
+                          Browse
+                        </button>
+                        <input type="file" id="keyAuthUsernamesBrowser" accept=".txt,.list,.csv" hidden>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="alert alert-dark border-secondary mt-3 mb-0">
+                  <div class="d-flex align-items-start">
+                    <svg class="me-2 flex-shrink-0 mt-1" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6c757d" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M12 16v-4"/><path d="M12 8h.01"/>
+                    </svg>
+                    <small class="text-secondary">
+                      <strong>Key only:</strong> Tests the private key against SSH targets.
+                      <strong>Key + Certificate:</strong> Uses CA-signed certificate auth (e.g., keys signed by an SSH CA). Provide the private key and its corresponding <code>-cert.pub</code> file.
+                    </small>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Credential File (user:pass list for other attack modes) -->
+              <!-- Workflow Info -->
+              <div class="workflow-info mt-5">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+                <div>
+                  <strong>Credential Testing Pipeline:</strong>
+                  <span id="credPipelineDescription">Service Validation → Fingerprint Detection → Smart Credential Selection → Authentication Testing</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Options -->
+        <div class="scan-tab" id="tab-options">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                Scan Options
+              </h4>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Configure scan performance and behavior settings.</p>
+
+              <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                  <label class="form-label">Threads</label>
+                  <input type="number" class="form-control" id="threads" value="10" min="1" max="50">
+                  <small class="form-text text-secondary">Number of concurrent threads</small>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Timeout (seconds)</label>
+                  <input type="number" class="form-control" id="timeout" value="5" min="1" max="60">
+                  <small class="form-text text-secondary">Connection timeout per target</small>
+                </div>
+              </div>
+
+              <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                  <label class="form-label">Max Attempts Per Target</label>
+                  <input type="number" class="form-control" id="maxAttempts" value="3" min="1" max="100">
+                  <small class="form-text text-secondary">Limit credential tests per target</small>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Service Probing</label>
+                  <div class="form-check form-switch mt-2">
+                    <input class="form-check-input" type="checkbox" id="enableProbing" checked>
+                    <label class="form-check-label" for="enableProbing">Enable service detection</label>
+                  </div>
+                  <small class="form-text text-secondary">Probe services to detect product/vendor for smart credential selection</small>
+                </div>
+              </div>
+
+              <!-- Protocol Selection (multi-select) -->
+              <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                  <label class="form-label">Protocols to Test</label>
+                  <div class="protocol-picker">
+                    <button type="button" class="form-select bg-dark text-light border-secondary text-start d-flex justify-content-between align-items-center"
+                            id="protocolPickerToggle" onclick="toggleProtocolPicker()">
+                      <span id="protocolPickerLabel">Auto-detect (recommended)</span>
+                      <i class="bi bi-chevron-down ms-2"></i>
+                    </button>
+                    <div class="protocol-picker-dropdown" id="protocolPickerDropdown" style="display:none;">
+                      <div class="p-2 border-bottom border-secondary">
+                        <div class="form-check">
+                          <input class="form-check-input" type="checkbox" id="proto_auto" value="auto" checked onchange="updateProtocolSelection('auto')">
+                          <label class="form-check-label text-light" for="proto_auto">Auto-detect (recommended)</label>
+                        </div>
+                      </div>
+                      <div class="p-2" style="max-height: 300px; overflow-y: auto;">
+                        <div class="small text-secondary mb-1 fw-bold proto-group-header" onclick="selectProtocolGroup('webshell')" style="cursor:pointer;" title="Click to toggle group">Web & Shell</div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="webshell" type="checkbox" id="proto_http" value="http" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_http">HTTP/HTTPS <small class="text-secondary">:80/443</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="webshell" type="checkbox" id="proto_ssh" value="ssh" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_ssh">SSH <small class="text-secondary">:22</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="webshell" type="checkbox" id="proto_telnet" value="telnet" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_telnet">Telnet <small class="text-secondary">:23</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="webshell" type="checkbox" id="proto_ftp" value="ftp" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_ftp">FTP <small class="text-secondary">:21</small></label></div>
+
+                        <div class="small text-secondary mb-1 mt-2 fw-bold proto-group-header" onclick="selectProtocolGroup('windows')" style="cursor:pointer;" title="Click to toggle group">Windows</div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="windows" type="checkbox" id="proto_smb" value="smb" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_smb">SMB <small class="text-secondary">:445</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="windows" type="checkbox" id="proto_rdp" value="rdp" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_rdp">RDP <small class="text-secondary">:3389</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="windows" type="checkbox" id="proto_winrm" value="winrm" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_winrm">WinRM <small class="text-secondary">:5985</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="windows" type="checkbox" id="proto_winrm_ssl" value="winrm-ssl" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_winrm_ssl">WinRM-SSL <small class="text-secondary">:5986</small></label></div>
+
+                        <div class="small text-secondary mb-1 mt-2 fw-bold proto-group-header" onclick="selectProtocolGroup('databases')" style="cursor:pointer;" title="Click to toggle group">Databases</div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="databases" type="checkbox" id="proto_mysql" value="mysql" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_mysql">MySQL <small class="text-secondary">:3306</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="databases" type="checkbox" id="proto_postgres" value="postgres" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_postgres">PostgreSQL <small class="text-secondary">:5432</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="databases" type="checkbox" id="proto_mssql" value="mssql" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_mssql">MSSQL <small class="text-secondary">:1433</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="databases" type="checkbox" id="proto_mongodb" value="mongodb" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_mongodb">MongoDB <small class="text-secondary">:27017</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="databases" type="checkbox" id="proto_redis" value="redis" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_redis">Redis <small class="text-secondary">:6379</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="databases" type="checkbox" id="proto_elasticsearch" value="elasticsearch" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_elasticsearch">Elasticsearch <small class="text-secondary">:9200</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="databases" type="checkbox" id="proto_couchdb" value="couchdb" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_couchdb">CouchDB <small class="text-secondary">:5984</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="databases" type="checkbox" id="proto_influxdb" value="influxdb" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_influxdb">InfluxDB <small class="text-secondary">:8086</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="databases" type="checkbox" id="proto_cassandra" value="cassandra" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_cassandra">Cassandra <small class="text-secondary">:9042</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="databases" type="checkbox" id="proto_neo4j" value="neo4j" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_neo4j">Neo4j <small class="text-secondary">:7687</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="databases" type="checkbox" id="proto_memcached" value="memcached" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_memcached">Memcached <small class="text-secondary">:11211</small></label></div>
+
+                        <div class="small text-secondary mb-1 mt-2 fw-bold proto-group-header" onclick="selectProtocolGroup('email')" style="cursor:pointer;" title="Click to toggle group">Email</div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="email" type="checkbox" id="proto_smtp" value="smtp" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_smtp">SMTP <small class="text-secondary">:25</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="email" type="checkbox" id="proto_smtps" value="smtps" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_smtps">SMTPS <small class="text-secondary">:465</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="email" type="checkbox" id="proto_imap" value="imap" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_imap">IMAP <small class="text-secondary">:143</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="email" type="checkbox" id="proto_imaps" value="imaps" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_imaps">IMAPS <small class="text-secondary">:993</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="email" type="checkbox" id="proto_pop3" value="pop3" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_pop3">POP3 <small class="text-secondary">:110</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="email" type="checkbox" id="proto_pop3s" value="pop3s" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_pop3s">POP3S <small class="text-secondary">:995</small></label></div>
+
+                        <div class="small text-secondary mb-1 mt-2 fw-bold proto-group-header" onclick="selectProtocolGroup('directory')" style="cursor:pointer;" title="Click to toggle group">Directory Services</div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="directory" type="checkbox" id="proto_ldap" value="ldap" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_ldap">LDAP <small class="text-secondary">:389</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="directory" type="checkbox" id="proto_ldaps" value="ldaps" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_ldaps">LDAPS <small class="text-secondary">:636</small></label></div>
+
+                        <div class="small text-secondary mb-1 mt-2 fw-bold proto-group-header" onclick="selectProtocolGroup('remote')" style="cursor:pointer;" title="Click to toggle group">Remote Access</div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="remote" type="checkbox" id="proto_vnc" value="vnc" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_vnc">VNC <small class="text-secondary">:5900</small></label></div>
+
+                        <div class="small text-secondary mb-1 mt-2 fw-bold proto-group-header" onclick="selectProtocolGroup('iot')" style="cursor:pointer;" title="Click to toggle group">IoT / Network</div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="iot" type="checkbox" id="proto_snmp" value="snmp" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_snmp">SNMP <small class="text-secondary">:161</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="iot" type="checkbox" id="proto_ipmi" value="ipmi" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_ipmi">IPMI <small class="text-secondary">:623</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="iot" type="checkbox" id="proto_mqtt" value="mqtt" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_mqtt">MQTT <small class="text-secondary">:1883</small></label></div>
+                        <div class="form-check"><input class="form-check-input proto-check" data-group="iot" type="checkbox" id="proto_mqtts" value="mqtts" onchange="updateProtocolSelection('svc')"><label class="form-check-label text-light" for="proto_mqtts">MQTTS <small class="text-secondary">:8883</small></label></div>
+                      </div>
+                    </div>
+                  </div>
+                  <small class="form-text text-secondary">Select one or more protocols to test (click group headers to toggle all)</small>
+                </div>
+              </div>
+
+              <!-- Advanced Options -->
+              <div class="row g-4 mb-4">
+                <div class="col-md-4">
+                  <label class="form-label">Jitter (seconds)</label>
+                  <input type="number" class="form-control" id="jitter" value="0" min="0" max="30" step="0.5">
+                  <small class="form-text text-secondary">Random delay variance between attempts</small>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Max Attempts Per User</label>
+                  <input type="number" class="form-control" id="maxAttemptsPerUser" value="0" min="0" max="100">
+                  <small class="form-text text-secondary">Limit per username (0 = unlimited)</small>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">SNMP Tier</label>
+                  <select class="form-select" id="snmpTier">
+                    <option value="default" selected>Default (25 strings)</option>
+                    <option value="extended">Extended (75 strings)</option>
+                    <option value="full">Full (200+ strings)</option>
+                  </select>
+                  <small class="form-text text-secondary">Community string wordlist depth</small>
+                </div>
+              </div>
+
+              <div class="row g-4 mb-4">
+                <div class="col-md-4">
+                  <label class="form-label">SMB NTLM Hash</label>
+                  <input type="text" class="form-control" id="smbHash" placeholder="LMHASH:NTHASH or NTHASH">
+                  <small class="form-text text-secondary">Pass-the-hash for SMB authentication</small>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Domain</label>
+                  <input type="text" class="form-control" id="domain" placeholder="WORKGROUP">
+                  <small class="form-text text-secondary">Domain for SMB/WinRM auth</small>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">SSH Bad Keys</label>
+                  <div class="form-check form-switch mt-2">
+                    <input class="form-check-input" type="checkbox" id="enableBadkeys">
+                    <label class="form-check-label" for="enableBadkeys">Test known-compromised SSH keys</label>
+                  </div>
+                  <small class="form-text text-secondary">Checks F5, ExaGrid, Barracuda, Vagrant, etc.</small>
+                </div>
+              </div>
+
+              <!-- Info about Smart Credential Selection -->
+              <div class="alert alert-info mt-4" role="alert">
+                <div class="d-flex align-items-start">
+                  <svg class="me-3 flex-shrink-0" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 16v-4"/>
+                    <path d="M12 8h.01"/>
+                  </svg>
+                  <div>
+                    <strong>Smart Credential Selection</strong>
+                    <p class="mb-0 mt-1 small">When service probing is enabled, credentials are automatically prioritized based on detected service (vendor/product). For example, if Jenkins is detected, Jenkins-specific credentials are tested first before generic HTTP credentials.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Info & Help -->
+        <div class="scan-tab" id="tab-info">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                  <line x1="8" y1="6" x2="16" y2="6"/>
+                  <line x1="8" y1="10" x2="16" y2="10"/>
+                  <line x1="8" y1="14" x2="12" y2="14"/>
+                </svg>
+                Credential Scanner Documentation
+              </h4>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Learn how to use Cygor's credential scanner effectively.</p>
+
+              <!-- How It Works -->
+              <div class="info-section">
+                <h5 class="info-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d6efd" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  How Credential Scanning Works
+                </h5>
+                <div class="info-content">
+                  <ol class="workflow-steps">
+                    <li>
+                      <strong>Service Detection</strong>
+                      <p>Identifies the service type based on port or URL, and fingerprints the target to detect vendor/product.</p>
+                    </li>
+                    <li>
+                      <strong>Credential Selection</strong>
+                      <p>Smart matching selects the most likely credentials based on service fingerprint and known defaults.</p>
+                    </li>
+                    <li>
+                      <strong>Authentication Testing</strong>
+                      <p>Tests credentials against the service using protocol-specific authentication methods.</p>
+                    </li>
+                    <li>
+                      <strong>Results & Reporting</strong>
+                      <p>Reports successful authentications with credential details and service information.</p>
+                    </li>
+                  </ol>
+                </div>
+              </div>
+
+              <!-- CLI Options Reference -->
+              <div class="info-section mt-5">
+                <h5 class="info-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <path d="M6 8l4 4-4 4"/>
+                    <line x1="12" y1="16" x2="18" y2="16"/>
+                  </svg>
+                  Command Line Options
+                </h5>
+                <div class="cli-options-grid">
+                  <div class="cli-option-group">
+                    <h6>Targets</h6>
+                    <div class="cli-option">
+                      <code>-t, --targets</code>
+                      <span>List of targets (IP:PORT or URLs)</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>-f, --file</code>
+                      <span>File containing targets</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>-p, --protocol</code>
+                      <span>Force specific protocol</span>
+                    </div>
+                  </div>
+                  <div class="cli-option-group">
+                    <h6>Credentials</h6>
+                    <div class="cli-option">
+                      <code>--creds-file</code>
+                      <span>Custom credentials YAML file</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--usernames</code>
+                      <span>Custom usernames list</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--passwords</code>
+                      <span>Custom passwords list</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--sync</code>
+                      <span>Sync external credential sources</span>
+                    </div>
+                  </div>
+                  <div class="cli-option-group">
+                    <h6>Performance</h6>
+                    <div class="cli-option">
+                      <code>--threads</code>
+                      <span>Number of concurrent threads</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--timeout</code>
+                      <span>Connection timeout in seconds</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--max-attempts</code>
+                      <span>Limit attempts per target</span>
+                    </div>
+                  </div>
+                  <div class="cli-option-group">
+                    <h6>SSH Key Auth</h6>
+                    <div class="cli-option">
+                      <code>--ssh-key</code>
+                      <span>SSH private key file for key-based auth</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--ssh-key-passphrase</code>
+                      <span>Passphrase for encrypted private key</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--ssh-cert</code>
+                      <span>SSH certificate file (-cert.pub) for CA-signed auth</span>
+                    </div>
+                  </div>
+                  <div class="cli-option-group">
+                    <h6>Features</h6>
+                    <div class="cli-option">
+                      <code>--probe / --no-probe</code>
+                      <span>Service probing (enabled by default)</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--sync</code>
+                      <span>Sync external credential sources</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>stats</code>
+                      <span>Show credential database stats (subcommand)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Examples -->
+              <div class="info-section mt-5">
+                <h5 class="info-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                  </svg>
+                  Example Commands
+                </h5>
+                <div class="examples-list">
+                  <div class="example-item">
+                    <div class="example-desc">Scan SSH targets with default credentials</div>
+                    <code class="example-code">cygor credrecon -t 192.168.1.1:22 -p ssh</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">Scan targets from file with auto-detection</div>
+                    <code class="example-code">cygor credrecon -f targets.txt --threads 20</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">Test HTTP login page with custom credentials</div>
+                    <code class="example-code">cygor credrecon -t http://target.com/login --usernames users.txt --passwords passwords.txt</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">Sync external sources and scan</div>
+                    <code class="example-code">cygor credrecon -i targets.txt --sync</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">Test SSH key authentication</div>
+                    <code class="example-code">cygor credrecon -t 192.168.1.1:22 --ssh-key ~/.ssh/id_rsa --attack-mode single --single-username root</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">Test with CA-signed SSH certificate (key + cert)</div>
+                    <code class="example-code">cygor credrecon -t 192.168.1.1:22 --ssh-key ~/.ssh/id_rsa --ssh-cert ~/.ssh/id_rsa-cert.pub --attack-mode single --single-username deploy</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">View credential database statistics</div>
+                    <code class="example-code">cygor credrecon stats</code>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Warning -->
+              <div class="alert alert-warning mt-5 mb-0">
+                <svg class="me-2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <strong>Authorization Required:</strong> Only scan systems you own or have explicit written permission to test. Unauthorized access attempts may be illegal and violate computer fraud laws.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- IP Rotation Status Badge -->
+        <div id="ipRotationBadge" class="mb-2" style="display:none;">
+          <span class="badge bg-info bg-opacity-25 text-info border border-info">
+            <i class="bi bi-shuffle me-1"></i>
+            <span id="ipRotationBadgeText">IP Rotation: Active</span>
+          </span>
+        </div>
+
+        <!-- Submit Bar -->
+        <div class="submit-bar mt-4">
+          <a href="/tasks" class="btn btn-outline-secondary btn-lg px-4">
+            <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+            Cancel
+          </a>
+          <button type="submit" class="btn btn-warning btn-lg px-5">
+            <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            Start Credential Scan
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+<style>
+/* ==================== SCAN NAV ==================== */
+.scan-nav-container {
+  position: sticky;
+  top: 80px;
+}
+
+.scan-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.scan-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: #adb5bd;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+  font-size: 1.05rem;
+}
+
+.scan-nav-item:hover {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #fff;
+}
+
+.scan-nav-item.active {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
+  color: #fff;
+}
+
+.scan-nav-item .nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.scan-nav-item .nav-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.scan-nav-item .nav-text {
+  flex: 1;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.scan-nav-item .nav-status {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.scan-nav-item .nav-status.configured {
+  background: #22c55e;
+}
+
+/* ==================== TABS ==================== */
+.scan-tab {
+  display: none;
+}
+
+.scan-tab.active {
+  display: block;
+}
+
+/* ==================== INPUT METHOD TOGGLE ==================== */
+.input-method-toggle {
+  display: flex;
+  gap: 1rem;
+}
+
+.method-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #adb5bd;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 1rem;
+}
+
+.method-btn:hover {
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #fff;
+}
+
+.method-btn.active {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
+  color: #fff;
+}
+
+/* ==================== TARGET INPUT ==================== */
+.target-input {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  font-size: 1rem;
+  background: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 4px !important;
+  line-height: 1.7;
+  padding: 1rem !important;
+}
+
+.target-input:focus {
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15) !important;
+}
+
+.target-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.hint-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+  color: #9ca3af;
+}
+
+/* ==================== UPLOAD ZONE ==================== */
+.upload-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.upload-zone-small {
+  padding: 2rem 1.5rem;
+}
+
+.upload-zone:hover {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.05);
+}
+
+.upload-zone svg {
+  color: #6b7280;
+  margin-bottom: 1.25rem;
+}
+
+.upload-zone p {
+  margin: 0;
+  color: #9ca3af;
+  font-size: 1rem;
+}
+
+.upload-zone span {
+  color: #f59e0b;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 4px;
+}
+
+.file-info span {
+  flex: 1;
+  font-family: monospace;
+  font-size: 1rem;
+  color: #22c55e;
+}
+
+.btn-clear {
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.btn-clear:hover {
+  background: rgba(220, 53, 69, 0.2);
+  color: #dc3545;
+}
+
+/* ==================== FILE BROWSE GROUP ==================== */
+.file-browse-group {
+  display: flex;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.file-browse-group .form-control {
+  flex: 1;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  font-size: 0.95rem;
+  padding: 0.875rem 1rem;
+}
+
+.file-browse-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  white-space: nowrap;
+  font-weight: 500;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #e5e7eb !important;
+  transition: all 0.2s;
+}
+
+.file-browse-btn:hover {
+  background: rgba(245, 158, 11, 0.15) !important;
+  border-color: #f59e0b !important;
+  color: #fff !important;
+}
+
+.file-browse-btn svg {
+  flex-shrink: 0;
+}
+
+/* ==================== SECTION TOGGLE ==================== */
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #adb5bd;
+  font-size: 1rem;
+}
+
+.section-toggle:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.section-toggle.open {
+  border-radius: 4px 4px 0 0;
+  border-bottom: none;
+}
+
+.toggle-arrow {
+  margin-left: auto;
+  transition: transform 0.2s;
+}
+
+.section-toggle.open .toggle-arrow {
+  transform: rotate(180deg);
+}
+
+.custom-creds-content {
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+}
+
+/* ==================== TOOL SECTIONS (shared with scan_new.html) ==================== */
+.tool-section {
+  margin-bottom: 2rem;
+}
+
+.tool-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.tool-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.tool-section-title svg {
+  width: 24px;
+  height: 24px;
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 992px) {
+  .tool-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (min-width: 1900px) {
+  .tool-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ==================== TOOL CARDS ==================== */
+.tool-card {
+  display: block;
+  cursor: pointer;
+}
+
+.tool-card input {
+  display: none;
+}
+
+.tool-card-content {
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  transition: all 0.2s;
+  height: 100%;
+}
+
+.tool-card:hover .tool-card-content {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.tool-card.selected .tool-card-content,
+.tool-card input:checked + .tool-card-content {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.tool-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.tool-name {
+  font-weight: 600;
+  font-size: 1.15rem;
+}
+
+.tool-badge {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.6rem;
+  background: #f59e0b;
+  color: #000;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.tool-features {
+  margin: 0;
+  padding: 0 0 0 1.25rem;
+  list-style: disc;
+}
+
+.tool-features li {
+  font-size: 0.9rem;
+  color: #9ca3af;
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+.tool-input {
+  padding-top: 1rem;
+  margin-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tool-input label {
+  display: block;
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin-bottom: 0.5rem;
+}
+
+.tool-input .form-control {
+  font-size: 0.9375rem;
+  padding: 0.625rem 0.875rem;
+}
+
+/* ==================== WORKFLOW INFO ==================== */
+.workflow-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: rgba(13, 110, 253, 0.1);
+  border: 1px solid rgba(13, 110, 253, 0.3);
+  border-radius: 4px;
+}
+
+.workflow-info svg {
+  color: #0d6efd;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+}
+
+.workflow-info strong {
+  color: #60a5fa;
+  font-size: 1rem;
+}
+
+.workflow-info span {
+  color: #9ca3af;
+  font-size: 0.9375rem;
+}
+
+/* ==================== TOOL SECTIONS ==================== */
+.tool-section {
+  margin-bottom: 2rem;
+}
+
+.tool-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.tool-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.tool-section-title svg {
+  width: 24px;
+  height: 24px;
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+.tool-grid.attack-mode-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 1200px) {
+  .tool-grid.attack-mode-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 992px) {
+  .tool-grid {
+    grid-template-columns: 1fr;
+  }
+  .tool-grid.attack-mode-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==================== TOOL CARDS ==================== */
+.tool-card {
+  display: block;
+  cursor: pointer;
+}
+
+.tool-card input {
+  display: none;
+}
+
+.tool-card-content {
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  transition: all 0.2s;
+  height: 100%;
+}
+
+.tool-card:hover .tool-card-content {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.tool-card.selected .tool-card-content,
+.tool-card input:checked + .tool-card-content {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.tool-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.tool-name {
+  font-weight: 600;
+  font-size: 1.15rem;
+}
+
+.tool-badge {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.6rem;
+  background: #f59e0b;
+  color: #000;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.tool-features {
+  margin: 0;
+  padding: 0 0 0 1.25rem;
+  list-style: disc;
+}
+
+.tool-features li {
+  font-size: 0.9rem;
+  color: #9ca3af;
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+/* ==================== WORKFLOW INFO ==================== */
+.workflow-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 4px;
+}
+
+.workflow-info svg {
+  color: #f59e0b;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+}
+
+.workflow-info strong {
+  color: #fbbf24;
+  font-size: 1rem;
+}
+
+.workflow-info span {
+  color: #9ca3af;
+  font-size: 0.9375rem;
+}
+
+/* ==================== FINGERPRINT ==================== */
+.fingerprint-toggle {
+  display: flex;
+  cursor: pointer;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.fingerprint-toggle input {
+  display: none;
+}
+
+.fingerprint-toggle:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.fingerprint-toggle:has(input:checked) {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.fingerprint-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin-bottom: 0.75rem;
+}
+
+.fingerprint-header svg {
+  color: #f59e0b;
+  width: 24px;
+  height: 24px;
+}
+
+.fingerprint-content p {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: #9ca3af;
+  line-height: 1.5;
+}
+
+/* ==================== INFO SECTIONS ==================== */
+.info-section {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 1.5rem;
+}
+
+.info-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.workflow-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.workflow-steps li {
+  position: relative;
+  padding-left: 3rem;
+  margin-bottom: 1.5rem;
+  counter-increment: step;
+}
+
+.workflow-steps li:before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2rem;
+  height: 2rem;
+  background: rgba(245, 158, 11, 0.2);
+  border: 2px solid #f59e0b;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #f59e0b;
+}
+
+.workflow-steps li strong {
+  display: block;
+  font-size: 1rem;
+  color: #e5e7eb;
+  margin-bottom: 0.25rem;
+}
+
+.workflow-steps li p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #9ca3af;
+  line-height: 1.5;
+}
+
+/* CLI Options */
+.cli-options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 992px) {
+  .cli-options-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cli-option-group h6 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fbbf24;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cli-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.625rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.cli-option code {
+  font-family: 'SF Mono', 'Monaco', monospace;
+  font-size: 0.875rem;
+  color: #22c55e;
+  background: transparent;
+}
+
+.cli-option span {
+  font-size: 0.8125rem;
+  color: #9ca3af;
+}
+
+/* Examples */
+.examples-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.example-item {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  padding: 1rem;
+}
+
+.example-desc {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin-bottom: 0.5rem;
+}
+
+.example-code {
+  display: block;
+  font-family: 'SF Mono', 'Monaco', monospace;
+  font-size: 0.875rem;
+  color: #22c55e;
+  background: transparent;
+  padding: 0;
+  word-break: break-all;
+}
+
+/* ==================== SUBMIT BAR ==================== */
+.submit-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 0;
+}
+
+.submit-bar .btn {
+  padding: 0.875rem 2rem;
+  font-size: 1rem;
+}
+
+/* ==================== FORM CONTROLS ==================== */
+.form-control, .form-select {
+  background: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 4px !important;
+  color: #e5e7eb !important;
+  font-size: 0.9375rem;
+  padding: 0.75rem 1rem;
+}
+
+.form-control:focus, .form-select:focus {
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15) !important;
+}
+
+.form-control::placeholder {
+  color: #6b7280 !important;
+}
+
+.form-label {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.form-text {
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+/* ==================== CARD OVERRIDES ==================== */
+.card.bg-dark {
+  border-radius: 4px !important;
+}
+
+.card-header {
+  padding: 1.25rem 1.5rem;
+  border-radius: 4px 4px 0 0 !important;
+}
+
+.card-header h4 {
+  font-size: 1.25rem;
+}
+
+.card-header h4 svg {
+  width: 28px;
+  height: 28px;
+}
+
+.card-body {
+  padding: 1.75rem;
+}
+
+.card-body > p.text-secondary {
+  font-size: 1rem;
+  margin-bottom: 1.5rem !important;
+}
+
+/* Alert styling */
+.alert-warning {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+.alert-warning strong {
+  color: #f59e0b;
+}
+</style>
+
+<script>
+// ==================== STATE ====================
+let uploadedTargetContent = null;
+let uploadedCredfileContent = '';
+
+// ==================== TAB NAVIGATION ====================
+document.querySelectorAll('.scan-nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.scan-nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    const tabId = btn.dataset.tab;
+    document.querySelectorAll('.scan-tab').forEach(tab => tab.classList.remove('active'));
+    document.getElementById(`tab-${tabId}`).classList.add('active');
+  });
+});
+
+// ==================== TARGET INPUT METHOD TOGGLE ====================
+function switchTargetMethod(method) {
+  // Update button active states
+  document.querySelectorAll('.method-btn[data-target="targets"]').forEach(b => {
+    b.classList.toggle('active', b.dataset.method === method);
+  });
+  // Show/hide the three content areas
+  document.getElementById('method-manual-targets').style.display = method === 'manual' ? 'block' : 'none';
+  document.getElementById('method-file-targets').style.display = method === 'file' ? 'block' : 'none';
+  document.getElementById('method-credfile-targets').style.display = method === 'credfile' ? 'block' : 'none';
+
+  // Hide Credentials tab when credential file is selected (file already has creds)
+  const credsNavItem = document.querySelector('.scan-nav-item[data-tab="credentials"]');
+  if (credsNavItem) {
+    credsNavItem.style.display = method === 'credfile' ? 'none' : '';
+    // If credentials tab was active, switch away from it
+    if (method === 'credfile' && credsNavItem.classList.contains('active')) {
+      credsNavItem.classList.remove('active');
+      document.getElementById('tab-credentials')?.classList.remove('active');
+      document.querySelector('.scan-nav-item[data-tab="targets"]')?.classList.add('active');
+      document.getElementById('tab-targets')?.classList.add('active');
+    }
+  }
+}
+
+// Generic server file browser opener — reuses credfile browser modal
+function openServerBrowser(targetInputId, fileTypes) {
+  credfileBrowserSelectedPath = '';
+  const btn = document.getElementById('credfileBrowserSelectBtn');
+  if (btn) btn.disabled = true;
+  window._serverBrowserTargetInput = targetInputId;
+  window._serverBrowserFileTypes = fileTypes || '.txt,.list,.csv';
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('credfileBrowserModal'));
+  modal.show();
+  credfileBrowserLoadDir('', window._serverBrowserFileTypes);
+}
+
+// ==================== TOOL CARD SELECTION ====================
+document.querySelectorAll('.tool-card input[type="checkbox"]').forEach(checkbox => {
+  checkbox.addEventListener('change', (e) => {
+    const card = e.target.closest('.tool-card');
+    card.classList.toggle('selected', e.target.checked);
+  });
+  // Initialize state
+  if (checkbox.checked) {
+    checkbox.closest('.tool-card').classList.add('selected');
+  }
+});
+
+// ==================== ATTACK MODE TOGGLE ====================
+document.querySelectorAll('input[name="attackMode"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    const mode = e.target.value;
+
+    // Update card selection state for attack mode cards
+    document.querySelectorAll('.tool-card input[name="attackMode"]').forEach(input => {
+      const card = input.closest('.tool-card');
+      card.classList.toggle('selected', input.checked);
+    });
+
+    // Show/hide relevant config sections in Credentials tab
+    document.getElementById('singleCredsSection').style.display = mode === 'single' ? 'block' : 'none';
+    document.getElementById('defaultCredsSection').style.display = mode === 'default' ? 'block' : 'none';
+    document.getElementById('spraySection').style.display = mode === 'spray' ? 'block' : 'none';
+    document.getElementById('stuffSection').style.display = mode === 'stuff' ? 'block' : 'none';
+    document.getElementById('keyAuthSection').style.display = mode === 'key' ? 'block' : 'none';
+
+    // Update pipeline description
+    const pipelineDesc = document.getElementById('credPipelineDescription');
+    if (pipelineDesc) {
+      switch(mode) {
+        case 'single':
+          pipelineDesc.textContent = 'Service Validation → Single Credential Test → Results';
+          break;
+        case 'spray':
+          pipelineDesc.textContent = 'Service Validation → Load Usernames → Password Spray → Results';
+          break;
+        case 'stuff':
+          pipelineDesc.textContent = 'Service Validation → Load Passwords → Credential Stuffing → Results';
+          break;
+        case 'key':
+          pipelineDesc.textContent = 'Service Validation → Load Key/Certificate → SSH Key Authentication → Results';
+          break;
+        default:
+          pipelineDesc.textContent = 'Service Validation → Fingerprint Detection → Smart Credential Selection → Authentication Testing';
+      }
+    }
+  });
+});
+
+// ==================== SHOW/HIDE PASSWORD TOGGLE ====================
+const showSinglePassword = document.getElementById('showSinglePassword');
+const singlePasswordInput = document.getElementById('singlePassword');
+if (showSinglePassword && singlePasswordInput) {
+  showSinglePassword.addEventListener('change', (e) => {
+    singlePasswordInput.type = e.target.checked ? 'text' : 'password';
+  });
+}
+
+// ==================== CHECKBOX CARD SELECTION ====================
+document.querySelectorAll('.tool-card input[type="checkbox"]').forEach(checkbox => {
+  checkbox.addEventListener('change', (e) => {
+    const card = e.target.closest('.tool-card');
+    card.classList.toggle('selected', e.target.checked);
+  });
+});
+
+// ==================== MAX ATTEMPTS (now always enabled) ====================
+// Max attempts input is always enabled - no toggle needed
+
+// ==================== FILE UPLOAD HANDLERS (for targets only) ====================
+function setupFileUpload(zoneId, inputId, infoId, nameId, clearId, contentVar) {
+  const zone = document.getElementById(zoneId);
+  const input = document.getElementById(inputId);
+  const info = document.getElementById(infoId);
+  const nameSpan = document.getElementById(nameId);
+  const clearBtn = document.getElementById(clearId);
+
+  if (!zone || !input) return;
+
+  zone.addEventListener('click', () => input.click());
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.style.borderColor = '#f59e0b'; });
+  zone.addEventListener('dragleave', () => { zone.style.borderColor = ''; });
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.style.borderColor = '';
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', (e) => {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+  });
+
+  function handleFile(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      window[contentVar] = e.target.result;
+      nameSpan.textContent = file.name;
+      zone.style.display = 'none';
+      info.style.display = 'flex';
+    };
+    reader.readAsText(file);
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      window[contentVar] = null;
+      input.value = '';
+      zone.style.display = 'flex';
+      info.style.display = 'none';
+    });
+  }
+}
+
+setupFileUpload('targetUploadZone', 'targetsFileInput', 'targetFileInfo', 'targetFileName', 'clearTargetFile', 'uploadedTargetContent');
+
+// ==================== FILE BROWSE HANDLERS ====================
+// Handle file browser for usernames file
+const usernamesFileBrowser = document.getElementById('usernamesFileBrowser');
+const defaultUsernamesFile = document.getElementById('defaultUsernamesFile');
+if (usernamesFileBrowser && defaultUsernamesFile) {
+  usernamesFileBrowser.addEventListener('change', (e) => {
+    if (e.target.files.length) {
+      // In web context, we show the file name but can't get the full path due to browser security
+      // The file will be uploaded and handled server-side
+      const file = e.target.files[0];
+      defaultUsernamesFile.value = file.name;
+      defaultUsernamesFile.dataset.fileContent = '';
+      // Read the file content for later use
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        defaultUsernamesFile.dataset.fileContent = ev.target.result;
+      };
+      reader.readAsText(file);
+    }
+  });
+}
+
+// Handle file browser for passwords file
+const passwordsFileBrowser = document.getElementById('passwordsFileBrowser');
+const defaultPasswordsFile = document.getElementById('defaultPasswordsFile');
+if (passwordsFileBrowser && defaultPasswordsFile) {
+  passwordsFileBrowser.addEventListener('change', (e) => {
+    if (e.target.files.length) {
+      const file = e.target.files[0];
+      defaultPasswordsFile.value = file.name;
+      defaultPasswordsFile.dataset.fileContent = '';
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        defaultPasswordsFile.dataset.fileContent = ev.target.result;
+      };
+      reader.readAsText(file);
+    }
+  });
+}
+
+// Handle file browser for spray usernames file
+const sprayUsernamesBrowser = document.getElementById('sprayUsernamesBrowser');
+const sprayUsernamesFile = document.getElementById('sprayUsernamesFile');
+if (sprayUsernamesBrowser && sprayUsernamesFile) {
+  sprayUsernamesBrowser.addEventListener('change', (e) => {
+    if (e.target.files.length) {
+      const file = e.target.files[0];
+      sprayUsernamesFile.value = file.name;
+      sprayUsernamesFile.dataset.fileContent = '';
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        sprayUsernamesFile.dataset.fileContent = ev.target.result;
+      };
+      reader.readAsText(file);
+    }
+  });
+}
+
+// Handle file browser for stuff passwords file
+const stuffPasswordsBrowser = document.getElementById('stuffPasswordsBrowser');
+const stuffPasswordsFile = document.getElementById('stuffPasswordsFile');
+if (stuffPasswordsBrowser && stuffPasswordsFile) {
+  stuffPasswordsBrowser.addEventListener('change', (e) => {
+    if (e.target.files.length) {
+      const file = e.target.files[0];
+      stuffPasswordsFile.value = file.name;
+      stuffPasswordsFile.dataset.fileContent = '';
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        stuffPasswordsFile.dataset.fileContent = ev.target.result;
+      };
+      reader.readAsText(file);
+    }
+  });
+}
+
+// Handle file browser for key auth usernames file
+const keyAuthUsernamesBrowser = document.getElementById('keyAuthUsernamesBrowser');
+const keyAuthUsernamesFile = document.getElementById('keyAuthUsernamesFile');
+if (keyAuthUsernamesBrowser && keyAuthUsernamesFile) {
+  keyAuthUsernamesBrowser.addEventListener('change', (e) => {
+    if (e.target.files.length) {
+      const file = e.target.files[0];
+      keyAuthUsernamesFile.value = file.name;
+      keyAuthUsernamesFile.dataset.fileContent = '';
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        keyAuthUsernamesFile.dataset.fileContent = ev.target.result;
+      };
+      reader.readAsText(file);
+    }
+  });
+}
+
+// ==================== SSH KEY HANDLERS ====================
+// SSH key method toggle (path vs upload)
+document.querySelectorAll('.method-btn[data-target="sshkey"]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.method-btn[data-target="sshkey"]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const method = btn.dataset.method;
+    document.getElementById('method-path-sshkey').style.display = method === 'path' ? 'block' : 'none';
+    document.getElementById('method-upload-sshkey').style.display = method === 'upload' ? 'block' : 'none';
+  });
+});
+
+// SSH key file browse (path input)
+const sshKeyFileBrowser = document.getElementById('sshKeyFileBrowser');
+const sshKeyPathInput = document.getElementById('sshKeyPath');
+if (sshKeyFileBrowser && sshKeyPathInput) {
+  sshKeyFileBrowser.addEventListener('change', (e) => {
+    if (e.target.files.length) {
+      const file = e.target.files[0];
+      sshKeyPathInput.value = file.name;
+      sshKeyPathInput.dataset.fileContent = '';
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        sshKeyPathInput.dataset.fileContent = ev.target.result;
+      };
+      reader.readAsText(file);
+    }
+  });
+}
+
+// SSH key upload zone
+let uploadedSshKeyContent = null;
+const sshKeyUploadZone = document.getElementById('sshKeyUploadZone');
+const sshKeyUploadInput = document.getElementById('sshKeyUploadInput');
+const sshKeyFileInfo = document.getElementById('sshKeyFileInfo');
+const sshKeyFileName = document.getElementById('sshKeyFileName');
+const clearSshKeyFile = document.getElementById('clearSshKeyFile');
+
+if (sshKeyUploadZone && sshKeyUploadInput) {
+  sshKeyUploadZone.addEventListener('click', () => sshKeyUploadInput.click());
+  sshKeyUploadZone.addEventListener('dragover', (e) => { e.preventDefault(); sshKeyUploadZone.style.borderColor = '#22c55e'; });
+  sshKeyUploadZone.addEventListener('dragleave', () => { sshKeyUploadZone.style.borderColor = ''; });
+  sshKeyUploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    sshKeyUploadZone.style.borderColor = '';
+    if (e.dataTransfer.files.length) handleSshKeyFile(e.dataTransfer.files[0]);
+  });
+  sshKeyUploadInput.addEventListener('change', (e) => {
+    if (e.target.files.length) handleSshKeyFile(e.target.files[0]);
+  });
+
+  function handleSshKeyFile(file) {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      uploadedSshKeyContent = ev.target.result;
+      if (sshKeyFileName) sshKeyFileName.textContent = file.name;
+      sshKeyUploadZone.style.display = 'none';
+      if (sshKeyFileInfo) sshKeyFileInfo.style.display = 'flex';
+    };
+    reader.readAsText(file);
+  }
+
+  if (clearSshKeyFile) {
+    clearSshKeyFile.addEventListener('click', () => {
+      uploadedSshKeyContent = null;
+      sshKeyUploadInput.value = '';
+      sshKeyUploadZone.style.display = 'flex';
+      if (sshKeyFileInfo) sshKeyFileInfo.style.display = 'none';
+    });
+  }
+}
+
+// SSH key passphrase show/hide
+const showSshKeyPassphrase = document.getElementById('showSshKeyPassphrase');
+const sshKeyPassphraseInput = document.getElementById('sshKeyPassphrase');
+if (showSshKeyPassphrase && sshKeyPassphraseInput) {
+  showSshKeyPassphrase.addEventListener('change', (e) => {
+    sshKeyPassphraseInput.type = e.target.checked ? 'text' : 'password';
+  });
+}
+
+// ==================== SSH CERTIFICATE HANDLERS ====================
+// SSH cert method toggle (path vs upload)
+document.querySelectorAll('.method-btn[data-target="sshcert"]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.method-btn[data-target="sshcert"]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const method = btn.dataset.method;
+    document.getElementById('method-path-sshcert').style.display = method === 'path' ? 'block' : 'none';
+    document.getElementById('method-upload-sshcert').style.display = method === 'upload' ? 'block' : 'none';
+  });
+});
+
+// SSH cert file browse (path input)
+const sshCertFileBrowser = document.getElementById('sshCertFileBrowser');
+const sshCertPathInput = document.getElementById('sshCertPath');
+if (sshCertFileBrowser && sshCertPathInput) {
+  sshCertFileBrowser.addEventListener('change', (e) => {
+    if (e.target.files.length) {
+      const file = e.target.files[0];
+      sshCertPathInput.value = file.name;
+      sshCertPathInput.dataset.fileContent = '';
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        sshCertPathInput.dataset.fileContent = ev.target.result;
+      };
+      reader.readAsText(file);
+    }
+  });
+}
+
+// SSH cert upload zone
+let uploadedSshCertContent = null;
+const sshCertUploadZone = document.getElementById('sshCertUploadZone');
+const sshCertUploadInput = document.getElementById('sshCertUploadInput');
+const sshCertFileInfo = document.getElementById('sshCertFileInfo');
+const sshCertFileName = document.getElementById('sshCertFileName');
+const clearSshCertFile = document.getElementById('clearSshCertFile');
+
+if (sshCertUploadZone && sshCertUploadInput) {
+  sshCertUploadZone.addEventListener('click', () => sshCertUploadInput.click());
+  sshCertUploadZone.addEventListener('dragover', (e) => { e.preventDefault(); sshCertUploadZone.style.borderColor = '#60a5fa'; });
+  sshCertUploadZone.addEventListener('dragleave', () => { sshCertUploadZone.style.borderColor = ''; });
+  sshCertUploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    sshCertUploadZone.style.borderColor = '';
+    if (e.dataTransfer.files.length) handleSshCertFile(e.dataTransfer.files[0]);
+  });
+  sshCertUploadInput.addEventListener('change', (e) => {
+    if (e.target.files.length) handleSshCertFile(e.target.files[0]);
+  });
+
+  function handleSshCertFile(file) {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      uploadedSshCertContent = ev.target.result;
+      if (sshCertFileName) sshCertFileName.textContent = file.name;
+      sshCertUploadZone.style.display = 'none';
+      if (sshCertFileInfo) sshCertFileInfo.style.display = 'flex';
+    };
+    reader.readAsText(file);
+  }
+
+  if (clearSshCertFile) {
+    clearSshCertFile.addEventListener('click', () => {
+      uploadedSshCertContent = null;
+      sshCertUploadInput.value = '';
+      sshCertUploadZone.style.display = 'flex';
+      if (sshCertFileInfo) sshCertFileInfo.style.display = 'none';
+    });
+  }
+}
+
+// ==================== CREDENTIAL FILE HANDLERS ====================
+    function toggleCredfileMethod(method) {
+      document.querySelectorAll('.method-btn[data-target="credfile"]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.method === method);
+      });
+      document.getElementById('credfilePasteArea').style.display = method === 'paste' ? 'block' : 'none';
+      document.getElementById('credfileUploadArea').style.display = method === 'upload' ? 'block' : 'none';
+      document.getElementById('credfilePathArea').style.display = method === 'path' ? 'block' : 'none';
+    }
+
+    function previewCredfilePaste() {
+      const content = document.getElementById('credfilePasteInput').value.trim();
+      if (content) {
+        uploadedCredfileContent = content;
+        previewCredfile(content);
+      }
+    }
+
+    function handleCredfileDrop(event) {
+      const file = event.dataTransfer.files[0];
+      if (file) readCredfile(file);
+    }
+
+    function handleCredfileSelect(input) {
+      const file = input.files[0];
+      if (file) readCredfile(file);
+    }
+
+    function readCredfile(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        uploadedCredfileContent = e.target.result;
+        document.getElementById('credfileFileName').textContent = file.name;
+        document.getElementById('credfileUploadInfo').style.display = 'inline-block';
+        previewCredfile(uploadedCredfileContent);
+      };
+      reader.readAsText(file);
+    }
+
+    function clearCredfileUpload() {
+      uploadedCredfileContent = '';
+      document.getElementById('credfileInput').value = '';
+      document.getElementById('credfileUploadInfo').style.display = 'none';
+      document.getElementById('credfilePreview').style.display = 'none';
+    }
+
+    function previewCredfile(content) {
+      const lines = content.trim().split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+      if (!lines.length) return;
+
+      const preview = document.getElementById('credfilePreview');
+      const headerRow = document.getElementById('credfilePreviewHeader');
+      const body = document.getElementById('credfilePreviewBody');
+      headerRow.innerHTML = '';
+      body.innerHTML = '';
+
+      // Detect if XML
+      const trimmed = content.trim();
+      if (trimmed.startsWith('<?xml') || (trimmed.startsWith('<') && !trimmed.startsWith('[') && !trimmed.startsWith('{'))) {
+        try {
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(content, 'text/xml');
+          const parseError = xmlDoc.querySelector('parsererror');
+          if (!parseError) {
+            const root = xmlDoc.documentElement;
+            const entries = root.children;
+            if (entries.length > 0) {
+              // Collect all unique tag names from first entry's children
+              const tags = Array.from(entries[0].children).map(c => c.tagName);
+              tags.forEach(t => { headerRow.innerHTML += `<th>${t}</th>`; });
+              Array.from(entries).slice(0, 10).forEach(entry => {
+                const tr = document.createElement('tr');
+                tags.forEach(t => {
+                  const el = entry.querySelector(t);
+                  tr.innerHTML += `<td>${el ? el.textContent : ''}</td>`;
+                });
+                body.appendChild(tr);
+              });
+              document.getElementById('credfileEntryCount').textContent = `${entries.length} entries`;
+            }
+            preview.style.display = 'block';
+            return;
+          }
+        } catch(e) {
+          // Not valid XML, fall through to other formats
+        }
+      }
+
+      // Detect if JSON
+      if (trimmed.startsWith('[')) {
+        try {
+          const data = JSON.parse(content);
+          if (data.length > 0) {
+            const keys = Object.keys(data[0]);
+            keys.forEach(k => { headerRow.innerHTML += `<th>${k}</th>`; });
+            data.slice(0, 10).forEach(obj => {
+              const tr = document.createElement('tr');
+              keys.forEach(k => { tr.innerHTML += `<td>${obj[k] || ''}</td>`; });
+              body.appendChild(tr);
+            });
+            document.getElementById('credfileEntryCount').textContent = `${data.length} entries`;
+          }
+        } catch(e) {
+          document.getElementById('credfileEntryCount').textContent = 'Invalid JSON';
+        }
+        preview.style.display = 'block';
+        return;
+      }
+
+      // CSV/text: detect delimiter
+      const firstLine = lines[0];
+      let delim = ',';
+      if (firstLine.includes('\t')) delim = '\t';
+      else if (firstLine.includes('|')) delim = '|';
+
+      // Check if first line is a header
+      const firstParts = firstLine.split(delim).map(p => p.trim().toLowerCase());
+      const knownHeaders = ['ip','host','target','address','port','username','user','login','password','pass','passwd','service','protocol','proto'];
+      const hasHeaders = firstParts.some(p => knownHeaders.includes(p));
+
+      const dataLines = hasHeaders ? lines.slice(1) : lines;
+      const headers = hasHeaders ? firstLine.split(delim).map(p => p.trim()) : [];
+
+      if (hasHeaders) {
+        headers.forEach(h => { headerRow.innerHTML += `<th>${h}</th>`; });
+      } else {
+        const colCount = (dataLines[0] || '').split(delim).length;
+        const guessHeaders = colCount === 3 ? ['IP','Username','Password'] :
+                             colCount === 4 ? ['IP','Port','Username','Password'] :
+                             colCount >= 5 ? ['IP','Port','Username','Password','Service'] : [];
+        guessHeaders.forEach(h => { headerRow.innerHTML += `<th>${h}</th>`; });
+      }
+
+      dataLines.slice(0, 10).forEach(line => {
+        const parts = line.split(delim).map(p => p.trim());
+        const tr = document.createElement('tr');
+        parts.forEach(p => { tr.innerHTML += `<td>${p}</td>`; });
+        body.appendChild(tr);
+      });
+
+      document.getElementById('credfileEntryCount').textContent = `${dataLines.length} entries`;
+      preview.style.display = 'block';
+    }
+
+// ==================== CREDS FILE HANDLERS (Credentials Tab) ====================
+let uploadedCredsFileContent = '';
+
+function toggleCredsFileMethod(method) {
+  document.getElementById('credsFilePasteBtn').classList.toggle('active', method === 'paste');
+  document.getElementById('credsFileUploadBtn').classList.toggle('active', method === 'upload');
+  document.getElementById('credsFilePathBtn').classList.toggle('active', method === 'path');
+  document.getElementById('credsFilePasteArea').style.display = method === 'paste' ? 'block' : 'none';
+  document.getElementById('credsFileUploadArea').style.display = method === 'upload' ? 'block' : 'none';
+  document.getElementById('credsFilePathArea').style.display = method === 'path' ? 'block' : 'none';
+}
+
+function handleCredsFileDrop(event) {
+  const file = event.dataTransfer.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      uploadedCredsFileContent = e.target.result;
+      document.getElementById('credsFileFileName').textContent = file.name;
+      document.getElementById('credsFileUploadInfo').style.display = 'inline-block';
+    };
+    reader.readAsText(file);
+  }
+}
+
+function handleCredsFileSelect(input) {
+  const file = input.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      uploadedCredsFileContent = e.target.result;
+      document.getElementById('credsFileFileName').textContent = file.name;
+      document.getElementById('credsFileUploadInfo').style.display = 'inline-block';
+    };
+    reader.readAsText(file);
+  }
+}
+
+function clearCredsFileUpload() {
+  uploadedCredsFileContent = '';
+  document.getElementById('credsFileInput').value = '';
+  document.getElementById('credsFileUploadInfo').style.display = 'none';
+}
+
+function openCredsFileBrowser() {
+  openServerBrowser('credsFileServerPath', '.txt,.list,.csv');
+}
+
+// ==================== FORM SUBMISSION ====================
+const credreconForm = document.getElementById('credreconForm');
+if (credreconForm) {
+  credreconForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    // Determine which target input method is active
+    const activeTargetMethod = document.querySelector('.method-btn[data-target="targets"].active')?.dataset?.method || 'manual';
+    const isCredfileMode = activeTargetMethod === 'credfile';
+
+    // Get attack mode
+    const attackModeEl = document.querySelector('input[name="attackMode"]:checked');
+    let attackMode = attackModeEl ? attackModeEl.value : 'default';
+
+    // If credfile target method is active, override attack mode to credfile
+    if (isCredfileMode) {
+      attackMode = 'credfile';
+    }
+
+    // Get targets (not needed for credfile mode — IPs come from the file)
+    let targets = [];
+    if (!isCredfileMode) {
+      const isTargetFileMethod = activeTargetMethod === 'file';
+      if (isTargetFileMethod && uploadedTargetContent) {
+        targets = uploadedTargetContent.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+      } else {
+        const manual = document.getElementById('targetsManual').value.trim();
+        if (!manual) {
+          showAlert('Please enter at least one target', 'warning');
+          return;
+        }
+        targets = manual.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+      }
+      if (targets.length === 0) {
+        showAlert('No valid targets found', 'warning');
+        return;
+      }
+    }
+
+    // Get selected protocols from multi-select picker
+    const selectedProtocols = getSelectedProtocols();
+
+    // Build request data
+    const scanData = {
+      targets: targets,
+      uploaded_targets: '',
+      protocol: 'auto',
+      attack_mode: attackMode,
+      threads: parseInt(document.getElementById('threads').value) || 10,
+      timeout: parseInt(document.getElementById('timeout').value) || 5,
+      max_attempts: parseInt(document.getElementById('maxAttempts')?.value) || 3,
+      probe_services: document.getElementById('enableProbing')?.checked !== false,
+      jitter: parseFloat(document.getElementById('jitter')?.value) || 0,
+      max_attempts_per_user: parseInt(document.getElementById('maxAttemptsPerUser')?.value) || 0,
+      snmp_tier: document.getElementById('snmpTier')?.value || 'default',
+      smb_hash: document.getElementById('smbHash')?.value || '',
+      domain: document.getElementById('domain')?.value || '',
+      badkeys: document.getElementById('enableBadkeys')?.checked !== false
+    };
+
+    // Set protocols from multi-select picker
+    if (selectedProtocols.length === 1 && selectedProtocols[0] === 'auto') {
+      scanData.protocol = 'auto';
+    } else if (selectedProtocols.length === 1) {
+      scanData.protocol = selectedProtocols[0];
+    } else {
+      scanData.protocols = selectedProtocols;
+    }
+
+    // Add SSH key authentication if provided
+    const sshKeyPathEl = document.getElementById('sshKeyPath');
+    const isUploadMethod = document.querySelector('.method-btn[data-target="sshkey"][data-method="upload"]')?.classList.contains('active');
+    if (isUploadMethod && uploadedSshKeyContent) {
+      scanData.ssh_key_content = uploadedSshKeyContent;
+    } else if (sshKeyPathEl) {
+      const keyPath = sshKeyPathEl.value.trim();
+      if (keyPath) {
+        if (sshKeyPathEl.dataset.fileContent) {
+          scanData.ssh_key_content = sshKeyPathEl.dataset.fileContent;
+        } else {
+          scanData.ssh_key_path = keyPath;
+        }
+      }
+    }
+    const sshPassphrase = document.getElementById('sshKeyPassphrase')?.value || '';
+    if (sshPassphrase) {
+      scanData.ssh_key_passphrase = sshPassphrase;
+    }
+
+    // Add SSH certificate if provided
+    const sshCertPathEl = document.getElementById('sshCertPath');
+    const isCertUploadMethod = document.querySelector('.method-btn[data-target="sshcert"][data-method="upload"]')?.classList.contains('active');
+    if (isCertUploadMethod && uploadedSshCertContent) {
+      scanData.ssh_cert_content = uploadedSshCertContent;
+    } else if (sshCertPathEl) {
+      const certPath = sshCertPathEl.value.trim();
+      if (certPath) {
+        if (sshCertPathEl.dataset.fileContent) {
+          scanData.ssh_cert_content = sshCertPathEl.dataset.fileContent;
+        } else {
+          scanData.ssh_cert_path = certPath;
+        }
+      }
+    }
+
+    // Check if SSH key was provided (for validation adjustments)
+    const hasSSHKey = !!(scanData.ssh_key_content || scanData.ssh_key_path);
+
+    // Add attack mode specific fields
+    if (attackMode === 'single') {
+      const singleUsername = document.getElementById('singleUsername').value.trim();
+      const singlePassword = document.getElementById('singlePassword').value;
+      if (!singleUsername) {
+        showAlert('Please enter a username', 'warning');
+        return;
+      }
+      if (!singlePassword && !hasSSHKey) {
+        showAlert('Please enter a password or provide an SSH key', 'warning');
+        return;
+      }
+      scanData.single_username = singleUsername;
+      if (singlePassword) {
+        scanData.single_password = singlePassword;
+      }
+    } else if (attackMode === 'default') {
+      const credsFileEl = document.getElementById('credsFile');
+      scanData.creds_file = credsFileEl ? credsFileEl.value.trim() || null : null;
+      scanData.use_builtin = document.getElementById('useBuiltinCreds')?.checked ?? true;
+      scanData.use_external = document.getElementById('useExternalCreds')?.checked ?? false;
+      // Custom wordlists for default mode
+      const usernamesFileEl = document.getElementById('defaultUsernamesFile');
+      const passwordsFileEl = document.getElementById('defaultPasswordsFile');
+      const usernamesFilePath = usernamesFileEl?.value?.trim() || '';
+      const passwordsFilePath = passwordsFileEl?.value?.trim() || '';
+
+      // If file was browsed (has content in dataset), send the content
+      // Otherwise send the path for server-side file reading
+      if (usernamesFilePath) {
+        if (usernamesFileEl.dataset.fileContent) {
+          scanData.usernames_content = usernamesFileEl.dataset.fileContent;
+        } else {
+          scanData.usernames_file = usernamesFilePath;
+        }
+      }
+      if (passwordsFilePath) {
+        if (passwordsFileEl.dataset.fileContent) {
+          scanData.passwords_content = passwordsFileEl.dataset.fileContent;
+        } else {
+          scanData.passwords_file = passwordsFilePath;
+        }
+      }
+    } else if (attackMode === 'spray') {
+      const sprayPassword = document.getElementById('sprayPassword').value.trim();
+      const sprayUsernamesFileEl = document.getElementById('sprayUsernamesFile');
+      const sprayUsernamesFilePath = sprayUsernamesFileEl ? sprayUsernamesFileEl.value.trim() : '';
+      if (!sprayPassword) {
+        showAlert('Please enter a password to spray', 'warning');
+        return;
+      }
+      if (!sprayUsernamesFilePath) {
+        showAlert('Please enter a path to the usernames file', 'warning');
+        return;
+      }
+      scanData.spray_password = sprayPassword;
+      // Check if file was browsed (has content in dataset)
+      if (sprayUsernamesFileEl.dataset.fileContent) {
+        scanData.usernames_content = sprayUsernamesFileEl.dataset.fileContent;
+      } else {
+        scanData.usernames_file = sprayUsernamesFilePath;
+      }
+    } else if (attackMode === 'stuff') {
+      const stuffUsername = document.getElementById('stuffUsername').value.trim();
+      const stuffPasswordsFileEl = document.getElementById('stuffPasswordsFile');
+      const stuffPasswordsFilePath = stuffPasswordsFileEl ? stuffPasswordsFileEl.value.trim() : '';
+      if (!stuffUsername) {
+        showAlert('Please enter a username to test', 'warning');
+        return;
+      }
+      if (!stuffPasswordsFilePath) {
+        showAlert('Please enter a path to the passwords file', 'warning');
+        return;
+      }
+      scanData.stuff_username = stuffUsername;
+      // Check if file was browsed (has content in dataset)
+      if (stuffPasswordsFileEl.dataset.fileContent) {
+        scanData.passwords_content = stuffPasswordsFileEl.dataset.fileContent;
+      } else {
+        scanData.passwords_file = stuffPasswordsFilePath;
+      }
+    } else if (attackMode === 'key') {
+      // Key Authentication mode - SSH key is required, validated via hasSSHKey
+      if (!hasSSHKey) {
+        showAlert('Please provide an SSH private key file', 'warning');
+        return;
+      }
+      // Usernames (comma-separated input or file)
+      const keyAuthUsernameInput = document.getElementById('keyAuthUsername')?.value.trim() || '';
+      const keyAuthUsernamesFileEl = document.getElementById('keyAuthUsernamesFile');
+      const keyAuthUsernamesFilePath = keyAuthUsernamesFileEl ? keyAuthUsernamesFileEl.value.trim() : '';
+
+      if (keyAuthUsernameInput) {
+        // Send comma-separated usernames as single_username (backend will handle)
+        scanData.key_usernames = keyAuthUsernameInput;
+      }
+      if (keyAuthUsernamesFilePath) {
+        if (keyAuthUsernamesFileEl.dataset.fileContent) {
+          scanData.usernames_content = keyAuthUsernamesFileEl.dataset.fileContent;
+        } else {
+          scanData.usernames_file = keyAuthUsernamesFilePath;
+        }
+      }
+      // If neither provided, backend will use default SSH usernames
+    } else if (attackMode === 'credfile') {
+      const activeMethod = document.querySelector('[data-target="credfile"].active')?.dataset?.method;
+      if (activeMethod === 'paste') {
+        const pasteContent = document.getElementById('credfilePasteInput')?.value?.trim();
+        if (pasteContent) {
+          scanData.credfile_content = pasteContent;
+        } else {
+          showAlert('Please paste credential data', 'warning');
+          return;
+        }
+      } else if (activeMethod === 'upload' && uploadedCredfileContent) {
+        scanData.credfile_content = uploadedCredfileContent;
+      } else if (activeMethod === 'path') {
+        const serverPath = document.getElementById('credfileServerPath')?.value?.trim();
+        if (serverPath) {
+          scanData.credfile_path = serverPath;
+        } else {
+          showAlert('Please specify a server path or use the Browse button to select a file', 'warning');
+          return;
+        }
+      } else {
+        showAlert('Please provide credentials — paste data, upload a file, or specify a server path', 'warning');
+        return;
+      }
+      // Set protocols from the credfile service multi-select
+      const selectedServices = getSelectedCredfileServices();
+      if (selectedServices.length === 1 && selectedServices[0] !== 'auto') {
+        scanData.protocol = selectedServices[0];
+      } else if (selectedServices.length > 1) {
+        scanData.protocols = selectedServices;
+      }
+      // Set port from the credfile global port input
+      const credfilePort = document.getElementById('credfileGlobalPort')?.value;
+      if (credfilePort) {
+        scanData.port = parseInt(credfilePort);
+      }
+    }
+
+    // max_attempts is already set in scanData from the input field
+
+    const btn = e.target.querySelector('button[type="submit"]');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Starting...';
+
+    try {
+      const response = await fetch('/api/credrecon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(scanData)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to create scan');
+      }
+
+      const result = await response.json();
+      window.location.href = result.redirect || `/credrecon/scans/${result.scan_id}`;
+
+    } catch (error) {
+      showAlert('Error: ' + error.message, 'danger');
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  });
+}
+
+// ==================== CREDENTIAL SYNC STATUS ====================
+async function loadCredSyncStatus() {
+  const statusEl = document.getElementById('credSyncStatus');
+  const iconEl = document.getElementById('credSyncIcon');
+  const alertEl = document.getElementById('credSyncStatusAlert');
+  const badgeEl = document.getElementById('externalCredsBadge');
+
+  if (!statusEl || !iconEl) return;
+
+  try {
+    const response = await fetch('/api/credrecon/credentials/stats');
+    if (!response.ok) throw new Error('Failed to fetch credential stats');
+
+    const data = await response.json();
+    const hasExternal = data.external && data.external > 0;
+    const lastSync = data.last_external_sync;
+
+    if (hasExternal) {
+      // External sources are synced
+      iconEl.className = 'bi bi-cloud-check-fill me-2 text-success';
+
+      if (lastSync) {
+        const syncDate = new Date(lastSync);
+        const now = new Date();
+        const daysSince = Math.floor((now - syncDate) / (1000 * 60 * 60 * 24));
+
+        if (daysSince > 7) {
+          statusEl.innerHTML = `<span class="text-warning">${data.external.toLocaleString()} external credentials (sync ${daysSince}d ago)</span>`;
+          iconEl.className = 'bi bi-cloud-fill me-2 text-warning';
+        } else {
+          statusEl.innerHTML = `<span class="text-success">${data.external.toLocaleString()} external credentials synced</span>`;
+        }
+      } else {
+        statusEl.innerHTML = `<span class="text-success">${data.external.toLocaleString()} external credentials available</span>`;
+      }
+
+      // Show badge on External Sources card
+      if (badgeEl) {
+        badgeEl.style.display = 'inline-block';
+        badgeEl.textContent = `${data.external.toLocaleString()}`;
+        badgeEl.className = 'tool-badge text-success';
+      }
+    } else {
+      // No external sources synced
+      iconEl.className = 'bi bi-cloud-slash-fill me-2 text-secondary';
+      statusEl.innerHTML = '<span class="text-secondary">No external sources synced</span>';
+
+      if (badgeEl) {
+        badgeEl.style.display = 'none';
+      }
+    }
+
+    // Also update builtin count if available
+    if (data.builtin) {
+      const builtinBadge = document.querySelector('#useBuiltinCreds')?.closest('.tool-card')?.querySelector('.tool-badge');
+      if (builtinBadge && !builtinBadge.textContent.includes('Recommended')) {
+        builtinBadge.textContent = `${data.builtin.toLocaleString()} creds`;
+      }
+    }
+
+  } catch (error) {
+    console.error('Error fetching credential sync status:', error);
+    iconEl.className = 'bi bi-cloud-slash-fill me-2 text-danger';
+    statusEl.innerHTML = '<span class="text-danger">Unable to check sync status</span>';
+  }
+}
+
+// Load sync status on page load
+document.addEventListener('DOMContentLoaded', loadCredSyncStatus);
+
+// IP rotation status check removed (enterprise-only feature).
+</script>
+
+<!-- ==================== CREDFILE SERVER FILE BROWSER MODAL ==================== -->
+<div class="modal fade" id="credfileBrowserModal" tabindex="-1" aria-labelledby="credfileBrowserModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title" id="credfileBrowserModalLabel">
+          <i class="bi bi-folder2-open me-2"></i>Browse Server — Select Credential File
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label small text-secondary">Current Path:</label>
+          <div class="input-group">
+            <input type="text" class="form-control bg-dark text-light border-secondary" id="credfileBrowserPath" readonly>
+            <button class="btn btn-outline-secondary" type="button" onclick="credfileBrowserGoTo()">
+              <i class="bi bi-arrow-right-circle"></i>
+            </button>
+          </div>
+        </div>
+        <div id="credfileBrowserList" style="max-height: 400px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 0.5rem;">
+          <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="credfileBrowserSelectBtn" disabled onclick="credfileBrowserSelect()">
+          <i class="bi bi-check-circle me-2"></i>Select File
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.credfile-browser-item {
+  display: flex;
+  align-items: center;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  gap: 0.75rem;
+}
+.credfile-browser-item:hover { background: rgba(13, 110, 253, 0.15); }
+.credfile-browser-item.selected { background: rgba(13, 110, 253, 0.3); outline: 1px solid #0d6efd; }
+.credfile-browser-item i { font-size: 1.2rem; min-width: 22px; }
+.credfile-browser-item .cb-name { flex: 1; color: #fff; font-weight: 500; }
+.credfile-browser-item .cb-size { color: #6c757d; font-size: 0.85rem; }
+
+/* Service multi-select picker */
+.credfile-service-picker { position: relative; }
+.credfile-service-dropdown {
+  position: absolute; z-index: 1050; top: 100%; left: 0; right: 0;
+  background: #1a1d21; border: 1px solid #495057; border-radius: 0.375rem;
+  margin-top: 2px; box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+}
+.credfile-service-dropdown .form-check { padding: 0.2rem 0.5rem 0.2rem 2rem; }
+.credfile-service-dropdown .form-check-label { font-size: 0.9rem; cursor: pointer; }
+.credfile-service-dropdown .form-check-input { cursor: pointer; }
+
+/* Protocol multi-select picker */
+.protocol-picker { position: relative; }
+/* Override Bootstrap card overflow:hidden so the dropdown isn't clipped */
+.protocol-picker-dropdown,
+.sched-protocol-picker-dropdown,
+.edit-protocol-picker-dropdown {
+  position: fixed; z-index: 1050;
+  width: auto; min-width: 300px;
+  background: #1a1d21; border: 1px solid #495057; border-radius: 0.375rem;
+  margin-top: 2px; box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+}
+.protocol-picker-dropdown .form-check { padding: 0.2rem 0.5rem 0.2rem 2rem; }
+.protocol-picker-dropdown .form-check-label { font-size: 0.9rem; cursor: pointer; }
+.protocol-picker-dropdown .form-check-input { cursor: pointer; }
+.proto-group-header:hover { color: #0d6efd !important; }
+</style>
+
+<script>
+// ==================== PROTOCOL MULTI-SELECT PICKER ====================
+function toggleProtocolPicker() {
+  const dd = document.getElementById('protocolPickerDropdown');
+  if (dd.style.display === 'none') {
+    const btn = document.getElementById('protocolPickerToggle');
+    const rect = btn.getBoundingClientRect();
+    dd.style.left = rect.left + 'px';
+    dd.style.top = (rect.bottom + 2) + 'px';
+    dd.style.width = rect.width + 'px';
+    dd.style.display = 'block';
+  } else {
+    dd.style.display = 'none';
+  }
+}
+
+// Close protocol picker when clicking outside or scrolling
+document.addEventListener('click', function(e) {
+  const picker = document.querySelector('.protocol-picker');
+  if (picker && !picker.contains(e.target)) {
+    document.getElementById('protocolPickerDropdown').style.display = 'none';
+  }
+});
+window.addEventListener('scroll', function(e) {
+  const dd = document.getElementById('protocolPickerDropdown');
+  if (dd && !dd.contains(e.target)) {
+    dd.style.display = 'none';
+  }
+}, true);
+
+function updateProtocolSelection(source) {
+  const autoCheck = document.getElementById('proto_auto');
+  const protoChecks = document.querySelectorAll('.proto-check');
+
+  if (source === 'auto') {
+    if (autoCheck.checked) {
+      protoChecks.forEach(c => c.checked = false);
+    }
+  } else {
+    const anyChecked = Array.from(protoChecks).some(c => c.checked);
+    autoCheck.checked = !anyChecked;
+  }
+
+  // Update label
+  const label = document.getElementById('protocolPickerLabel');
+  const selected = Array.from(protoChecks).filter(c => c.checked).map(c => c.value.toUpperCase());
+  if (autoCheck.checked || selected.length === 0) {
+    autoCheck.checked = true;
+    label.textContent = 'Auto-detect (recommended)';
+  } else {
+    label.textContent = selected.length <= 3 ? selected.join(', ') : `${selected.length} protocols selected`;
+  }
+}
+
+function getSelectedProtocols() {
+  const autoCheck = document.getElementById('proto_auto');
+  if (autoCheck && autoCheck.checked) return ['auto'];
+  const checked = Array.from(document.querySelectorAll('.proto-check:checked')).map(c => c.value);
+  return checked.length > 0 ? checked : ['auto'];
+}
+
+function selectProtocolGroup(groupName) {
+  const groupChecks = document.querySelectorAll(`.proto-check[data-group="${groupName}"]`);
+  const allChecked = Array.from(groupChecks).every(c => c.checked);
+  groupChecks.forEach(c => c.checked = !allChecked);
+  updateProtocolSelection('svc');
+}
+
+// ==================== CREDFILE SERVER BROWSER ====================
+// ==================== CREDFILE SERVICE MULTI-SELECT ====================
+function toggleServicePicker() {
+  const dd = document.getElementById('credfileServiceDropdown');
+  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+}
+
+// Close picker when clicking outside
+document.addEventListener('click', function(e) {
+  const picker = document.querySelector('.credfile-service-picker');
+  if (picker && !picker.contains(e.target)) {
+    document.getElementById('credfileServiceDropdown').style.display = 'none';
+  }
+});
+
+function updateServiceSelection(source) {
+  const autoCheck = document.getElementById('credfileSvc_auto');
+  const serviceChecks = document.querySelectorAll('.credfile-svc-check');
+
+  if (source === 'auto') {
+    // User clicked auto-detect — uncheck all specific services
+    if (autoCheck.checked) {
+      serviceChecks.forEach(c => c.checked = false);
+    }
+  } else {
+    // User clicked a specific service — uncheck auto-detect
+    const anyServiceChecked = Array.from(serviceChecks).some(c => c.checked);
+    autoCheck.checked = !anyServiceChecked;
+  }
+
+  // Update label
+  const label = document.getElementById('credfileServiceLabel');
+  const selected = Array.from(serviceChecks).filter(c => c.checked).map(c => c.value.toUpperCase());
+  if (autoCheck.checked || selected.length === 0) {
+    autoCheck.checked = true;
+    label.textContent = 'Auto-detect from port';
+  } else {
+    label.textContent = selected.length <= 3 ? selected.join(', ') : `${selected.length} services selected`;
+  }
+}
+
+function getSelectedCredfileServices() {
+  const autoCheck = document.getElementById('credfileSvc_auto');
+  if (autoCheck && autoCheck.checked) return ['auto'];
+  const checked = Array.from(document.querySelectorAll('.credfile-svc-check:checked')).map(c => c.value);
+  return checked.length > 0 ? checked : ['auto'];
+}
+
+let credfileBrowserCurrentPath = '';
+let credfileBrowserSelectedPath = '';
+
+function openCredfileBrowser() {
+  openServerBrowser('credfileServerPath', '.csv,.txt,.json,.tsv,.xml');
+}
+
+async function credfileBrowserLoadDir(path, fileTypes) {
+  const listEl = document.getElementById('credfileBrowserList');
+  const pathEl = document.getElementById('credfileBrowserPath');
+  listEl.innerHTML = '<div class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary" role="status"></div></div>';
+  const ft = fileTypes || window._serverBrowserFileTypes || '.csv,.txt,.json,.tsv,.xml';
+
+  try {
+    const url = `/api/browse?path=${encodeURIComponent(path)}&file_types=${encodeURIComponent(ft)}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+
+    if (data.error || !resp.ok) {
+      listEl.innerHTML = `<div class="text-danger small p-2">Error: ${data.error || 'Failed to browse'}</div>`;
+      return;
+    }
+
+    credfileBrowserCurrentPath = data.current_path;
+    pathEl.value = credfileBrowserCurrentPath;
+    listEl.innerHTML = '';
+
+    if (!data.items || data.items.length === 0) {
+      listEl.innerHTML = '<div class="text-center py-4 text-secondary small">Empty directory</div>';
+      return;
+    }
+
+    data.items.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'credfile-browser-item';
+      el.dataset.path = item.path;
+      el.dataset.type = item.type;
+
+      let icon, iconColor;
+      if (item.type === 'parent') { icon = 'bi-arrow-up-circle-fill'; iconColor = '#6c757d'; }
+      else if (item.type === 'directory') { icon = 'bi-folder-fill'; iconColor = '#ffc107'; }
+      else { icon = 'bi-file-earmark-text-fill'; iconColor = '#0dcaf0'; }
+
+      const sizeStr = item.type === 'file' && item.size > 0
+        ? `<span class="cb-size">${item.size > 1048576 ? (item.size / 1048576).toFixed(1) + ' MB' : item.size > 1024 ? (item.size / 1024).toFixed(1) + ' KB' : item.size + ' B'}</span>`
+        : '';
+
+      el.innerHTML = `<i class="bi ${icon}" style="color:${iconColor}"></i><span class="cb-name">${item.name}</span>${sizeStr}`;
+
+      if (item.type === 'directory' || item.type === 'parent') {
+        el.addEventListener('click', () => {
+          credfileBrowserSelectedPath = '';
+          document.getElementById('credfileBrowserSelectBtn').disabled = true;
+          credfileBrowserLoadDir(item.path);
+        });
+      } else {
+        el.addEventListener('click', function() {
+          document.querySelectorAll('.credfile-browser-item').forEach(e => e.classList.remove('selected'));
+          this.classList.add('selected');
+          credfileBrowserSelectedPath = item.path;
+          document.getElementById('credfileBrowserSelectBtn').disabled = false;
+        });
+        // Double-click to select and close
+        el.addEventListener('dblclick', function() {
+          credfileBrowserSelectedPath = item.path;
+          credfileBrowserSelect();
+        });
+      }
+
+      listEl.appendChild(el);
+    });
+  } catch (err) {
+    listEl.innerHTML = `<div class="text-danger small p-2">Error: ${err.message}</div>`;
+  }
+}
+
+function credfileBrowserGoTo() {
+  const pathEl = document.getElementById('credfileBrowserPath');
+  if (pathEl && pathEl.value) credfileBrowserLoadDir(pathEl.value);
+}
+
+function credfileBrowserSelect() {
+  if (!credfileBrowserSelectedPath) return;
+  // Route to the correct input based on which browse button was clicked
+  const targetInput = window._serverBrowserTargetInput;
+  if (targetInput) {
+    document.getElementById(targetInput).value = credfileBrowserSelectedPath;
+    window._serverBrowserTargetInput = null;
+  } else {
+    document.getElementById('credfileServerPath').value = credfileBrowserSelectedPath;
+  }
+  const modal = bootstrap.Modal.getInstance(document.getElementById('credfileBrowserModal'));
+  if (modal) modal.hide();
+}
+</script>
+
+{% endblock %}

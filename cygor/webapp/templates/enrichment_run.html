@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="cy-page-header d-flex align-items-center gap-3">
+    <a href="/enrichment" class="cy-btn cy-btn-icon" title="Back to enrichment dashboard">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h1 class="mb-0"><i class="bi bi-globe-americas"></i>Run #{{ run.id }}</h1>
+      <span class="cy-page-subtitle">{{ iocs|length }} IOC(s) · {{ run.finding_count }} finding(s)</span>
+    </div>
+  </div>
+
+  {# Run header card: metadata + status #}
+  <div class="card cy-card mb-4">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <div class="text-muted small">Started</div>
+          <div>{{ run.started_at.strftime('%Y-%m-%d %H:%M:%S') if run.started_at else '-' }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-muted small">Completed</div>
+          <div>
+            {% if run.completed_at %}
+              {{ run.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}
+            {% else %}
+              <span class="badge bg-warning text-dark">in progress</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-muted small">Sources requested</div>
+          <div>
+            {% for s in (run.sources or []) %}
+              <span class="badge bg-secondary me-1">{{ s }}</span>
+            {% else %}
+              <span class="text-muted">all configured</span>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-muted small">Output file</div>
+          <div class="small text-info"><code>{{ run.output_path }}</code></div>
+        </div>
+      </div>
+      {% if run.notes %}
+        <div class="mt-3 small">
+          <span class="text-muted">Notes:</span> {{ run.notes }}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Per-IOC drill-down #}
+  {% if not iocs %}
+    <div class="alert alert-secondary">No findings recorded for this run.</div>
+  {% else %}
+    {% for entry in iocs %}
+      <div class="card cy-card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <code class="text-info" style="font-size: 1rem;">{{ entry.ioc }}</code>
+            <span class="badge bg-secondary ms-2">{{ entry.ioc_type }}</span>
+            {% if entry.host_id %}
+              <a href="/hosts/{{ entry.host_id }}" class="badge bg-info ms-1 text-decoration-none">linked host</a>
+            {% endif %}
+          </div>
+          <div class="small text-muted">
+            {{ entry.sources|length }} source(s) · {{ entry.rows|length }} finding(s)
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="row g-2">
+            {% for f in entry.rows %}
+              <div class="col-md-6">
+                <div class="border border-secondary rounded p-2">
+                  <div class="d-flex justify-content-between align-items-baseline mb-1">
+                    <span><code class="text-info">{{ f.source }}</code>
+                      <span class="badge bg-dark border border-secondary text-light ms-1" style="font-size: 0.7rem;">{{ f.finding_kind }}</span>
+                    </span>
+                    <span class="text-muted small">{{ f.enriched_at.strftime('%Y-%m-%d %H:%M') if f.enriched_at else '' }}</span>
+                  </div>
+                  <div class="small mb-1">{{ f.summary }}</div>
+                  {% if f.signals %}
+                    <div class="d-flex flex-wrap gap-1 mb-1">
+                      {% for sig in f.signals %}
+                        <span class="badge bg-dark border border-secondary text-light" style="font-size: 0.7rem;">{{ sig }}</span>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  {% if f.raw %}
+                    <details class="mt-1">
+                      <summary class="text-muted small">raw</summary>
+                      <pre class="bg-black text-light small p-2 mt-1 mb-0" style="max-height: 300px; overflow:auto;">{{ f.raw|tojson(indent=2) }}</pre>
+                    </details>
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

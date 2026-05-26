@@ -1,0 +1,1721 @@
+{% extends "base.html" %}
+{% block content %}
+
+
+<div class="container-fluid py-4">
+  <!-- Page header -->
+  <div class="cy-page-header">
+    <a href="/tasks" id="backBtn" class="cy-btn cy-btn-icon" title="Back to Tasks">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <h1><i class="bi bi-key-fill"></i>Credential Scan Details</h1>
+    <span id="taskSourceBadge" class="cy-badge" style="display: none;"></span>
+    <div class="cy-page-actions">
+      <button id="refreshBtn" class="cy-btn" onclick="refreshTask()">
+        <i class="bi bi-arrow-clockwise"></i>Refresh
+      </button>
+      <button id="cancelBtn" class="cy-btn" onclick="cancelScan()" style="display:none;">
+        <i class="bi bi-stop-circle-fill"></i>Cancel
+      </button>
+      <button id="deleteBtn" class="cy-btn cy-btn-danger" onclick="deleteScan()" style="display:none;">
+        <i class="bi bi-trash-fill"></i>Delete
+      </button>
+    </div>
+  </div>
+
+  <!-- Success Banner (hidden by default) -->
+  <div class="alert alert-success d-flex align-items-center mb-4 d-none" id="successBanner">
+    <i class="bi bi-check-circle-fill me-3 fs-4"></i>
+    <div class="flex-grow-1">
+      <strong>Scan Complete!</strong>
+      <p class="mb-0 small" id="successBannerMessage">Your credential scan has finished successfully.</p>
+    </div>
+  </div>
+
+  <!-- Scan Info Card (Collapsible) -->
+  <div class="mb-4">
+    <div class="card bg-dark shadow">
+      <div class="card-header py-3" style="cursor: pointer;" onclick="toggleScanInfo()" id="scanInfoHeader">
+        <div class="d-flex justify-content-between align-items-center">
+          <h4 class="mb-0 fw-bold">
+            <i class="bi bi-info-circle-fill me-2"></i>Scan Information
+          </h4>
+          <div class="d-flex align-items-center gap-3">
+            <!-- Running Timer (inline) -->
+            <div id="runningTimerInline" style="display:none;">
+              <div class="d-flex align-items-center gap-2 px-3 py-1 bg-warning bg-opacity-10 rounded">
+                <span class="text-secondary text-uppercase fw-semibold" style="font-size: 0.75rem; letter-spacing: 0.5px;">Running</span>
+                <span class="fw-bold text-warning" id="elapsedTimeInline" style="font-size: 1rem;">00:00</span>
+              </div>
+            </div>
+            <!-- Collapse icon -->
+            <i class="bi bi-chevron-down" id="scanInfoChevron" style="font-size: 1.2rem; transition: transform 0.3s;"></i>
+          </div>
+        </div>
+      </div>
+      <div class="collapse show" id="scanInfoCollapse">
+        <div class="card-body py-4">
+          <dl class="row mb-0 scan-info-list">
+            <dt class="col-sm-3">Scan ID</dt>
+            <dd class="col-sm-9"><code class="text-info fw-bold" id="scan-id" style="font-size: 1.1rem;">{{ scan_id }}</code></dd>
+
+            <dt class="col-sm-3">Status</dt>
+            <dd class="col-sm-9"><span id="scan-status">-</span></dd>
+
+            <dt class="col-sm-3">Targets</dt>
+            <dd class="col-sm-9 text-light fw-bold" id="scan-targets" style="font-size: 1.1rem;">-</dd>
+
+            <dt class="col-sm-3">Protocol</dt>
+            <dd class="col-sm-9"><span id="scan-protocol" class="badge bg-secondary" style="font-size: 1rem; padding: 0.6rem 1rem;">-</span></dd>
+
+            <dt class="col-sm-3">Command</dt>
+            <dd class="col-sm-9">
+              <div class="d-flex align-items-start gap-2">
+                <code class="text-light flex-grow-1" id="scan-command" style="font-size: 1.05rem; background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 0.375rem; display: block; word-break: break-all; line-height: 1.6;">-</code>
+                <button class="btn btn-sm btn-outline-secondary flex-shrink-0" onclick="copyCommand(event)" title="Copy command">
+                  <i class="bi bi-clipboard"></i>
+                </button>
+              </div>
+            </dd>
+
+            <dt class="col-sm-3">Created At</dt>
+            <dd class="col-sm-9 text-light" id="scan-created" style="font-size: 1.1rem;">-</dd>
+
+            <dt class="col-sm-3">Started At</dt>
+            <dd class="col-sm-9 text-light" id="scan-started" style="font-size: 1.1rem;">-</dd>
+
+            <dt class="col-sm-3">Completed At</dt>
+            <dd class="col-sm-9 text-light" id="scan-completed" style="font-size: 1.1rem;">-</dd>
+
+            <dt class="col-sm-3">Duration</dt>
+            <dd class="col-sm-9 text-light fw-bold" id="scan-duration" style="font-size: 1.3rem;">-</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Output Tabs -->
+  <div class="card bg-dark shadow">
+    <div class="card-header py-0">
+      <ul class="nav nav-tabs card-header-tabs" role="tablist" style="border-bottom: none;">
+        <li class="nav-item">
+          <a class="nav-link active px-4 py-3" data-bs-toggle="tab" href="#resultsTab" style="font-size: 1rem;">
+            <i class="bi bi-clipboard-data-fill me-2"></i>Results
+            <span class="badge bg-info ms-2 fs-6" id="resultsBadge" style="padding: 0.35rem 0.6rem;">0</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link px-4 py-3" data-bs-toggle="tab" href="#terminalTab" style="font-size: 1rem;">
+            <i class="bi bi-terminal-fill me-2"></i>Terminal Output
+            <span class="badge bg-primary ms-2 fs-6" id="outputBadge" style="padding: 0.35rem 0.6rem;">0</span>
+          </a>
+        </li>
+      </ul>
+    </div>
+    <div class="card-body p-0">
+      <div class="tab-content">
+        <!-- Results Tab -->
+        <div class="tab-pane fade show active" id="resultsTab">
+          <div class="p-4">
+            <!-- Loading State -->
+            <div id="resultsLoading" class="text-center py-5">
+              <div class="spinner-border text-info" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-3 text-secondary">Loading results...</p>
+            </div>
+
+            <!-- Results Content -->
+            <div id="resultsContent" style="display: none;">
+              <!-- Summary Cards -->
+              <div class="row mb-4">
+                <div class="col-md-3">
+                  <div class="card bg-success bg-opacity-10 border-success summary-card">
+                    <div class="card-body text-center">
+                      <i class="bi bi-check-circle-fill text-success fs-2"></i>
+                      <h3 class="mt-2 mb-0 text-success fw-bold" id="successCount" style="font-size: 2rem;">0</h3>
+                      <p class="mb-0 text-secondary fw-semibold" style="font-size: 0.95rem;">Successful</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="card bg-danger bg-opacity-10 border-danger summary-card">
+                    <div class="card-body text-center">
+                      <i class="bi bi-x-circle-fill text-danger fs-2"></i>
+                      <h3 class="mt-2 mb-0 text-danger fw-bold" id="failedCount" style="font-size: 2rem;">0</h3>
+                      <p class="mb-0 text-secondary fw-semibold" style="font-size: 0.95rem;">Failed</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="card bg-warning bg-opacity-10 border-warning summary-card">
+                    <div class="card-body text-center">
+                      <i class="bi bi-exclamation-triangle-fill text-warning fs-2"></i>
+                      <h3 class="mt-2 mb-0 text-warning fw-bold" id="errorCount" style="font-size: 2rem;">0</h3>
+                      <p class="mb-0 text-secondary fw-semibold" style="font-size: 0.95rem;">Errors</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="card bg-secondary bg-opacity-10 border-secondary summary-card">
+                    <div class="card-body text-center">
+                      <i class="bi bi-skip-forward-fill text-secondary fs-2"></i>
+                      <h3 class="mt-2 mb-0 text-secondary fw-bold" id="skippedCount" style="font-size: 2rem;">0</h3>
+                      <p class="mb-0 text-secondary fw-semibold" style="font-size: 0.95rem;">Skipped</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Export Buttons -->
+              <div id="exportButtons" class="d-flex justify-content-end mb-3">
+                <div class="dropdown">
+                  <button type="button" class="btn btn-outline-success btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                    <i class="bi bi-download me-1"></i>Export Results
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark">
+                    <li><a class="dropdown-item" href="#" onclick="exportScanResults('csv'); return false;">
+                      <i class="bi bi-filetype-csv me-2"></i>CSV
+                    </a></li>
+                    <li><a class="dropdown-item" href="#" onclick="exportScanResults('json'); return false;">
+                      <i class="bi bi-filetype-json me-2"></i>JSON
+                    </a></li>
+                    <li><a class="dropdown-item" href="#" onclick="exportScanResults('xml'); return false;">
+                      <i class="bi bi-filetype-xml me-2"></i>XML
+                    </a></li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- Successful Credentials -->
+              <div id="successfulSection" style="display: none;">
+                <h5 class="text-success mb-3"><i class="bi bi-check-circle-fill me-2"></i>Successful Credentials</h5>
+                <div class="table-responsive mb-4">
+                  <table class="table table-dark table-hover">
+                    <thead>
+                      <tr>
+                        <th>Target</th>
+                        <th>Port</th>
+                        <th>Protocol</th>
+                        <th>Username</th>
+                        <th>Password</th>
+                        <th>Details</th>
+                        <th>Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody id="successfulTable"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Failed Credentials -->
+              <div id="failedSection" style="display: none;">
+                <h5 class="text-danger mb-3"><i class="bi bi-x-circle-fill me-2"></i>Failed Credentials</h5>
+                <div class="table-responsive mb-4">
+                  <table class="table table-dark table-hover">
+                    <thead>
+                      <tr>
+                        <th>Target</th>
+                        <th>Port</th>
+                        <th>Protocol</th>
+                        <th>Username</th>
+                        <th>Password</th>
+                        <th>Reason</th>
+                        <th>Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody id="failedTable"></tbody>
+                  </table>
+                </div>
+                <div id="failedPagination" class="d-flex justify-content-between align-items-center px-3 py-2 mb-4 border-top border-secondary" style="display:none !important;">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted small">Show:</span>
+                    <select class="form-select form-select-sm bg-dark text-light border-secondary" style="width: auto; font-size: 0.8rem;" onchange="changeDetailPerPage('failed', this.value)">
+                      <option value="100" selected>100</option>
+                      <option value="250">250</option>
+                      <option value="500">500</option>
+                      <option value="1000">1000</option>
+                      <option value="all">All</option>
+                    </select>
+                    <span class="text-muted small" id="failedPagInfo">0 entries</span>
+                  </div>
+                  <div class="d-flex align-items-center gap-1">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navDetailPage('failed', -1)" id="failedPagPrev" disabled>&laquo; Prev</button>
+                    <span class="text-muted small mx-2" id="failedPagPageInfo">Page 1 of 1</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navDetailPage('failed', 1)" id="failedPagNext" disabled>Next &raquo;</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Error Credentials -->
+              <div id="errorSection" style="display: none;">
+                <h5 class="text-warning mb-3"><i class="bi bi-exclamation-triangle-fill me-2"></i>Errors</h5>
+                <div class="table-responsive mb-4">
+                  <table class="table table-dark table-hover">
+                    <thead>
+                      <tr>
+                        <th>Target</th>
+                        <th>Port</th>
+                        <th>Protocol</th>
+                        <th>Username</th>
+                        <th>Password</th>
+                        <th>Error</th>
+                        <th>Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody id="errorTable"></tbody>
+                  </table>
+                </div>
+                <div id="errorPagination" class="d-flex justify-content-between align-items-center px-3 py-2 mb-4 border-top border-secondary" style="display:none !important;">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted small">Show:</span>
+                    <select class="form-select form-select-sm bg-dark text-light border-secondary" style="width: auto; font-size: 0.8rem;" onchange="changeDetailPerPage('error', this.value)">
+                      <option value="100" selected>100</option>
+                      <option value="250">250</option>
+                      <option value="500">500</option>
+                      <option value="1000">1000</option>
+                      <option value="all">All</option>
+                    </select>
+                    <span class="text-muted small" id="errorPagInfo">0 entries</span>
+                  </div>
+                  <div class="d-flex align-items-center gap-1">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navDetailPage('error', -1)" id="errorPagPrev" disabled>&laquo; Prev</button>
+                    <span class="text-muted small mx-2" id="errorPagPageInfo">Page 1 of 1</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navDetailPage('error', 1)" id="errorPagNext" disabled>Next &raquo;</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Skipped Credentials -->
+              <div id="skippedSection" style="display: none;">
+                <h5 class="text-secondary mb-3"><i class="bi bi-skip-forward-fill me-2"></i>Skipped Credentials</h5>
+                <p class="text-muted small">These credentials were not tested because no authentication mechanism was detected or the target was unreachable.</p>
+                <div class="table-responsive mb-4">
+                  <table class="table table-dark table-hover">
+                    <thead>
+                      <tr>
+                        <th>Target</th>
+                        <th>Port</th>
+                        <th>Protocol</th>
+                        <th>Username</th>
+                        <th>Password</th>
+                        <th>Reason</th>
+                        <th>Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody id="skippedTable"></tbody>
+                  </table>
+                </div>
+                <div id="skippedPagination" class="d-flex justify-content-between align-items-center px-3 py-2 mb-4 border-top border-secondary" style="display:none !important;">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted small">Show:</span>
+                    <select class="form-select form-select-sm bg-dark text-light border-secondary" style="width: auto; font-size: 0.8rem;" onchange="changeDetailPerPage('skipped', this.value)">
+                      <option value="100" selected>100</option>
+                      <option value="250">250</option>
+                      <option value="500">500</option>
+                      <option value="1000">1000</option>
+                      <option value="all">All</option>
+                    </select>
+                    <span class="text-muted small" id="skippedPagInfo">0 entries</span>
+                  </div>
+                  <div class="d-flex align-items-center gap-1">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navDetailPage('skipped', -1)" id="skippedPagPrev" disabled>&laquo; Prev</button>
+                    <span class="text-muted small mx-2" id="skippedPagPageInfo">Page 1 of 1</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="navDetailPage('skipped', 1)" id="skippedPagNext" disabled>Next &raquo;</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- No Results Message -->
+              <div id="noResults" class="text-center py-5" style="display: none;">
+                <i class="bi bi-inbox fs-1 text-secondary"></i>
+                <p class="mt-3 text-secondary">No credential test results available yet. Results will appear here as the scan progresses.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Terminal Tab -->
+        <div class="tab-pane fade" id="terminalTab">
+          <div class="terminal-window">
+            <div class="terminal-body">
+              <pre id="outputContent" class="terminal-output active">Loading...</pre>
+              <pre id="errorsContent" class="terminal-output terminal-errors" style="display:none;"></pre>
+            </div>
+          </div>
+          <!-- Hidden badge elements for JS compatibility -->
+          <span id="stdoutBadge" style="display:none;">0</span>
+          <span id="errorsBadge" style="display:none;">0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Custom Alert Modals -->
+<div class="modal fade" id="cygorAlertModal" tabindex="-1" aria-labelledby="cygorAlertModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-secondary">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title text-white" id="cygorAlertModalLabel">
+          <i class="bi bi-info-circle-fill me-2"></i>Notification
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="cygorAlertMessage"></p>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="cygorErrorModal" tabindex="-1" aria-labelledby="cygorErrorModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-danger">
+      <div class="modal-header border-danger">
+        <h5 class="modal-title text-white" id="cygorErrorModalLabel">
+          <i class="bi bi-exclamation-triangle-fill me-2 text-danger"></i>Error
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="cygorErrorMessage"></p>
+      </div>
+      <div class="modal-footer border-danger">
+        <button type="button" class="btn btn-danger" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Scan Confirmation Modal -->
+<div class="modal fade" id="deleteScanModal" tabindex="-1" aria-labelledby="deleteScanModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-danger">
+      <div class="modal-header border-danger">
+        <h5 class="modal-title text-white" id="deleteScanModalLabel">
+          <i class="bi bi-trash-fill me-2"></i>Delete Scan
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-2">Delete this scan? This cannot be undone.</p>
+        <div class="alert alert-danger" role="alert">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>
+          <strong>Warning:</strong> This action is permanent and cannot be reversed.
+        </div>
+      </div>
+      <div class="modal-footer border-danger">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteScanBtn">
+          <i class="bi bi-trash-fill me-1"></i>Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Cancel Scan Confirmation Modal -->
+<div class="modal fade" id="cancelScanModal" tabindex="-1" aria-labelledby="cancelScanModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-warning">
+      <div class="modal-header border-warning">
+        <h5 class="modal-title text-white" id="cancelScanModalLabel">
+          <i class="bi bi-stop-circle-fill me-2"></i>Cancel Scan
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0">Cancel this scan?</p>
+      </div>
+      <div class="modal-footer border-warning">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+        <button type="button" class="btn btn-warning" id="confirmCancelScanBtn">
+          <i class="bi bi-stop-circle-fill me-1"></i>Yes, Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* =========================================================
+   Credential Scan Detail Styling (Aligned with Task Detail)
+   Status badges, terminal, ANSI colors now in cygor-components.css
+   ========================================================= */
+
+/* Scan info layout */
+.scan-info-list dt {
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: #adb5bd;
+  padding: 1rem 0;
+  letter-spacing: 0.3px;
+}
+.scan-info-list dd {
+  padding: 1rem 0;
+  margin-bottom: 0;
+}
+.scan-info-list dt:not(:first-child),
+.scan-info-list dd:not(:nth-child(2)) {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Tabs */
+.nav-tabs .nav-link {
+  color: #8b949e;
+  border: none;
+  background: transparent;
+}
+.nav-tabs .nav-link:hover {
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.05);
+}
+.nav-tabs .nav-link.active {
+  color: #58a6ff;
+  background: #0d1117;
+  border-bottom: 2px solid #58a6ff;
+}
+
+/* Improve table readability in scan detail */
+#resultsContent .table {
+  font-size: 1rem;
+}
+
+#resultsContent .table thead th {
+  color: #c9d1d9 !important;
+  font-weight: 600;
+  font-size: 1.05rem;
+  padding: 0.75rem;
+}
+
+#resultsContent .table tbody td {
+  color: #e6edf3 !important;
+  padding: 0.75rem;
+  vertical-align: middle;
+}
+
+/* Light theme overrides for table-dark */
+body.light-theme #resultsContent .table.table-dark {
+  background-color: #ffffff !important;
+  color: #212529 !important;
+}
+
+body.light-theme #resultsContent .table.table-dark thead {
+  background-color: #f8f9fa !important;
+}
+
+body.light-theme #resultsContent .table.table-dark thead th {
+  color: #212529 !important;
+  font-weight: 700 !important;
+  border-bottom: 2px solid #dee2e6 !important;
+}
+
+body.light-theme #resultsContent .table.table-dark tbody {
+  background-color: #ffffff !important;
+}
+
+body.light-theme #resultsContent .table.table-dark tbody td {
+  color: #212529 !important;
+  border-bottom: 1px solid #dee2e6 !important;
+}
+
+body.light-theme #resultsContent .table.table-dark tbody tr:hover {
+  background-color: #f8f9fa !important;
+}
+
+#resultsContent .table code {
+  font-size: 1rem !important;
+  padding: 0.4rem 0.6rem !important;
+  border-radius: 0.25rem;
+  display: inline-block;
+  font-weight: 500;
+}
+
+#resultsContent .table .badge {
+  font-size: 1rem !important;
+  padding: 0.5rem 0.75rem !important;
+  font-weight: 500;
+}
+</style>
+
+
+<script src="/static/js/ansi_up.js"></script>
+<script>
+const scanId = "{{ scan_id }}";
+let refreshInterval = null;
+let resultsRefreshInterval = null;
+let startTime = null;
+let timerInterval = null;
+let scanInfoCollapsed = false;
+let lastKnownResultTotal = 0;  // Track result count to avoid unnecessary re-renders
+
+// Custom Alert Function - Replace browser alerts with styled modals
+function showAlert(message, type = 'info') {
+  let modalId, messageId, modal;
+  
+  if (type === 'error') {
+    modalId = 'cygorErrorModal';
+    messageId = 'cygorErrorMessage';
+  } else {
+    modalId = 'cygorAlertModal';
+    messageId = 'cygorAlertMessage';
+  }
+  
+  const messageElement = document.getElementById(messageId);
+  if (messageElement) {
+    messageElement.textContent = message;
+    modal = new bootstrap.Modal(document.getElementById(modalId));
+    modal.show();
+  } else {
+    // Fallback — log to console if modal not found
+    console.warn('showAlert fallback — modal not found for:', message);
+  }
+}
+let previousStatus = null;
+
+// ANSI color renderer (with fallback if CDN fails to load)
+let ansi;
+if (typeof AnsiUp !== 'undefined') {
+  ansi = new AnsiUp();
+  ansi.use_classes = true;
+} else {
+  console.warn('ansi_up library not loaded, ANSI colors disabled');
+  ansi = { ansi_to_html: function(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }};
+}
+
+
+// Toggle scan info collapse
+function toggleScanInfo() {
+  const collapse = document.getElementById('scanInfoCollapse');
+  const chevron = document.getElementById('scanInfoChevron');
+  const bsCollapse = new bootstrap.Collapse(collapse, { toggle: false });
+
+  if (collapse.classList.contains('show')) {
+    bsCollapse.hide();
+    chevron.style.transform = 'rotate(-90deg)';
+    scanInfoCollapsed = true;
+  } else {
+    bsCollapse.show();
+    chevron.style.transform = 'rotate(0deg)';
+    scanInfoCollapsed = false;
+  }
+}
+
+// --- Incremental output tracking ---
+let outputBuffer = [];
+let errorBuffer = [];
+let lastOutputCount = 0;
+let lastErrorCount = 0;
+
+async function fetchScanDetails() {
+  try {
+    const response = await fetch(`/api/credrecon/scans/${scanId}`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        document.body.innerHTML = '<div class="container mt-5"><div class="alert alert-danger">Scan not found</div></div>';
+        return;
+      }
+      throw new Error('Failed to fetch scan');
+    }
+
+    const scan = await response.json();
+
+    // Reset buffers if starting a new or rerun scan
+    if ((scan.status === 'pending' || scan.status === 'running') && outputBuffer.length === 0) {
+      outputBuffer = [];
+      errorBuffer = [];
+      lastOutputCount = 0;
+      lastErrorCount = 0;
+      document.getElementById("outputContent").textContent = "Waiting for output...";
+      document.getElementById("errorsContent").textContent = "";
+    }
+
+    updateScanInfo(scan);
+
+    // Fetch and stream new output incrementally
+    const outputResponse = await fetch(`/api/credrecon/scans/${scanId}/output`);
+    if (outputResponse.ok) {
+      const outputData = await outputResponse.json();
+      updateOutput(outputData);
+    }
+
+  } catch (error) {
+    console.error('Error fetching scan:', error);
+  }
+}
+
+function updateScanInfo(scan) {
+  // Basic info
+  document.getElementById('scan-id').textContent = scan.scan_id ? scan.scan_id.substring(0, 12) : scanId.substring(0, 12);
+  document.getElementById('scan-targets').textContent = scan.num_targets || '-';
+  document.getElementById('scan-protocol').textContent = scan.protocol || 'auto';
+  document.getElementById('scan-command').textContent = scan.command || '-';
+  document.getElementById('scan-created').textContent = formatTime(scan.created_at);
+  document.getElementById('scan-started').textContent = formatTime(scan.started_at);
+  document.getElementById('scan-completed').textContent = formatTime(scan.completed_at);
+
+  // Update back button based on whether this scan was triggered by a schedule
+  const backBtn = document.getElementById('backBtn');
+  const sourceBadge = document.getElementById('taskSourceBadge');
+  const isScheduled = scan.scan_id && scan.scan_id.startsWith('sched-');
+
+  if (scan.schedule_id || isScheduled) {
+    backBtn.href = scan.schedule_id ? `/schedules/${scan.schedule_id}` : '/tasks';
+    backBtn.title = scan.schedule_name ? `Back to schedule: ${scan.schedule_name}` : 'Back to Task Manager';
+    // Show scheduled badge
+    sourceBadge.innerHTML = '<i class="bi bi-calendar-check me-1"></i>Scheduled';
+    sourceBadge.className = 'badge bg-primary ms-2 fs-6';
+    sourceBadge.style.display = 'inline-block';
+  } else {
+    backBtn.href = '/tasks';
+    backBtn.title = 'Back to Task Manager';
+    // Show manual badge
+    sourceBadge.innerHTML = '<i class="bi bi-play-circle me-1"></i>Manual';
+    sourceBadge.className = 'badge bg-success ms-2 fs-6';
+    sourceBadge.style.display = 'inline-block';
+  }
+
+  // Status badge with icons
+  const statusEl = document.getElementById('scan-status');
+  const statusClass = `status-${scan.status}`;
+  const statusIcon = {
+    pending: 'clock-history',
+    running: 'hourglass-split',
+    completed: 'check-circle-fill',
+    failed: 'x-circle-fill',
+    cancelled: 'dash-circle'
+  }[scan.status] || 'question-circle';
+
+  statusEl.innerHTML = `<span class="status-badge ${statusClass}"><i class="bi bi-${statusIcon}"></i>${scan.status}</span>`;
+
+  // Duration
+  document.getElementById('scan-duration').textContent = calculateDuration(scan);
+
+  // Action buttons
+  document.getElementById('cancelBtn').style.display = scan.status === 'running' ? 'inline-block' : 'none';
+  document.getElementById('deleteBtn').style.display = scan.status !== 'running' ? 'inline-block' : 'none';
+
+  // Show success banner for completed scans
+  const successBanner = document.getElementById('successBanner');
+  if (scan.status === 'completed') {
+    successBanner.classList.remove('d-none');
+
+    // Auto-collapse scan info when complete (only once)
+    if (!scanInfoCollapsed && !window.scanCompleted) {
+      window.scanCompleted = true;
+      const collapse = document.getElementById('scanInfoCollapse');
+      const chevron = document.getElementById('scanInfoChevron');
+      if (collapse.classList.contains('show')) {
+        const bsCollapse = new bootstrap.Collapse(collapse, { toggle: false });
+        bsCollapse.hide();
+        chevron.style.transform = 'rotate(-90deg)';
+        scanInfoCollapsed = true;
+      }
+    }
+  } else {
+    successBanner.classList.add('d-none');
+  }
+
+  // Running timer (inline in header)
+  if (scan.status === 'running') {
+    if (scan.started_at) {
+      let isoString = scan.started_at;
+      if (!isoString.endsWith('Z') && !isoString.includes('+') && !isoString.includes('-', 10)) {
+        isoString = isoString + 'Z';
+      }
+      const parsedStart = new Date(isoString);
+
+      if (!isNaN(parsedStart.getTime())) {
+        if (!startTime) {
+          startTime = parsedStart;
+        }
+        if (!timerInterval) {
+          startTimer();
+        }
+      }
+    }
+    document.getElementById('runningTimerInline').style.display = 'block';
+  } else {
+    document.getElementById('runningTimerInline').style.display = 'none';
+    stopTimer();
+    startTime = null;
+  }
+
+  // Auto-refresh logic: prefer SSE for live updates, fall back to polling
+  if (scan.status === 'running' || scan.status === 'pending') {
+    // Try SSE first for efficient incremental updates
+    if (!window._sseSource && typeof EventSource !== 'undefined') {
+      try {
+        window._sseSource = new EventSource(`/api/credrecon/scans/${scanId}/stream`);
+        window._sseSource.onmessage = function(event) {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.event === 'update') {
+              // Always re-fetch scan details (includes output) for real-time updates
+              fetchScanDetails();
+              // Only re-fetch results table on status change (heavier operation)
+              if (msg.status !== previousStatus) {
+                fetchResults();
+              }
+              // Update result count badge without full fetch
+              if (msg.results_count !== undefined) {
+                const badge = document.getElementById('resultsBadge');
+                if (badge) badge.textContent = msg.results_count;
+              }
+            } else if (msg.event === 'done') {
+              // Scan completed - final fetch
+              fetchScanDetails();
+              fetchResults();
+              if (window._sseSource) { window._sseSource.close(); window._sseSource = null; }
+            }
+          } catch (e) { console.warn('SSE parse error:', e); }
+        };
+        window._sseSource.onerror = function() {
+          // SSE failed, fall back to polling
+          if (window._sseSource) { window._sseSource.close(); window._sseSource = null; }
+        };
+        // Always start polling alongside SSE for reliable output updates
+        if (!refreshInterval) refreshInterval = setInterval(fetchScanDetails, 2000);
+        if (!resultsRefreshInterval) resultsRefreshInterval = setInterval(fetchResults, 5000);
+      } catch (e) {
+        // SSE not supported, use polling
+        if (!refreshInterval) refreshInterval = setInterval(fetchScanDetails, 2000);
+        if (!resultsRefreshInterval) resultsRefreshInterval = setInterval(fetchResults, 5000);
+      }
+    } else {
+      // SSE already active but ensure polling is running too
+      if (!refreshInterval) refreshInterval = setInterval(fetchScanDetails, 2000);
+      if (!resultsRefreshInterval) resultsRefreshInterval = setInterval(fetchResults, 5000);
+    }
+  } else {
+    // Scan not running - clean up SSE and polling
+    if (window._sseSource) { window._sseSource.close(); window._sseSource = null; }
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+      refreshInterval = null;
+    }
+    if (resultsRefreshInterval) {
+      clearInterval(resultsRefreshInterval);
+      resultsRefreshInterval = null;
+    }
+  }
+
+  // Auto-refresh results when scan completes (transition from running/pending to completed/failed)
+  if (previousStatus && (previousStatus === 'running' || previousStatus === 'pending') &&
+      (scan.status === 'completed' || scan.status === 'failed')) {
+    console.log('Scan completed, fetching results...');
+    fetchResults();
+    // Fetch once more after a delay in case results are still being flushed
+    setTimeout(fetchResults, 3000);
+  }
+
+  previousStatus = scan.status;
+}
+
+function updateOutput(data) {
+  // Handle both array and string formats (for backward compatibility and historic scans)
+  let newOutput = data.output || [];
+  let newErrors = data.errors || [];
+
+  // Convert strings to arrays if needed
+  if (typeof newOutput === 'string') {
+    newOutput = newOutput.split('\n').filter(line => line.length > 0);
+  }
+  if (typeof newErrors === 'string') {
+    newErrors = newErrors.split('\n').filter(line => line.length > 0);
+  }
+
+  const outputEl = document.getElementById("outputContent");
+  const errEl = document.getElementById("errorsContent");
+
+  // Append only new lines that haven't been shown yet
+  if (newOutput.length > lastOutputCount) {
+    const delta = newOutput.slice(lastOutputCount);
+    outputBuffer.push(...delta);
+    lastOutputCount = newOutput.length;
+
+    // Render full buffer through ANSI color parser
+    outputEl.innerHTML = ansi.ansi_to_html(outputBuffer.join("\n"));
+    outputEl.scrollTop = outputEl.scrollHeight;
+  } else if (newOutput.length === 0 && outputBuffer.length === 0) {
+    outputEl.textContent = "Waiting for output...";
+  }
+
+  // Handle case where scan completed but no output
+  if (data.status && (data.status === 'completed' || data.status === 'failed')) {
+    if (newOutput.length === 0 && outputBuffer.length === 0) {
+      outputEl.textContent = "No output generated by this scan.";
+    }
+  }
+
+  // Similar logic for errors
+  if (newErrors.length > lastErrorCount) {
+    const deltaErr = newErrors.slice(lastErrorCount);
+    errorBuffer.push(...deltaErr);
+    lastErrorCount = newErrors.length;
+
+    // Render errors through ANSI color parser
+    errEl.innerHTML = ansi.ansi_to_html(errorBuffer.join("\n"));
+    errEl.scrollTop = errEl.scrollHeight;
+  }
+
+  // Update badge counts
+  document.getElementById("outputBadge").textContent = outputBuffer.length;
+  document.getElementById("stdoutBadge").textContent = outputBuffer.length;
+  document.getElementById("errorsBadge").textContent = errorBuffer.length;
+
+  // If there are still no errors, show empty state
+  if (errorBuffer.length === 0) {
+    errEl.textContent = "";
+  }
+}
+
+/* formatTime now in cygor-datetime.js */
+
+function calculateDuration(scan) {
+  if (!scan.started_at) return '-';
+
+  try {
+    let startIso = scan.started_at;
+    if (!startIso.endsWith('Z') && !startIso.includes('+') && !startIso.includes('-', 10)) {
+      startIso = startIso + 'Z';
+    }
+    const start = new Date(startIso);
+
+    let end;
+    if (scan.completed_at) {
+      let endIso = scan.completed_at;
+      if (!endIso.endsWith('Z') && !endIso.includes('+') && !endIso.includes('-', 10)) {
+        endIso = endIso + 'Z';
+      }
+      end = new Date(endIso);
+    } else {
+      end = new Date();
+    }
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return '-';
+    }
+
+    let diff = end - start;
+    if (diff < 0) diff = 0;
+
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000);
+
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+  } catch (e) {
+    return '-';
+  }
+}
+
+/* startTimer/stopTimer now use window.cygorTimer — see cygor-terminal.js */
+function startTimer() { window.cygorTimer.start(startTime); }
+function stopTimer() { window.cygorTimer.stop(); }
+
+async function cancelScan() {
+  // Show confirmation modal
+  const modal = new bootstrap.Modal(document.getElementById('cancelScanModal'));
+  modal.show();
+  
+  // Handle confirm button
+  const confirmBtn = document.getElementById('confirmCancelScanBtn');
+  const newHandler = async function() {
+    confirmBtn.removeEventListener('click', newHandler);
+    modal.hide();
+    
+    try {
+      const response = await fetch(`/api/credrecon/scans/${scanId}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Failed to cancel scan');
+      await fetchScanDetails();
+    } catch (error) {
+      showAlert('Error cancelling scan: ' + error.message, 'error');
+    }
+  };
+  confirmBtn.addEventListener('click', newHandler);
+}
+
+async function deleteScan() {
+  // Show confirmation modal
+  const modal = new bootstrap.Modal(document.getElementById('deleteScanModal'));
+  modal.show();
+  
+  // Handle confirm button
+  const confirmBtn = document.getElementById('confirmDeleteScanBtn');
+  const newHandler = async function() {
+    confirmBtn.removeEventListener('click', newHandler);
+    modal.hide();
+
+    try {
+      const response = await fetch(`/api/credrecon/scans/${scanId}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Failed to delete scan');
+      // Navigate back to schedule or task manager
+      const backBtn = document.getElementById('backBtn');
+      window.location.href = backBtn ? backBtn.href : '/tasks';
+    } catch (error) {
+      showAlert('Error deleting scan: ' + error.message, 'error');
+    }
+  };
+  confirmBtn.addEventListener('click', newHandler);
+}
+
+// ==================== DETAIL PAGE PAGINATION ====================
+const _detailSectionData = { failed: [], error: [], skipped: [] };
+const _detailPages = { failed: 1, error: 1, skipped: 1 };
+const _detailPerPage = { failed: 100, error: 100, skipped: 100 };
+// Store render config per section so nav/perPage changes can re-render
+const _detailRenderConfig = {
+  failed: { targetColor: 'text-muted', passwordBg: 'rgba(139, 148, 158, 0.15)', detailColor: '#f85149', defaultReason: 'Authentication failed' },
+  error: { targetColor: 'text-muted', passwordBg: 'rgba(139, 148, 158, 0.15)', detailColor: '#d29922', defaultReason: 'Unknown error' },
+  skipped: { targetColor: 'text-secondary', passwordBg: 'rgba(110, 118, 129, 0.1)', detailColor: '#6e7681', defaultReason: 'Skipped' }
+};
+const _detailTbodyIds = { failed: 'failedTable', error: 'errorTable', skipped: 'skippedTable' };
+
+function renderDetailSectionPage(section, targetColor, passwordBg, detailColor, defaultReason) {
+  // Save render config for nav/perPage re-renders
+  _detailRenderConfig[section] = { targetColor, passwordBg, detailColor, defaultReason };
+
+  const items = _detailSectionData[section] || [];
+  const total = items.length;
+  const pp = _detailPerPage[section] === 'all' ? total : _detailPerPage[section];
+  const totalPages = Math.max(1, Math.ceil(total / pp));
+  if (_detailPages[section] > totalPages) _detailPages[section] = totalPages;
+  const start = (_detailPages[section] - 1) * pp;
+  const end = Math.min(start + pp, total);
+
+  const tbody = document.getElementById(_detailTbodyIds[section]);
+  if (!tbody) return;
+  const frag = document.createDocumentFragment();
+  for (let i = start; i < end; i++) {
+    const result = items[i];
+    const tr = document.createElement('tr');
+    const ts = result.tested_at ? new Date(result.tested_at).toLocaleString() : '';
+    tr.innerHTML = `
+        <td style="padding: 0.75rem;">${formatTargetCell(result.target, result.protocol, targetColor)}</td>
+        <td style="padding: 0.75rem; color: #c9d1d9; font-size: 1rem; font-weight: 600;" class="port-cell">${result.port}</td>
+        <td style="padding: 0.75rem;"><span style="font-family: 'SF Mono', 'Consolas', 'Monaco', monospace; font-size: 0.85rem; padding: 0.35rem 0.6rem; background: rgba(88, 166, 255, 0.15); color: #58a6ff; border: 1px solid rgba(88, 166, 255, 0.3); border-radius: 4px; font-weight: 500; letter-spacing: 0.02em;">${result.protocol.toUpperCase()}</span></td>
+        <td style="padding: 0.75rem;"><code style="font-family: 'SF Mono', 'Consolas', 'Monaco', monospace; font-size: 0.9rem; padding: 0.35rem 0.6rem; background: rgba(139, 148, 158, 0.15); color: #c9d1d9; border-radius: 4px;">${escapeHtml(result.username)}</code></td>
+        <td style="padding: 0.75rem;"><code style="font-family: 'SF Mono', 'Consolas', 'Monaco', monospace; font-size: 0.9rem; padding: 0.35rem 0.6rem; background: ${passwordBg}; color: ${detailColor}; border-radius: 4px;">${escapeHtml(result.password || '(empty)')}</code></td>
+        <td style="padding: 0.75rem; color: ${detailColor}; font-size: 0.9rem; font-weight: 500; line-height: 1.6;" class="details-cell">${escapeHtml(result.reason || defaultReason)}</td>
+        <td style="padding: 0.75rem; color: #8b949e; font-size: 0.85rem; white-space: nowrap;">${ts}</td>`;
+    frag.appendChild(tr);
+  }
+  tbody.innerHTML = '';
+  tbody.appendChild(frag);
+
+  // Update pagination controls
+  const pagination = document.getElementById(section + 'Pagination');
+  if (pagination) pagination.style.cssText = total > 0 ? 'display: flex !important;' : 'display: none !important;';
+  const info = document.getElementById(section + 'PagInfo');
+  if (info) info.textContent = `${start + 1}-${end} of ${total.toLocaleString()} entries`;
+  const pageInfo = document.getElementById(section + 'PagPageInfo');
+  if (pageInfo) pageInfo.textContent = `Page ${_detailPages[section]} of ${totalPages}`;
+  const prevBtn = document.getElementById(section + 'PagPrev');
+  const nextBtn = document.getElementById(section + 'PagNext');
+  if (prevBtn) prevBtn.disabled = _detailPages[section] <= 1;
+  if (nextBtn) nextBtn.disabled = _detailPages[section] >= totalPages;
+}
+
+function navDetailPage(section, dir) {
+  _detailPages[section] += dir;
+  const cfg = _detailRenderConfig[section];
+  renderDetailSectionPage(section, cfg.targetColor, cfg.passwordBg, cfg.detailColor, cfg.defaultReason);
+}
+
+function changeDetailPerPage(section, val) {
+  _detailPerPage[section] = val === 'all' ? 'all' : parseInt(val);
+  _detailPages[section] = 1;
+  const cfg = _detailRenderConfig[section];
+  renderDetailSectionPage(section, cfg.targetColor, cfg.passwordBg, cfg.detailColor, cfg.defaultReason);
+}
+
+async function fetchResults() {
+  try {
+    // Fetch first page with large per_page to get counts and initial data
+    const PER_PAGE = 1000;
+    const response = await fetch(`/api/credrecon/scans/${scanId}/results?per_page=${PER_PAGE}&page=1`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        document.getElementById('resultsLoading').style.display = 'none';
+        document.getElementById('noResults').style.display = 'block';
+        return;
+      }
+      throw new Error('Failed to fetch results');
+    }
+
+    const data = await response.json();
+
+    // Skip re-render if result count hasn't changed (avoids DOM churn during polling)
+    if (data.total === lastKnownResultTotal && lastKnownResultTotal > 0) {
+      return;
+    }
+    lastKnownResultTotal = data.total || 0;
+
+    // If there are more pages, fetch them all in parallel
+    const allResults = { successful: [...(data.results.successful || [])], failed: [...(data.results.failed || [])], errors: [...(data.results.errors || [])], skipped: [...(data.results.skipped || [])] };
+    if (data.total_pages && data.total_pages > 1) {
+      const fetches = [];
+      for (let p = 2; p <= data.total_pages; p++) {
+        fetches.push(
+          fetch(`/api/credrecon/scans/${scanId}/results?per_page=${PER_PAGE}&page=${p}`)
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null)
+        );
+      }
+      const pages = await Promise.all(fetches);
+      pages.forEach(pageData => {
+        if (pageData && pageData.results) {
+          if (pageData.results.successful) allResults.successful.push(...pageData.results.successful);
+          if (pageData.results.failed) allResults.failed.push(...pageData.results.failed);
+          if (pageData.results.errors) allResults.errors.push(...pageData.results.errors);
+          if (pageData.results.skipped) allResults.skipped.push(...pageData.results.skipped);
+        }
+      });
+    }
+
+    // Cache full results for export
+    cachedResults = {
+      ...data,
+      total: data.total,
+      results: allResults
+    };
+
+    // Update badge
+    document.getElementById('resultsBadge').textContent = data.total || 0;
+
+    // Update summary cards
+    document.getElementById('successCount').textContent = data.successful || 0;
+    document.getElementById('failedCount').textContent = data.failed || 0;
+    document.getElementById('errorCount').textContent = data.errors || 0;
+    document.getElementById('skippedCount').textContent = data.skipped || 0;
+
+    // Hide loading, show content
+    document.getElementById('resultsLoading').style.display = 'none';
+
+    if (data.total === 0) {
+      document.getElementById('noResults').style.display = 'block';
+      return;
+    }
+
+    document.getElementById('resultsContent').style.display = 'block';
+    document.getElementById('noResults').style.display = 'none';
+
+    // Helper: build rows using DocumentFragment for batch DOM insertion (avoids per-row reflow)
+    function buildResultRows(items, targetColor, passwordBg, detailColor, defaultReason) {
+      const frag = document.createDocumentFragment();
+      items.forEach(result => {
+        const tr = document.createElement('tr');
+        const ts = result.tested_at ? new Date(result.tested_at).toLocaleString() : '';
+        tr.innerHTML = `
+            <td style="padding: 0.75rem;">${formatTargetCell(result.target, result.protocol, targetColor)}</td>
+            <td style="padding: 0.75rem; color: #c9d1d9; font-size: 1rem; font-weight: 600;" class="port-cell">${result.port}</td>
+            <td style="padding: 0.75rem;"><span style="font-family: 'SF Mono', 'Consolas', 'Monaco', monospace; font-size: 0.85rem; padding: 0.35rem 0.6rem; background: rgba(88, 166, 255, 0.15); color: #58a6ff; border: 1px solid rgba(88, 166, 255, 0.3); border-radius: 4px; font-weight: 500; letter-spacing: 0.02em;">${result.protocol.toUpperCase()}</span></td>
+            <td style="padding: 0.75rem;"><code style="font-family: 'SF Mono', 'Consolas', 'Monaco', monospace; font-size: 0.9rem; padding: 0.35rem 0.6rem; background: rgba(139, 148, 158, 0.15); color: #c9d1d9; border-radius: 4px;">${escapeHtml(result.username)}</code></td>
+            <td style="padding: 0.75rem;"><code style="font-family: 'SF Mono', 'Consolas', 'Monaco', monospace; font-size: 0.9rem; padding: 0.35rem 0.6rem; background: ${passwordBg}; color: ${detailColor}; border-radius: 4px;">${escapeHtml(result.password || '(empty)')}</code></td>
+            <td style="padding: 0.75rem; color: ${detailColor}; font-size: 0.9rem; font-weight: 500; line-height: 1.6;" class="details-cell">${escapeHtml(result.reason || defaultReason)}</td>
+            <td style="padding: 0.75rem; color: #8b949e; font-size: 0.85rem; white-space: nowrap;">${ts}</td>`;
+        frag.appendChild(tr);
+      });
+      return frag;
+    }
+
+    // Populate Successful table
+    if (allResults.successful.length > 0) {
+      document.getElementById('successfulSection').style.display = 'block';
+      const tbody = document.getElementById('successfulTable');
+      tbody.innerHTML = '';
+      tbody.appendChild(buildResultRows(allResults.successful, 'text-success', 'rgba(46, 160, 67, 0.15)', '#3fb950', 'Authentication successful'));
+    }
+
+    // Store results for paginated rendering
+    _detailSectionData.failed = allResults.failed;
+    _detailSectionData.error = allResults.errors;
+    _detailSectionData.skipped = allResults.skipped;
+
+    // Populate Failed table (paginated)
+    if (allResults.failed.length > 0) {
+      document.getElementById('failedSection').style.display = 'block';
+      _detailPages.failed = 1;
+      renderDetailSectionPage('failed', 'text-muted', 'rgba(139, 148, 158, 0.15)', '#f85149', 'Authentication failed');
+    }
+
+    // Populate Error table (paginated)
+    if (allResults.errors.length > 0) {
+      document.getElementById('errorSection').style.display = 'block';
+      _detailPages.error = 1;
+      renderDetailSectionPage('error', 'text-muted', 'rgba(139, 148, 158, 0.15)', '#d29922', 'Unknown error');
+    }
+
+    // Populate Skipped table (paginated)
+    if (allResults.skipped.length > 0) {
+      document.getElementById('skippedSection').style.display = 'block';
+      _detailPages.skipped = 1;
+      renderDetailSectionPage('skipped', 'text-secondary', 'rgba(110, 118, 129, 0.1)', '#6e7681', 'Skipped');
+    }
+
+  } catch (error) {
+    console.error('Error fetching results:', error);
+    document.getElementById('resultsLoading').innerHTML = `
+      <i class="bi bi-exclamation-triangle text-warning fs-1"></i>
+      <p class="mt-3 text-warning">Error loading results: ${error.message}</p>
+    `;
+  }
+}
+
+/* escapeHtml now in cygor-utils.js */
+
+function formatTargetCell(target, protocol, colorClass = 'text-success') {
+  // Check if target is already a full URL
+  if (target && (target.startsWith('http://') || target.startsWith('https://'))) {
+    return `<a href="${escapeHtml(target)}" target="_blank" rel="noopener noreferrer" style="color: #6ea8fe; text-decoration: none; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(110, 168, 254, 0.15); padding: 0.4rem 0.6rem; border-radius: 0.25rem; display: inline-block; font-weight: 600;" title="${escapeHtml(target)}">${escapeHtml(target)} <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.8rem;"></i></a>`;
+  }
+  // Check if protocol is HTTP/HTTPS and construct URL
+  else if (protocol && (protocol.toLowerCase() === 'http' || protocol.toLowerCase() === 'https')) {
+    const url = `${protocol.toLowerCase()}://${target}`;
+    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color: #6ea8fe; text-decoration: none; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(110, 168, 254, 0.15); padding: 0.4rem 0.6rem; border-radius: 0.25rem; display: inline-block; font-weight: 600;" title="${escapeHtml(url)}">${escapeHtml(target)} <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.8rem;"></i></a>`;
+  }
+  // Otherwise, display as plain text with code styling
+  else {
+    const colorMap = {
+      'text-success': '#198754',
+      'text-muted': '#8b949e',
+      'text-secondary': '#6c757d'
+    };
+    const bgMap = {
+      'text-success': 'rgba(25, 135, 84, 0.15)',
+      'text-muted': 'rgba(139, 148, 158, 0.1)',
+      'text-secondary': 'rgba(108, 117, 125, 0.15)'
+    };
+    const color = colorMap[colorClass] || colorMap['text-muted'];
+    const bg = bgMap[colorClass] || bgMap['text-muted'];
+    return `<code style="color: ${color}; font-size: 1rem; background: ${bg}; padding: 0.4rem 0.6rem; border-radius: 0.25rem; font-weight: 600;">${escapeHtml(target)}</code>`;
+  }
+}
+
+function refreshTask() {
+  fetchScanDetails();
+  fetchResults();
+}
+
+async function copyCommand(event) {
+  try {
+    const text = document.getElementById('scan-command').textContent;
+    await copyText(text);
+
+    const btn = event.target.closest('button');
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+    btn.classList.remove('btn-outline-secondary');
+    btn.classList.add('btn-success');
+
+    setTimeout(() => {
+      btn.innerHTML = originalHTML;
+      btn.classList.remove('btn-success');
+      btn.classList.add('btn-outline-secondary');
+    }, 2000);
+  } catch (err) {
+    console.error('Failed to copy command:', err);
+  }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  fetchScanDetails();
+  fetchResults();
+});
+
+// Auto-refresh when page gains focus
+window.addEventListener('focus', () => {
+  console.log('Scan detail focused - refreshing...');
+  fetchScanDetails();
+  fetchResults();
+});
+
+// Cleanup
+window.addEventListener('beforeunload', () => {
+  if (refreshInterval) clearInterval(refreshInterval);
+  if (resultsRefreshInterval) clearInterval(resultsRefreshInterval);
+  stopTimer();
+});
+
+// ==================== EXPORT FUNCTIONS ====================
+function exportScanResults(format) {
+  if (!cachedResults || !cachedResults.results) {
+    showAlert('No results available to export', 'warning');
+    return;
+  }
+
+  // Flatten all result categories into a single array with timestamps
+  const allResults = [];
+  const categories = ['successful', 'failed', 'errors', 'skipped'];
+  categories.forEach(cat => {
+    if (cachedResults.results[cat]) {
+      cachedResults.results[cat].forEach(r => {
+        allResults.push({
+          target: r.target || '',
+          port: r.port || '',
+          protocol: r.protocol || '',
+          service: r.service || '',
+          username: r.username || '',
+          password: r.password || '',
+          status: cat === 'errors' ? 'error' : (cat === 'skipped' ? 'skipped' : (cat === 'successful' ? 'success' : 'failed')),
+          reason: r.reason || '',
+          timestamp: r.tested_at || ''
+        });
+      });
+    }
+  });
+
+  if (allResults.length === 0) {
+    showAlert('No results to export', 'warning');
+    return;
+  }
+
+  const dateStr = new Date().toISOString().split('T')[0];
+  const scanShortId = scanId.substring(0, 8);
+  const fields = ['target', 'port', 'protocol', 'service', 'username', 'password', 'status', 'reason', 'timestamp'];
+
+  if (format === 'csv') {
+    let csv = 'Target,Port,Protocol,Service,Username,Password,Status,Reason,Timestamp\n';
+    allResults.forEach(r => {
+      csv += fields.map(f => `"${escCSV(r[f])}"`).join(',') + '\n';
+    });
+    downloadExport(csv, `credrecon_${scanShortId}_${dateStr}.csv`, 'text/csv');
+
+  } else if (format === 'json') {
+    const jsonStr = JSON.stringify(allResults, null, 2);
+    downloadExport(jsonStr, `credrecon_${scanShortId}_${dateStr}.json`, 'application/json');
+
+  } else if (format === 'xml') {
+    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+    xml += `<credrecon_results scan_id="${escXML(scanId)}" generated="${new Date().toISOString()}" total="${allResults.length}">\n`;
+    allResults.forEach(item => {
+      xml += '  <result>\n';
+      fields.forEach(field => {
+        xml += `    <${field}>${escXML(String(item[field] ?? ''))}</${field}>\n`;
+      });
+      xml += '  </result>\n';
+    });
+    xml += '</credrecon_results>\n';
+    downloadExport(xml, `credrecon_${scanShortId}_${dateStr}.xml`, 'application/xml');
+  }
+}
+
+function escCSV(value) {
+  if (!value) return '';
+  return String(value).replace(/"/g, '""');
+}
+
+function escXML(value) {
+  if (!value) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function downloadExport(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType + ';charset=utf-8;' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  window.URL.revokeObjectURL(url);
+}
+
+</script>
+
+<style>
+/* Light theme overrides for scan detail page */
+body.light-theme .text-light {
+  color: #212529 !important;
+}
+
+body.light-theme code.text-light {
+  color: #212529 !important;
+  background: rgba(0, 0, 0, 0.05) !important;
+}
+
+body.light-theme .text-info {
+  color: #0d6efd !important;
+}
+
+body.light-theme .text-secondary {
+  color: #6c757d !important;
+}
+
+body.light-theme .text-muted {
+  color: #6c757d !important;
+}
+
+body.light-theme .bg-dark {
+  background: #ffffff !important;
+}
+
+body.light-theme .card.bg-dark {
+  background: #ffffff !important;
+  border: 1px solid #dee2e6 !important;
+}
+
+body.light-theme .card-header {
+  background: #f8f9fa !important;
+  border-bottom: 1px solid #dee2e6 !important;
+  color: #212529 !important;
+}
+
+body.light-theme .card-body {
+  background: #ffffff !important;
+  color: #212529 !important;
+}
+
+body.light-theme dt {
+  color: #495057 !important;
+  font-weight: 600 !important;
+}
+
+body.light-theme dd {
+  color: #212529 !important;
+}
+
+body.light-theme .table-dark {
+  background: #ffffff !important;
+  color: #212529 !important;
+}
+
+body.light-theme .table-dark thead th {
+  background: #f8f9fa !important;
+  color: #212529 !important;
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme .table-dark tbody td {
+  background: #ffffff !important;
+  color: #212529 !important;
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme .badge {
+  color: #ffffff !important;
+}
+
+body.light-theme .badge.bg-warning.text-dark {
+  color: #000000 !important;
+}
+
+body.light-theme .nav-tabs .nav-link {
+  color: #495057 !important;
+}
+
+body.light-theme .nav-tabs .nav-link.active {
+  color: #0d6efd !important;
+  background: #ffffff !important;
+  border-color: #dee2e6 #dee2e6 #ffffff !important;
+}
+
+body.light-theme .alert {
+  color: #212529 !important;
+}
+
+body.light-theme .btn-outline-secondary {
+  color: #6c757d !important;
+  border-color: #6c757d !important;
+}
+
+body.light-theme .btn-outline-secondary:hover {
+  color: #ffffff !important;
+  background-color: #6c757d !important;
+  border-color: #6c757d !important;
+}
+
+/* Light theme overrides for summary cards */
+body.light-theme .summary-card,
+body.light-theme .card.bg-success.bg-opacity-10,
+body.light-theme .card.bg-danger.bg-opacity-10,
+body.light-theme .card.bg-warning.bg-opacity-10,
+body.light-theme .card.bg-secondary.bg-opacity-10 {
+  background: #ffffff !important;
+  border: 2px solid !important;
+}
+
+body.light-theme .summary-card.bg-success.bg-opacity-10,
+body.light-theme .card.bg-success.bg-opacity-10 {
+  border-color: #198754 !important;
+}
+
+body.light-theme .summary-card.bg-danger.bg-opacity-10,
+body.light-theme .card.bg-danger.bg-opacity-10 {
+  border-color: #dc3545 !important;
+}
+
+body.light-theme .summary-card.bg-warning.bg-opacity-10,
+body.light-theme .card.bg-warning.bg-opacity-10 {
+  border-color: #ffc107 !important;
+}
+
+body.light-theme .summary-card.bg-secondary.bg-opacity-10,
+body.light-theme .card.bg-secondary.bg-opacity-10 {
+  border-color: #6c757d !important;
+}
+
+body.light-theme .summary-card .card-body h3,
+body.light-theme .card-body h3 {
+  color: #212529 !important;
+  font-weight: 700 !important;
+  font-size: 2rem !important;
+}
+
+body.light-theme .summary-card .card-body h3.text-success {
+  color: #198754 !important;
+}
+
+body.light-theme .summary-card .card-body h3.text-danger {
+  color: #dc3545 !important;
+}
+
+body.light-theme .summary-card .card-body h3.text-warning {
+  color: #856404 !important;
+}
+
+body.light-theme .summary-card .card-body h3.text-secondary {
+  color: #6c757d !important;
+}
+
+body.light-theme .summary-card .card-body p.text-secondary,
+body.light-theme .card-body p.text-secondary {
+  color: #495057 !important;
+  font-weight: 600 !important;
+  font-size: 0.95rem !important;
+}
+
+body.light-theme .summary-card .card-body i {
+  font-size: 2.5rem !important;
+}
+
+body.light-theme .text-success {
+  color: #198754 !important;
+}
+
+body.light-theme .text-danger {
+  color: #dc3545 !important;
+}
+
+body.light-theme .text-warning {
+  color: #856404 !important;
+}
+
+body.light-theme h5.text-success,
+body.light-theme h5.text-danger,
+body.light-theme h5.text-warning,
+body.light-theme h5.text-secondary {
+  color: #212529 !important;
+  font-weight: 600 !important;
+  font-size: 1.15rem !important;
+}
+
+body.light-theme h5.text-success i {
+  color: #198754 !important;
+}
+
+body.light-theme h5.text-danger i {
+  color: #dc3545 !important;
+}
+
+body.light-theme h5.text-warning i {
+  color: #856404 !important;
+}
+
+body.light-theme h5.text-secondary i {
+  color: #6c757d !important;
+}
+
+/* Light theme for table cells with inline styles */
+body.light-theme #resultsContent .table tbody td[style*="color: #c9d1d9"],
+body.light-theme #resultsContent .table tbody td[style*="color: #e6edf3"] {
+  color: #212529 !important;
+  font-weight: 600 !important;
+}
+
+/* Light theme for Port column - make it more visible */
+body.light-theme #resultsContent .table tbody td.port-cell,
+body.light-theme #resultsContent .table tbody td:nth-child(2) {
+  color: #212529 !important;
+  font-weight: 700 !important;
+  font-size: 1.05rem !important;
+}
+
+/* Light theme for Details column - ensure visibility */
+body.light-theme #resultsContent .table tbody td.details-cell,
+body.light-theme #resultsContent .table tbody td[style*="color: #198754"] {
+  color: #198754 !important;
+  font-weight: 600 !important;
+  background: rgba(25, 135, 84, 0.12) !important;
+  padding: 0.75rem !important;
+}
+
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #dc3545"],
+body.light-theme #resultsContent .table tbody td[style*="color: #dc3545"] {
+  color: #dc3545 !important;
+  font-weight: 600 !important;
+  background: rgba(220, 53, 69, 0.12) !important;
+  padding: 0.75rem !important;
+}
+
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #ffc107"],
+body.light-theme #resultsContent .table tbody td[style*="color: #ffc107"] {
+  color: #856404 !important;
+  font-weight: 600 !important;
+  background: rgba(255, 193, 7, 0.18) !important;
+  padding: 0.75rem !important;
+}
+
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #6c757d"],
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #8b949e"] {
+  color: #495057 !important;
+  font-weight: 600 !important;
+  background: rgba(108, 117, 125, 0.1) !important;
+  padding: 0.75rem !important;
+}
+
+/* Light theme - ensure all table cells have readable text, but allow Details to override */
+body.light-theme #resultsContent .table tbody td:not(.details-cell) {
+  color: #212529 !important;
+}
+
+/* Force all table text to be dark in light theme - this is the base rule */
+body.light-theme #resultsContent .table tbody td {
+  color: #212529 !important;
+}
+
+body.light-theme #resultsContent .table thead th {
+  color: #212529 !important;
+}
+
+/* Preserve specific colors for Details column (these have higher specificity) */
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #198754"] {
+  color: #198754 !important;
+}
+
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #dc3545"] {
+  color: #dc3545 !important;
+}
+
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #ffc107"] {
+  color: #856404 !important;
+}
+
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #6c757d"],
+body.light-theme #resultsContent .table tbody td.details-cell[style*="color: #8b949e"] {
+  color: #495057 !important;
+}
+
+/* Preserve badge colors - badges should use their own colors */
+body.light-theme #resultsContent .table .badge.bg-info {
+  color: #000000 !important;
+}
+
+body.light-theme #resultsContent .table .badge.bg-warning.text-dark {
+  color: #000000 !important;
+}
+
+body.light-theme #resultsContent .table .badge.bg-primary {
+  color: #ffffff !important;
+}
+
+body.light-theme #resultsContent .table .badge.bg-secondary {
+  color: #ffffff !important;
+}
+
+/* Light theme for badges in tables */
+body.light-theme .badge.bg-info {
+  background-color: #0dcaf0 !important;
+  color: #000000 !important;
+}
+
+body.light-theme .badge.bg-warning.text-dark {
+  background-color: #ffc107 !important;
+  color: #000000 !important;
+}
+
+body.light-theme .badge.bg-primary {
+  background-color: #0d6efd !important;
+  color: #ffffff !important;
+}
+
+body.light-theme .badge.bg-secondary {
+  background-color: #6c757d !important;
+  color: #ffffff !important;
+}
+
+/* Light theme for code elements in tables */
+body.light-theme code.text-info {
+  color: #0d6efd !important;
+  background: rgba(13, 110, 253, 0.1) !important;
+}
+
+body.light-theme code.text-light {
+  color: #212529 !important;
+  background: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Light theme for links in tables */
+body.light-theme .table a {
+  color: #0d6efd !important;
+}
+
+body.light-theme .table a:hover {
+  color: #0a58ca !important;
+  text-decoration: underline !important;
+}
+
+/* Light theme for spinner and loading text */
+body.light-theme .spinner-border.text-info {
+  color: #0dcaf0 !important;
+}
+
+body.light-theme #resultsLoading .text-secondary {
+  color: #6c757d !important;
+}
+
+body.light-theme #noResults .text-secondary {
+  color: #6c757d !important;
+}
+
+/* Light theme for nav tabs */
+body.light-theme .nav-tabs {
+  border-bottom: 1px solid #dee2e6 !important;
+}
+
+body.light-theme .nav-tabs .nav-link {
+  color: #495057 !important;
+  background: #f8f9fa !important;
+}
+
+body.light-theme .nav-tabs .nav-link:hover {
+  color: #0d6efd !important;
+  background: #e9ecef !important;
+}
+
+body.light-theme .nav-tabs .nav-link.active {
+  color: #0d6efd !important;
+  background: #ffffff !important;
+  border-color: #dee2e6 #dee2e6 #ffffff !important;
+  font-weight: 600 !important;
+}
+</style>
+
+{% endblock %}

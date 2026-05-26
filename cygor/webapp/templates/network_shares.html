@@ -1,0 +1,860 @@
+{% extends "base.html" %}
+{% block title %}Network Shares{% endblock %}
+{% block content %}
+
+{# ---- NFS Permission renderer: prefers bits; falls back to string parsing ---- #}
+{% macro render_nfs_perms(p, r=None, w=None, x=None) -%}
+  {% if r is not none or w is not none or x is not none %}
+    {% set has_r = r %}{% set has_w = w %}{% set has_x = x %}
+    {% set unknown = false %}
+  {% else %}
+    {% set s = ((p or '')|string).upper().replace('-', '_').replace(' ', '_') %}
+    {% set deny_r = 'NO_READ' in s or 'DENY_READ' in s %}
+    {% set deny_w = 'NO_WRITE' in s or 'DENY_WRITE' in s or 'NOWRITE' in s %}
+    {% set deny_x = 'NO_EXEC' in s or 'NO_EXECUTE' in s or 'NOEXEC' in s or 'DENY_EXEC' in s or 'DENY_EXECUTE' in s %}
+    {% set has_r = ('READ' in s) and not deny_r %}
+    {% set has_w = ('WRITE' in s) and not deny_w %}
+    {% set has_x = (('EXEC' in s) or ('EXECUTE' in s)) and not deny_x %}
+    {% set unknown = (not s) or ('UNKNOWN' in s) %}
+  {% endif %}
+
+  {% if unknown %}
+    {% set overall_label = 'Unknown' %}{% set overall_class = 'pill-unknown' %}
+  {% elif has_r and has_w and has_x %}
+    {% set overall_label = 'Read / Write / Execute' %}{% set overall_class = 'pill-allow' %}
+  {% elif has_r and has_w %}
+    {% set overall_label = 'Read / Write' %}{% set overall_class = 'pill-allow' %}
+  {% elif has_r and has_x %}
+    {% set overall_label = 'Read / Execute' %}{% set overall_class = 'pill-partial' %}
+  {% elif has_r %}
+    {% set overall_label = 'Read-only' %}{% set overall_class = 'pill-warn' %}
+  {% else %}
+    {% set overall_label = 'No access' %}{% set overall_class = 'pill-deny' %}
+  {% endif %}
+
+  <span class="perm-wrap">
+    <span class="overall {{ overall_class }}">{{ overall_label }}</span>
+    <span class="mono-chip {{ 'chip-allow' if has_r else 'chip-deny' }}">R</span>
+    <span class="mono-chip {{ 'chip-allow' if has_w else 'chip-deny' }}">W</span>
+    <span class="mono-chip {{ 'chip-allow' if has_x else 'chip-deny' }}">X</span>
+  </span>
+{%- endmacro %}
+
+<div class="container-fluid py-3">
+  <div class="cy-page-header">
+    <h1><i class="bi bi-folder-symlink-fill"></i>Network Shares</h1>
+    <span class="cy-page-subtitle">Combined view of SMB and NFS share enumeration</span>
+    <div class="cy-page-actions">
+      <button type="button" class="cy-btn cy-btn-icon" data-bs-toggle="modal" data-bs-target="#infoModal" title="About">
+        <i class="bi bi-info-circle"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Info Modal -->
+  <div class="modal fade" id="infoModal" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content bg-dark">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title text-white" id="infoModalLabel">About Network Shares</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body text-light">
+          <p>
+            This page combines results from <strong>SMB Explorer</strong> and <strong>NFS Explorer</strong>
+            to provide a unified view of all network file shares discovered during enumeration.
+          </p>
+          <p class="mb-0">
+            <strong>SMB (Server Message Block)</strong> shares are commonly found on Windows systems (port 445),
+            while <strong>NFS (Network File System)</strong> exports are typically used on Unix/Linux systems (port 2049).
+            Both can expose sensitive data if misconfigured.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% set all_results = smb_results + nfs_results %}
+  {% if all_results %}
+    <!-- Dashboard Stats — horizontal cy-stat-tile -->
+    <div class="cy-stat-row cy-cols-4 mb-3">
+      <div class="cy-stat-tile">
+        <div class="cy-stat-tile-icon"><i class="bi bi-pc-display"></i></div>
+        <div class="cy-stat-tile-meta">
+          <div class="cy-stat-tile-value">{{ total_hosts }}</div>
+          <div class="cy-stat-tile-label">Total Hosts</div>
+        </div>
+      </div>
+      <div class="cy-stat-tile">
+        <div class="cy-stat-tile-icon"><i class="bi bi-folder-symlink"></i></div>
+        <div class="cy-stat-tile-meta">
+          <div class="cy-stat-tile-value">{{ smb_shares_count }}</div>
+          <div class="cy-stat-tile-label">SMB Shares</div>
+        </div>
+      </div>
+      <div class="cy-stat-tile">
+        <div class="cy-stat-tile-icon cy-stat-tile-icon--success"><i class="bi bi-hdd-network"></i></div>
+        <div class="cy-stat-tile-meta">
+          <div class="cy-stat-tile-value">{{ nfs_exports_count }}</div>
+          <div class="cy-stat-tile-label">NFS Exports</div>
+        </div>
+      </div>
+      <div class="cy-stat-tile">
+        <div class="cy-stat-tile-icon cy-stat-tile-icon--warn"><i class="bi bi-pencil-square"></i></div>
+        <div class="cy-stat-tile-meta">
+          <div class="cy-stat-tile-value">{{ writable_count }}</div>
+          <div class="cy-stat-tile-label">Writable</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div class="card bg-dark mb-4">
+      <div class="card-body">
+        <label for="shareSearch" class="form-label text-white fw-semibold mb-3">Search</label>
+        <div class="position-relative">
+          <input id="shareSearch" type="text"
+                 class="form-control bg-dark border-secondary text-light"
+                 placeholder="Search for hosts, shares, files, permissions...">
+        </div>
+      </div>
+    </div>
+
+    <!-- SMB Hosts Section -->
+    {% set smb_ips = smb_results|map(attribute='ip')|list|unique|list %}
+    {% if smb_ips %}
+    <div class="card bg-dark mb-4">
+      <div class="card-header bg-dark border-secondary">
+        <h5 class="text-white fw-bold mb-0">SMB Hosts <span class="badge bg-info ms-2">{{ smb_ips|length }}</span></h5>
+      </div>
+      <div class="card-body p-0">
+        <div class="accordion accordion-flush" id="smbAccordion">
+          {% for ip in smb_ips %}
+            {% set host_shares = smb_results|selectattr("ip", "equalto", ip)|list %}
+            {% set host_files = smb_file_rows|selectattr("ip", "equalto", ip)|list %}
+            <div class="accordion-item bg-dark border-secondary share-item" data-ip="{{ ip }}" data-protocol="smb">
+              <h2 class="accordion-header" id="smb-heading-{{ loop.index }}">
+                <button class="accordion-button collapsed bg-dark text-white" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#smb-collapse-{{ loop.index }}"
+                        style="border-bottom: 1px solid #18181b;">
+                  <div class="d-flex align-items-center w-100">
+                    <span class="fw-semibold font-monospace me-3">{{ ip }}</span>
+                    <span class="badge bg-info ms-auto me-3">{{ host_shares|length }} shares</span>
+                  </div>
+                </button>
+              </h2>
+              <div id="smb-collapse-{{ loop.index }}" class="accordion-collapse collapse"
+                   data-bs-parent="#smbAccordion">
+                <div class="accordion-body bg-dark">
+
+                  <!-- Main Shares -->
+                  <div class="mb-4">
+                    <h6 class="text-white fw-semibold mb-3">
+                      Main Shares
+                      <span class="badge bg-secondary ms-2">{{ host_shares|length }}</span>
+                    </h6>
+                    <div class="table-responsive">
+                      <table class="table table-dark table-hover align-middle mb-0" data-section="shares">
+                        <thead>
+                          <tr>
+                            <th class="text-white">Share</th>
+                            <th class="text-white">Status</th>
+                            <th class="text-white">SMB Version</th>
+                            <th class="text-white">Permissions</th>
+                            <th class="text-white">Information</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for share in host_shares %}
+                            <tr data-share="{{ share.share|e }}">
+                              <td class="text-light">{{ share.share }}</td>
+                              <td>
+                                {% if share.status == 'Success' %}
+                                  <span class="badge bg-success">{{ share.status }}</span>
+                                {% else %}
+                                  <span class="badge bg-danger">{{ share.status or 'Unknown' }}</span>
+                                {% endif %}
+                              </td>
+                              <td class="text-light">{{ share.smb_version or '-' }}</td>
+                              <td>
+                                {% set perms = share.permissions or '' %}
+                                {% if 'Read Write' in perms %}
+                                  <span class="badge bg-success">Read Write</span>
+                                {% elif 'Read Only' in perms %}
+                                  <span class="badge bg-warning text-dark">Read Only</span>
+                                {% elif 'No Access' in perms %}
+                                  <span class="badge bg-danger">No Access</span>
+                                {% else %}
+                                  <span class="badge bg-secondary">{{ perms or '-' }}</span>
+                                {% endif %}
+                              </td>
+                              <td class="text-secondary">{{ share.information or '-' }}</td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <!-- Subdirectories -->
+                  {% set subdirs = host_files | selectattr("type", "equalto", "Directory") | list %}
+                  {% if subdirs %}
+                  <div class="mb-4">
+                    <h6 class="text-white fw-semibold mb-3">
+                      Subdirectories
+                      <span class="badge bg-secondary ms-2">{{ subdirs|length }}</span>
+                    </h6>
+                    <div class="table-responsive">
+                      <table class="table table-dark table-hover align-middle mb-0" data-section="subdirs">
+                        <thead>
+                          <tr>
+                            <th class="text-white">Share</th>
+                            <th class="text-white">Directory</th>
+                            <th class="text-white">Modified</th>
+                            <th class="text-white">Attributes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for d in subdirs %}
+                            <tr data-share="{{ d.share|e }}" data-name="{{ d.name|e }}">
+                              <td class="text-light">{{ d.share }}</td>
+                              <td class="text-light">{{ d.name }}</td>
+                              <td class="text-secondary">{{ d.mtime or '-' }}</td>
+                              <td class="text-secondary">{{ d.attributes or '-' }}</td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  {% endif %}
+
+                  <!-- Files -->
+                  {% set files = host_files | selectattr("type", "equalto", "File") | list %}
+                  {% if files %}
+                  <div class="mb-4">
+                    <h6 class="text-white fw-semibold mb-3">
+                      Files
+                      <span class="badge bg-secondary ms-2">{{ files|length }}</span>
+                    </h6>
+                    <div class="table-responsive">
+                      <table class="table table-dark table-hover align-middle mb-0" data-section="files">
+                        <thead>
+                          <tr>
+                            <th class="text-white">Share</th>
+                            <th class="text-white">Name</th>
+                            <th class="text-white">Size</th>
+                            <th class="text-white">Modified</th>
+                            <th class="text-white">Attributes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for f in files %}
+                            <tr data-share="{{ f.share|e }}" data-name="{{ f.name|e }}">
+                              <td class="text-light">{{ f.share }}</td>
+                              <td class="text-light">{{ f.name }}</td>
+                              <td class="text-secondary">{{ f.size or '-' }}</td>
+                              <td class="text-secondary">{{ f.mtime or '-' }}</td>
+                              <td class="text-secondary">{{ f.attributes or '-' }}</td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  {% endif %}
+
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- NFS Hosts Section -->
+    {% set nfs_ips = nfs_results|map(attribute='ip')|list|unique|list %}
+    {% if nfs_ips %}
+    <div class="card bg-dark mb-4">
+      <div class="card-header bg-dark border-secondary">
+        <h5 class="text-white fw-bold mb-0">NFS Hosts <span class="badge bg-success ms-2">{{ nfs_ips|length }}</span></h5>
+      </div>
+      <div class="card-body p-0">
+        <div class="accordion accordion-flush" id="nfsAccordion">
+          {% for ip in nfs_ips %}
+            {% set host_exports = nfs_results|selectattr("ip", "equalto", ip)|list %}
+            {% set unique_shares = host_exports|map(attribute='share')|list|unique|list %}
+            <div class="accordion-item bg-dark border-secondary share-item" data-ip="{{ ip }}" data-protocol="nfs">
+              <h2 class="accordion-header" id="nfs-heading-{{ loop.index }}">
+                <button class="accordion-button collapsed bg-dark text-white" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#nfs-collapse-{{ loop.index }}"
+                        style="border-bottom: 1px solid #18181b;">
+                  <div class="d-flex align-items-center w-100">
+                    <span class="fw-semibold font-monospace me-3">{{ ip }}</span>
+                    <span class="badge bg-success ms-auto me-3">{{ unique_shares|length }} exports</span>
+                  </div>
+                </button>
+              </h2>
+              <div id="nfs-collapse-{{ loop.index }}" class="accordion-collapse collapse"
+                   data-bs-parent="#nfsAccordion">
+                <div class="accordion-body bg-dark">
+
+                  {% for share in unique_shares %}
+                    {% set share_entries = host_exports|selectattr("share", "equalto", share)|list %}
+                    {% set subdirs_rows = share_entries|selectattr("type","equalto","dir")|list
+                                          + share_entries|selectattr("type","equalto","directory")|list %}
+                    {% set files_rows = share_entries|selectattr("type","equalto","file")|list
+                                        + share_entries|selectattr("type","equalto","File")|list %}
+                    {% set e0 = share_entries|first if share_entries|length else none %}
+
+                    <!-- Main Export -->
+                    <div class="mb-4">
+                      <h6 class="text-white fw-semibold mb-3">
+                        Main Export: <span class="text-success">{{ share }}</span>
+                      </h6>
+                      <div class="table-responsive">
+                        <table class="table table-dark table-hover align-middle mb-0" data-section="main-export">
+                          <thead>
+                            <tr>
+                              <th class="text-white">Share</th>
+                              <th class="text-white">Permissions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr data-share="{{ share|e }}">
+                              <td class="text-light">{{ share }}</td>
+                              <td>
+                                {{ render_nfs_perms(
+                                  e0.permissions if e0 else '-',
+                                  e0.perm_r if e0 is not none and e0.perm_r is defined else none,
+                                  e0.perm_w if e0 is not none and e0.perm_w is defined else none,
+                                  e0.perm_x if e0 is not none and e0.perm_x is defined else none
+                                ) }}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <!-- Export Shares (directories) -->
+                    {% if subdirs_rows %}
+                    <div class="mb-4">
+                      <h6 class="text-white fw-semibold mb-3">
+                        Export Shares
+                        <span class="badge bg-secondary ms-2">{{ subdirs_rows|length }}</span>
+                      </h6>
+                      <div class="table-responsive">
+                        <table class="table table-dark table-hover align-middle mb-0" data-section="subdirs">
+                          <thead>
+                            <tr>
+                              <th class="text-white">Name</th>
+                              <th class="text-white">Size</th>
+                              <th class="text-white">Permissions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {% for d in subdirs_rows %}
+                              {% set dname = d.name if d.name is defined and d.name else (d.file if d.file is defined and d.file else '-') %}
+                              <tr data-share="{{ d.share|e }}" data-name="{{ dname|e }}">
+                                <td class="text-light">{{ dname }}</td>
+                                <td class="text-secondary">{{ d.size if d.size is defined else '-' }}</td>
+                                <td>
+                                  {{ render_nfs_perms(
+                                    d.permissions if d.permissions is defined else '-',
+                                    d.perm_r if d.perm_r is defined else none,
+                                    d.perm_w if d.perm_w is defined else none,
+                                    d.perm_x if d.perm_x is defined else none
+                                  ) }}
+                                </td>
+                              </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Export Files -->
+                    {% if files_rows %}
+                    <div class="mb-4">
+                      <h6 class="text-white fw-semibold mb-3">
+                        Export Files
+                        <span class="badge bg-secondary ms-2">{{ files_rows|length }}</span>
+                      </h6>
+                      <div class="table-responsive">
+                        <table class="table table-dark table-hover align-middle mb-0" data-section="files">
+                          <thead>
+                            <tr>
+                              <th class="text-white">Name</th>
+                              <th class="text-white">Size</th>
+                              <th class="text-white">Permissions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {% for f in files_rows %}
+                              {% set fname = f.name if f.name is defined and f.name else (f.file if f.file is defined and f.file else '-') %}
+                              <tr data-share="{{ f.share|e }}" data-name="{{ fname|e }}">
+                                <td class="text-light">{{ fname }}</td>
+                                <td class="text-secondary">{{ f.size if f.size is defined else '-' }}</td>
+                                <td>
+                                  {{ render_nfs_perms(
+                                    f.permissions if f.permissions is defined else '-',
+                                    f.perm_r if f.perm_r is defined else none,
+                                    f.perm_w if f.perm_w is defined else none,
+                                    f.perm_x if f.perm_x is defined else none
+                                  ) }}
+                                </td>
+                              </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    {% endif %}
+
+                    {% if not loop.last %}
+                      <hr class="border-secondary opacity-25 my-4">
+                    {% endif %}
+                  {% endfor %}
+
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  {% else %}
+    <!-- Empty State: No Results -->
+    <!-- Stat Cards (zeroed out) -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-3">
+        <div class="card bg-dark h-100">
+          <div class="card-body d-flex align-items-center">
+            <div class="flex-shrink-0">
+              <div class="stat-icon-container bg-primary bg-opacity-10 rounded-3 p-3">
+                <i class="bi bi-pc-display text-primary" style="font-size: 2rem;"></i>
+              </div>
+            </div>
+            <div class="flex-grow-1 ms-4">
+              <div class="text-secondary text-uppercase fw-semibold mb-1" style="font-size: 0.85rem; letter-spacing: 0.5px;">Total Hosts</div>
+              <div class="fs-3 fw-bold text-white">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card bg-dark h-100">
+          <div class="card-body d-flex align-items-center">
+            <div class="flex-shrink-0">
+              <div class="stat-icon-container bg-info bg-opacity-10 rounded-3 p-3">
+                <i class="bi bi-folder-symlink text-info" style="font-size: 2rem;"></i>
+              </div>
+            </div>
+            <div class="flex-grow-1 ms-4">
+              <div class="text-secondary text-uppercase fw-semibold mb-1" style="font-size: 0.85rem; letter-spacing: 0.5px;">SMB Shares</div>
+              <div class="fs-3 fw-bold text-white">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card bg-dark h-100">
+          <div class="card-body d-flex align-items-center">
+            <div class="flex-shrink-0">
+              <div class="stat-icon-container bg-success bg-opacity-10 rounded-3 p-3">
+                <i class="bi bi-hdd-network text-success" style="font-size: 2rem;"></i>
+              </div>
+            </div>
+            <div class="flex-grow-1 ms-4">
+              <div class="text-secondary text-uppercase fw-semibold mb-1" style="font-size: 0.85rem; letter-spacing: 0.5px;">NFS Exports</div>
+              <div class="fs-3 fw-bold text-white">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card bg-dark h-100">
+          <div class="card-body d-flex align-items-center">
+            <div class="flex-shrink-0">
+              <div class="stat-icon-container bg-warning bg-opacity-10 rounded-3 p-3">
+                <i class="bi bi-pencil-square text-warning" style="font-size: 2rem;"></i>
+              </div>
+            </div>
+            <div class="flex-grow-1 ms-4">
+              <div class="text-secondary text-uppercase fw-semibold mb-1" style="font-size: 0.85rem; letter-spacing: 0.5px;">Writable</div>
+              <div class="fs-3 fw-bold text-white">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State Card -->
+    <div class="card bg-dark">
+      <div class="card-body text-center py-5">
+        <div class="empty-state-icon mb-4">
+          <i class="bi bi-folder-x"></i>
+        </div>
+        <h3 class="text-white fw-bold mb-2">No Network Shares Discovered</h3>
+        <p class="text-secondary mb-4" style="max-width: 500px; margin: 0 auto;">
+          Run SMB Explorer or NFS Explorer to enumerate file shares across your network. Discovered shares, permissions, and directory listings will appear here.
+        </p>
+
+        <div class="row g-3 justify-content-center mt-2" style="max-width: 700px; margin: 0 auto;">
+          <!-- SMB Card -->
+          <div class="col-md-6">
+            <div class="empty-cmd-card">
+              <div class="d-flex align-items-center mb-3">
+                <div class="empty-cmd-icon bg-info bg-opacity-10">
+                  <i class="bi bi-folder-symlink text-info"></i>
+                </div>
+                <div class="ms-3 text-start">
+                  <div class="text-white fw-semibold">SMB Explorer</div>
+                  <div class="text-secondary" style="font-size: 0.8rem;">Windows file shares (port 445)</div>
+                </div>
+              </div>
+              <code class="empty-cmd-code text-info">cygor enum smbexplorer -i &lt;targets.txt&gt;</code>
+            </div>
+          </div>
+          <!-- NFS Card -->
+          <div class="col-md-6">
+            <div class="empty-cmd-card">
+              <div class="d-flex align-items-center mb-3">
+                <div class="empty-cmd-icon bg-success bg-opacity-10">
+                  <i class="bi bi-hdd-network text-success"></i>
+                </div>
+                <div class="ms-3 text-start">
+                  <div class="text-white fw-semibold">NFS Explorer</div>
+                  <div class="text-secondary" style="font-size: 0.8rem;">Unix/Linux exports (port 2049)</div>
+                </div>
+              </div>
+              <code class="empty-cmd-code text-success">cygor enum nfsexplorer -i &lt;targets.txt&gt;</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Styling -->
+<style>
+  mark {
+    background: #fbbf24 !important;
+    color: #000 !important;
+    padding: 2px 4px !important;
+    border-radius: 3px !important;
+    font-weight: 600 !important;
+  }
+
+  /* Accordion styling */
+  .accordion-item {
+    border-color: #18181b !important;
+  }
+
+  .accordion-button {
+    background: #0a0a0a !important;
+    color: #e4e4e7 !important;
+  }
+
+  .accordion-button:not(.collapsed) {
+    background: #0f0f0f !important;
+    color: #ffffff !important;
+    box-shadow: none;
+  }
+
+  .accordion-button:focus {
+    box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25);
+  }
+
+  .accordion-button::after {
+    filter: invert(1);
+  }
+
+  .accordion-body {
+    background: #0a0a0a !important;
+  }
+
+  .accordion-body h6 {
+    color: #ffffff !important;
+  }
+
+  /* Table styling */
+  .table-dark {
+    --bs-table-bg: #0a0a0a;
+    --bs-table-striped-bg: #0f0f0f;
+    --bs-table-hover-bg: #18181b;
+    --bs-table-border-color: #18181b;
+    color: #e4e4e7;
+  }
+
+  .table-dark thead {
+    background: #0f0f0f;
+  }
+
+  .table-dark thead th {
+    border-bottom: 2px solid #18181b;
+    font-weight: 600;
+  }
+
+  .table-dark tbody tr {
+    border-color: #18181b;
+  }
+
+  .table-dark tbody tr:hover {
+    background: #18181b !important;
+  }
+
+  .table td, .table th {
+    vertical-align: middle;
+  }
+
+  /* NFS Permission UI */
+  .perm-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .overall {
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.8rem;
+    border: 1px solid transparent;
+  }
+
+  .mono-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 9999px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-weight: 700;
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
+    border: 1px solid transparent;
+  }
+
+  /* Colors tuned for dark backgrounds */
+  .pill-allow {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    border-color: #22c55e;
+  }
+  .pill-partial {
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+    border-color: #f59e0b;
+  }
+  .pill-warn {
+    background: rgba(251, 191, 36, 0.12);
+    color: #fbbf24;
+    border-color: #f59e0b;
+  }
+  .pill-deny {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border-color: #ef4444;
+  }
+  .pill-unknown {
+    background: rgba(113, 113, 122, 0.14);
+    color: #a1a1aa;
+    border-color: #71717a;
+  }
+
+  .chip-allow {
+    background: rgba(34, 197, 94, 0.12);
+    color: #4ade80;
+    border-color: #22c55e;
+  }
+  .chip-deny {
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+    border-color: #ef4444;
+  }
+
+  /* ========== LIGHT THEME OVERRIDES ========== */
+  body.light-theme h1 {
+    color: #212529 !important;
+  }
+
+  body.light-theme .card.bg-dark {
+    background: #ffffff !important;
+    border-color: rgba(0,0,0,0.1) !important;
+  }
+
+  body.light-theme .card-header.bg-dark {
+    background: #f8f9fa !important;
+    border-color: rgba(0,0,0,0.1) !important;
+  }
+
+  body.light-theme .card-body h3 {
+    color: #212529 !important;
+  }
+
+  body.light-theme .card-body p {
+    color: #6c757d !important;
+  }
+
+  body.light-theme .accordion-item {
+    background: #ffffff !important;
+    border-color: rgba(0,0,0,0.1) !important;
+  }
+
+  body.light-theme .accordion-button {
+    background: #f8f9fa !important;
+    color: #212529 !important;
+  }
+
+  body.light-theme .accordion-button:not(.collapsed) {
+    background: #e9ecef !important;
+    color: #0d6efd !important;
+  }
+
+  body.light-theme .accordion-button::after {
+    filter: none;
+  }
+
+  body.light-theme .accordion-body {
+    background: #ffffff !important;
+  }
+
+  body.light-theme .accordion-body h6 {
+    color: #212529 !important;
+  }
+
+  body.light-theme .table-dark {
+    --bs-table-bg: #ffffff;
+    --bs-table-striped-bg: #f8f9fa;
+    --bs-table-hover-bg: #e9ecef;
+    --bs-table-border-color: #dee2e6;
+    color: #212529;
+  }
+
+  body.light-theme .table-dark thead {
+    background: #f8f9fa;
+  }
+
+  body.light-theme .table-dark thead th {
+    color: #212529;
+    border-color: #dee2e6;
+  }
+
+  body.light-theme .table-dark tbody td {
+    color: #212529;
+  }
+
+  body.light-theme mark {
+    background: #ffc107 !important;
+  }
+
+  /* Light theme pill colors */
+  body.light-theme .pill-allow {
+    background: rgba(25, 135, 84, 0.1) !important;
+    color: #198754 !important;
+    border-color: #198754 !important;
+  }
+
+  body.light-theme .pill-partial {
+    background: rgba(255, 193, 7, 0.1) !important;
+    color: #856404 !important;
+    border-color: #ffc107 !important;
+  }
+
+  body.light-theme .pill-warn {
+    background: rgba(255, 193, 7, 0.1) !important;
+    color: #856404 !important;
+    border-color: #e0a800 !important;
+  }
+
+  body.light-theme .pill-deny {
+    background: rgba(220, 53, 69, 0.1) !important;
+    color: #dc3545 !important;
+    border-color: #dc3545 !important;
+  }
+
+  body.light-theme .pill-unknown {
+    background: rgba(108, 117, 125, 0.1) !important;
+    color: #6c757d !important;
+    border-color: #6c757d !important;
+  }
+
+  body.light-theme .chip-allow {
+    background: rgba(25, 135, 84, 0.1) !important;
+    color: #198754 !important;
+    border-color: #198754 !important;
+  }
+
+  body.light-theme .chip-deny {
+    background: rgba(220, 53, 69, 0.1) !important;
+    color: #dc3545 !important;
+    border-color: #dc3545 !important;
+  }
+
+</style>
+
+<!-- Search / Highlight -->
+<script>
+(function () {
+  const searchInput = document.getElementById("shareSearch");
+  const items = Array.from(document.querySelectorAll(".share-item"));
+
+  function escapeReg(s){ return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+  function clearHighlights(root){ root.querySelectorAll("mark").forEach(m=>m.replaceWith(m.textContent)); }
+  function highlightMatches(root, q){
+    if(!q) return;
+    const re = new RegExp('('+escapeReg(q)+')','gi');
+    root.querySelectorAll("td, span.fw-semibold, h6").forEach(cell=>{
+      const texts=[]; cell.childNodes.forEach(n=>{ if(n.nodeType===Node.TEXT_NODE) texts.push(n); });
+      texts.forEach(n=>{
+        const s=document.createElement('span');
+        s.innerHTML = n.textContent.replace(re,'<mark>$1</mark>');
+        n.replaceWith(...s.childNodes);
+      });
+    });
+  }
+
+  function filterItems(q){
+    const qq = q.toLowerCase();
+    items.forEach(item=>{
+      clearHighlights(item);
+
+      if(!qq){
+        item.style.display="";
+        const btn=item.querySelector(".accordion-button");
+        const col=item.querySelector(".accordion-collapse");
+        btn?.classList.add("collapsed");
+        col?.classList.remove("show");
+        return;
+      }
+      const hit = item.textContent.toLowerCase().includes(qq);
+      item.style.display = hit ? "" : "none";
+      if(hit){
+        const btn=item.querySelector(".accordion-button");
+        const col=item.querySelector(".accordion-collapse");
+        btn?.classList.remove("collapsed");
+        col?.classList.add("show");
+        highlightMatches(item,q);
+      }
+    });
+  }
+
+  // Debounced search
+  let t;
+  searchInput.addEventListener("input", ()=>{
+    const q = searchInput.value.trim();
+    clearTimeout(t);
+    t = setTimeout(()=>{ filterItems(q); }, 80);
+  });
+})();
+</script>
+{% endblock %}

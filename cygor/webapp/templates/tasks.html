@@ -1,0 +1,998 @@
+{% extends "base.html" %}
+{% block content %}
+
+
+<div class="container-fluid py-3">
+  <div class="cy-page-header">
+    <h1><i class="bi bi-list-task"></i>Tasks</h1>
+    <span class="cy-page-subtitle">Active scans, parsing jobs, and module runs</span>
+    <div class="cy-page-actions">
+      <div class="dropdown">
+        <button class="cy-btn cy-btn-icon" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="About Task Manager">
+          <i class="bi bi-question-circle"></i>
+        </button>
+        <div class="dropdown-menu dropdown-menu-dark p-4" style="min-width: 480px; max-width: 520px;">
+          <h5 class="text-info mb-3">
+            <i class="bi bi-info-circle-fill me-2"></i>About Task Manager
+          </h5>
+          <p class="text-light mb-3">
+            The Task Manager is your central hub for managing and monitoring all security assessment operations in Cygor. It provides real-time visibility into running tasks, queued operations, and completed assessments.
+          </p>
+
+          <hr class="my-3 border-secondary">
+
+          <h6 class="text-warning mb-3"><i class="bi bi-diagram-3 me-2"></i>How It Works</h6>
+          <div class="mb-3">
+            <div class="d-flex align-items-start mb-2">
+              <span class="badge bg-primary rounded-circle me-2" style="width: 24px; height: 24px; line-height: 16px;">1</span>
+              <div>
+                <strong class="text-light">Create a Task</strong>
+                <p class="text-secondary small mb-0">Click "New Task" to start a port scan, credential test, or other operation. Configure targets and options.</p>
+              </div>
+            </div>
+            <div class="d-flex align-items-start mb-2">
+              <span class="badge bg-primary rounded-circle me-2" style="width: 24px; height: 24px; line-height: 16px;">2</span>
+              <div>
+                <strong class="text-light">Task Execution</strong>
+                <p class="text-secondary small mb-0">Tasks run in the background. Monitor progress in real-time through the task detail view or check status here.</p>
+              </div>
+            </div>
+            <div class="d-flex align-items-start mb-2">
+              <span class="badge bg-primary rounded-circle me-2" style="width: 24px; height: 24px; line-height: 16px;">3</span>
+              <div>
+                <strong class="text-light">Results Processing</strong>
+                <p class="text-secondary small mb-0">When tasks complete, results are automatically parsed and stored in the database for analysis.</p>
+              </div>
+            </div>
+            <div class="d-flex align-items-start">
+              <span class="badge bg-success rounded-circle me-2" style="width: 24px; height: 24px; line-height: 16px;">4</span>
+              <div>
+                <strong class="text-light">View & Export</strong>
+                <p class="text-secondary small mb-0">Access findings through Hosts, Services, and Vulnerabilities views. Export reports for documentation.</p>
+              </div>
+            </div>
+          </div>
+
+          <hr class="my-3 border-secondary">
+
+          <h6 class="text-info mb-2"><i class="bi bi-collection me-2"></i>Task Types</h6>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <div class="d-flex align-items-center">
+                <i class="bi bi-radar text-primary me-2"></i>
+                <div>
+                  <strong class="small">Port Scans</strong>
+                  <p class="text-secondary small mb-0">Discover open ports & services</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="d-flex align-items-center">
+                <i class="bi bi-shield-check text-success me-2"></i>
+                <div>
+                  <strong class="small">Credentials</strong>
+                  <p class="text-secondary small mb-0">Test default/weak creds</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="d-flex align-items-center">
+                <i class="bi bi-file-earmark-code text-info me-2"></i>
+                <div>
+                  <strong class="small">Parse Results</strong>
+                  <p class="text-secondary small mb-0">Import external scan data</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="d-flex align-items-center">
+                <i class="bi bi-search text-warning me-2"></i>
+                <div>
+                  <strong class="small">Enrich IOCs</strong>
+                  <p class="text-secondary small mb-0">Gather threat intel</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="d-flex align-items-center">
+                <i class="bi bi-gear-fill text-secondary me-2"></i>
+                <div>
+                  <strong class="small">Modules</strong>
+                  <p class="text-secondary small mb-0">Run custom scripts</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <hr class="my-3 border-secondary">
+
+          <div class="d-flex align-items-center text-muted small">
+            <i class="bi bi-lightbulb text-warning me-2"></i>
+            <span>Use the filter cards to quickly view tasks by type. Click on any task row for detailed output and controls.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dropdown">
+      <button class="cygor-btn cygor-btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <i class="bi bi-plus-circle me-2"></i>New Task
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark" style="min-width: 280px;">
+        <!-- Scanning & Discovery -->
+        <li class="dropdown-header px-3 py-2" style="font-weight: 600; font-size: 0.85rem; color: #6c757d; letter-spacing: 0.5px;">
+          <i class="bi bi-search me-1"></i>SCANNING & DISCOVERY
+        </li>
+        <li><a class="dropdown-item py-2 px-3" href="/tasks/scan/new">
+          <i class="bi bi-radar me-2 fs-5"></i>
+          <span class="fw-semibold">Port Discovery Scan</span>
+        </a></li>
+        <li><a class="dropdown-item py-2 px-3" href="/tasks/enrich/new">
+          <i class="bi bi-binoculars me-2 fs-5"></i>
+          <span class="fw-semibold">Enrich IOCs</span>
+        </a></li>
+
+        <li><hr class="dropdown-divider my-2"></li>
+
+        <!-- Authentication & Credentials -->
+        <li class="dropdown-header px-3 py-2" style="font-weight: 600; font-size: 0.85rem; color: #6c757d; letter-spacing: 0.5px;">
+          <i class="bi bi-shield-lock me-1"></i>AUTHENTICATION
+        </li>
+        <li><a class="dropdown-item py-2 px-3" href="/credrecon/new">
+          <i class="bi bi-shield-check me-2 fs-5"></i>
+          <span class="fw-semibold">Credential Test</span>
+        </a></li>
+
+        <li><hr class="dropdown-divider my-2"></li>
+
+        <!-- Data Processing -->
+        <li class="dropdown-header px-3 py-2" style="font-weight: 600; font-size: 0.85rem; color: #6c757d; letter-spacing: 0.5px;">
+          <i class="bi bi-code-square me-1"></i>DATA PROCESSING
+        </li>
+        <li><a class="dropdown-item py-2 px-3" href="/tasks/parse/new">
+          <i class="bi bi-file-earmark-code me-2 fs-5"></i>
+          <span class="fw-semibold">Parse Scan Results</span>
+        </a></li>
+        <li><a class="dropdown-item py-2 px-3" href="/tasks/module/new">
+          <i class="bi bi-gear-fill me-2 fs-5"></i>
+          <span class="fw-semibold">Run Module</span>
+        </a></li>
+      </ul>
+    </div>
+  </div>
+  </div>
+
+  <!-- Task Type Filters -->
+  <div class="row g-2 mb-4" id="taskTypeFilters">
+    <div class="col">
+      <div class="filter-card active" data-filter="all" onclick="filterTasks('all')">
+        <div class="filter-card-icon">
+          <i class="bi bi-list-ul"></i>
+        </div>
+        <div class="filter-card-content">
+          <h6 class="filter-card-title">All Tasks</h6>
+          <p class="filter-card-count" id="filter-count-all">0</p>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="filter-card" data-filter="port_scan" onclick="filterTasks('port_scan')">
+        <div class="filter-card-icon">
+          <i class="bi bi-radar"></i>
+        </div>
+        <div class="filter-card-content">
+          <h6 class="filter-card-title">Port Scans</h6>
+          <p class="filter-card-count" id="filter-count-port_scan">0</p>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="filter-card" data-filter="credential_test" onclick="filterTasks('credential_test')">
+        <div class="filter-card-icon">
+          <i class="bi bi-shield-check"></i>
+        </div>
+        <div class="filter-card-content">
+          <h6 class="filter-card-title">Credentials</h6>
+          <p class="filter-card-count" id="filter-count-credential_test">0</p>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="filter-card" data-filter="parse" onclick="filterTasks('parse')">
+        <div class="filter-card-icon">
+          <i class="bi bi-file-earmark-code"></i>
+        </div>
+        <div class="filter-card-content">
+          <h6 class="filter-card-title">Parsed</h6>
+          <p class="filter-card-count" id="filter-count-parse">0</p>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="filter-card" data-filter="enrich" onclick="filterTasks('enrich')">
+        <div class="filter-card-icon">
+          <i class="bi bi-search"></i>
+        </div>
+        <div class="filter-card-content">
+          <h6 class="filter-card-title">Enriched</h6>
+          <p class="filter-card-count" id="filter-count-enrich">0</p>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="filter-card" data-filter="module" onclick="filterTasks('module')">
+        <div class="filter-card-icon">
+          <i class="bi bi-gear-fill"></i>
+        </div>
+        <div class="filter-card-content">
+          <h6 class="filter-card-title">Modules</h6>
+          <p class="filter-card-count" id="filter-count-module">0</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Stats — horizontal cy-stat-tile -->
+  <div class="cy-stat-row cy-cols-4 mb-4">
+    <div class="cy-stat-tile">
+      <div class="cy-stat-tile-icon cy-stat-tile-icon--warn"><i class="bi bi-hourglass-split"></i></div>
+      <div class="cy-stat-tile-meta">
+        <div class="cy-stat-tile-value" id="stat-running">-</div>
+        <div class="cy-stat-tile-label">Running</div>
+      </div>
+    </div>
+    <div class="cy-stat-tile">
+      <div class="cy-stat-tile-icon"><i class="bi bi-clock-history"></i></div>
+      <div class="cy-stat-tile-meta">
+        <div class="cy-stat-tile-value" id="stat-pending">-</div>
+        <div class="cy-stat-tile-label">Pending</div>
+      </div>
+    </div>
+    <div class="cy-stat-tile">
+      <div class="cy-stat-tile-icon cy-stat-tile-icon--success"><i class="bi bi-check-circle-fill"></i></div>
+      <div class="cy-stat-tile-meta">
+        <div class="cy-stat-tile-value" id="stat-completed">-</div>
+        <div class="cy-stat-tile-label">Completed</div>
+      </div>
+    </div>
+    <div class="cy-stat-tile">
+      <div class="cy-stat-tile-icon cy-stat-tile-icon--danger"><i class="bi bi-x-circle-fill"></i></div>
+      <div class="cy-stat-tile-meta">
+        <div class="cy-stat-tile-value" id="stat-failed">-</div>
+        <div class="cy-stat-tile-label">Failed</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Task Source Tabs -->
+  <ul class="nav nav-tabs nav-tabs-dark mb-0" id="taskSourceTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="all-tasks-tab" data-bs-toggle="tab" data-bs-target="#all-tasks-pane" type="button" role="tab" onclick="filterBySource('all')">
+        <i class="bi bi-collection me-2"></i>All Tasks <span class="badge bg-secondary ms-1" id="tab-count-all">0</span>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="manual-tasks-tab" data-bs-toggle="tab" data-bs-target="#manual-tasks-pane" type="button" role="tab" onclick="filterBySource('manual')">
+        <i class="bi bi-play-circle me-2 text-success"></i>Manual Tasks <span class="badge bg-success ms-1" id="tab-count-manual">0</span>
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="scheduled-tasks-tab" data-bs-toggle="tab" data-bs-target="#scheduled-tasks-pane" type="button" role="tab" onclick="filterBySource('scheduled')">
+        <i class="bi bi-calendar-check me-2 text-primary"></i>Scheduled Tasks <span class="badge bg-primary ms-1" id="tab-count-scheduled">0</span>
+      </button>
+    </li>
+    <li class="nav-item ms-auto">
+      <button class="cygor-btn" onclick="refreshTasks()" style="margin-top: 4px;">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+      </button>
+    </li>
+  </ul>
+
+  <!-- Tasks Table -->
+  <div class="card bg-dark shadow border-top-0" style="border-top-left-radius: 0; border-top-right-radius: 0;">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0 tasks-table">
+          <thead class="table-dark">
+            <tr>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">ID</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Type</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Command</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Status</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">User</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Created</th>
+              <th class="py-3 px-4" style="font-size: 0.95rem;">Duration</th>
+              <th class="py-3 px-4 text-center" style="font-size: 0.95rem;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tasks-tbody">
+            <tr>
+              <td colspan="8" class="text-center text-muted py-5">
+                <i class="bi bi-hourglass-split me-2 fs-4"></i>
+                <div class="mt-2 fs-5">Loading tasks...</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Custom Alert Modals -->
+<div class="modal fade" id="cygorAlertModal" tabindex="-1" aria-labelledby="cygorAlertModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-secondary">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title text-white" id="cygorAlertModalLabel">
+          <i class="bi bi-info-circle-fill me-2"></i>Notification
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="cygorAlertMessage"></p>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="cygor-btn cygor-btn-primary" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="cygorErrorModal" tabindex="-1" aria-labelledby="cygorErrorModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-danger">
+      <div class="modal-header border-danger">
+        <h5 class="modal-title text-white" id="cygorErrorModalLabel">
+          <i class="bi bi-exclamation-triangle-fill me-2 text-danger"></i>Error
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="cygorErrorMessage"></p>
+      </div>
+      <div class="modal-footer border-danger">
+        <button type="button" class="btn btn-danger" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Task Confirmation Modal -->
+<div class="modal fade" id="deleteTaskModal" tabindex="-1" aria-labelledby="deleteTaskModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-danger">
+      <div class="modal-header border-danger">
+        <h5 class="modal-title text-white" id="deleteTaskModalLabel">
+          <i class="bi bi-trash-fill me-2"></i>Delete Task
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-2">Delete this task? This cannot be undone.</p>
+        <div class="alert alert-danger" role="alert">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>
+          <strong>Warning:</strong> This action is permanent and cannot be reversed.
+        </div>
+      </div>
+      <div class="modal-footer border-danger">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteTaskBtn">
+          <i class="bi bi-trash-fill me-1"></i>Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Cancel Task Confirmation Modal -->
+<div class="modal fade" id="cancelTaskModal" tabindex="-1" aria-labelledby="cancelTaskModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-warning">
+      <div class="modal-header border-warning">
+        <h5 class="modal-title text-white" id="cancelTaskModalLabel">
+          <i class="bi bi-stop-circle-fill me-2"></i>Cancel Task
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0">Cancel this task?</p>
+      </div>
+      <div class="modal-footer border-warning">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+        <button type="button" class="btn btn-warning" id="confirmCancelTaskBtn">
+          <i class="bi bi-stop-circle-fill me-1"></i>Yes, Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Task Source Tabs Styling */
+.nav-tabs-dark {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px 8px 0 0;
+  padding: 0.5rem 0.5rem 0;
+}
+
+.nav-tabs-dark .nav-link {
+  color: #adb5bd;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  padding: 0.75rem 1.25rem;
+  margin-right: 0.25rem;
+  background: transparent;
+  transition: all 0.2s ease;
+}
+
+.nav-tabs-dark .nav-link:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: transparent;
+}
+
+.nav-tabs-dark .nav-link.active {
+  color: #fff;
+  background: #212529;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom-color: #212529;
+  margin-bottom: -1px;
+}
+
+.nav-tabs-dark .nav-link .badge {
+  font-size: 0.75rem;
+}
+
+/* Filter Card Styles */
+.filter-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 100%;
+  min-height: 60px;
+}
+
+.filter-card:hover {
+  background: rgba(13, 110, 253, 0.1);
+  border-color: rgba(13, 110, 253, 0.5);
+  transform: translateY(-2px);
+}
+
+.filter-card.active {
+  background: rgba(13, 110, 253, 0.2);
+  border-color: #0d6efd;
+}
+
+.filter-card-icon {
+  font-size: 1.5rem;
+  color: #0d6efd;
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-card-content {
+  flex: 1;
+}
+
+.filter-card-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.filter-card-count {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0d6efd;
+}
+
+/* Table enhancements */
+.tasks-table tbody td {
+  padding: 1.25rem 1rem !important;
+  font-size: 0.95rem !important;
+  vertical-align: middle !important;
+}
+
+.tasks-table tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tasks-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Code styling in table */
+.tasks-table code {
+  font-size: 0.9rem !important;
+  padding: 0.25rem 0.5rem;
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 0.25rem;
+}
+
+/* User column styling for better visibility */
+.username-cell {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.username-user {
+  color: #e5e7eb !important;
+}
+
+.username-user i {
+  color: #60a5fa !important;
+  font-size: 1rem;
+}
+
+.username-system {
+  color: #9ca3af !important;
+  font-weight: 500;
+}
+
+.username-system i {
+  color: #6b7280 !important;
+  font-size: 1rem;
+}
+
+/* Light theme overrides for user column */
+body.light-theme .username-user {
+  color: #1f2937 !important;
+}
+
+body.light-theme .username-user i {
+  color: #2563eb !important;
+}
+
+body.light-theme .username-system {
+  color: #6b7280 !important;
+}
+
+body.light-theme .username-system i {
+  color: #9ca3af !important;
+}
+
+.tasks-table code.text-info {
+  font-weight: 600;
+  font-size: 0.95rem !important;
+}
+
+/* Task type badges */
+.tasks-table .badge {
+  font-size: 0.85rem !important;
+  padding: 0.5rem 0.75rem !important;
+  font-weight: 600 !important;
+}
+
+/* Center visually the command column (reduce left offset, improve wrap) */
+.command-cell {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: left;
+  padding-left: 0 !important;
+  margin: 0 auto;
+  max-width: 900px;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.command-cell code {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.95rem;
+  color: #e6edf3;
+  display: inline-block;
+  width: 100%;
+}
+
+/* Custom badge colors for task types */
+.bg-purple {
+  background-color: #7c3aed !important;
+  color: white;
+}
+
+/* Brief highlight when arriving via /tasks?focus=<task_id> */
+@keyframes task-row-pulse {
+  0%   { background-color: rgba(59, 130, 246, 0.45); }
+  60%  { background-color: rgba(59, 130, 246, 0.18); }
+  100% { background-color: transparent; }
+}
+tr.task-row-focused {
+  animation: task-row-pulse 2.4s ease-out;
+  outline: 2px solid rgba(59, 130, 246, 0.6);
+  outline-offset: -2px;
+}
+
+</style>
+
+<script>
+let refreshInterval = null;
+let currentFilter = 'all';
+let currentSourceFilter = 'all';
+let allTasks = [];
+
+// Custom Alert Function - Replace browser alerts with styled modals
+function showAlert(message, type = 'info') {
+  let modalId, messageId, modal;
+  
+  if (type === 'error') {
+    modalId = 'cygorErrorModal';
+    messageId = 'cygorErrorMessage';
+  } else {
+    modalId = 'cygorAlertModal';
+    messageId = 'cygorAlertMessage';
+  }
+  
+  const messageElement = document.getElementById(messageId);
+  if (messageElement) {
+    messageElement.textContent = message;
+    modal = new bootstrap.Modal(document.getElementById(modalId));
+    modal.show();
+  } else {
+    // Fallback — log to console if modal not found
+    console.warn('showAlert fallback — modal not found for:', message);
+  }
+}
+
+function filterTasks(filterType) {
+  currentFilter = filterType;
+
+  // Update active state on filter cards
+  document.querySelectorAll('.filter-card').forEach(card => {
+    card.classList.remove('active');
+  });
+  document.querySelector(`[data-filter="${filterType}"]`).classList.add('active');
+
+  // Re-render tasks with current filter
+  renderTasks(allTasks).catch(err => console.error('Error rendering tasks:', err));
+}
+
+function filterBySource(sourceType) {
+  currentSourceFilter = sourceType;
+
+  // Re-render tasks with current filters
+  renderTasks(allTasks).catch(err => console.error('Error rendering tasks:', err));
+}
+
+async function fetchTasks() {
+  try {
+    const response = await fetch('/api/tasks');
+    if (!response.ok) throw new Error('Failed to fetch tasks');
+    const tasks = await response.json();
+
+    // Store tasks globally for filtering
+    allTasks = tasks;
+
+    // Update stats
+    const stats = {
+      running: tasks.filter(t => t.status === 'running').length,
+      pending: tasks.filter(t => t.status === 'pending').length,
+      completed: tasks.filter(t => t.status === 'completed').length,
+      failed: tasks.filter(t => t.status === 'failed').length
+    };
+
+    document.getElementById('stat-running').textContent = stats.running;
+    document.getElementById('stat-pending').textContent = stats.pending;
+    document.getElementById('stat-completed').textContent = stats.completed;
+    document.getElementById('stat-failed').textContent = stats.failed;
+
+    // Update filter counts
+    const filterCounts = {
+      all: tasks.length,
+      port_scan: tasks.filter(t => t.task_type === 'port_scan').length,
+      credential_test: tasks.filter(t => t.task_type === 'credential_test').length,
+      parse: tasks.filter(t => t.task_type === 'parse' || t.task_type === 'parse-upload').length,
+      enrich: tasks.filter(t => t.task_type === 'enrich').length,
+      module: tasks.filter(t => t.task_type === 'module').length
+    };
+
+    Object.keys(filterCounts).forEach(key => {
+      const elem = document.getElementById(`filter-count-${key}`);
+      if (elem) elem.textContent = filterCounts[key];
+    });
+
+    // Update tab counts
+    const scheduledCount = tasks.filter(t => t.task_id && t.task_id.startsWith('sched-')).length;
+    const manualCount = tasks.length - scheduledCount;
+    document.getElementById('tab-count-all').textContent = tasks.length;
+    document.getElementById('tab-count-scheduled').textContent = scheduledCount;
+    document.getElementById('tab-count-manual').textContent = manualCount;
+
+    // Render filtered tasks
+    renderTasks(tasks).catch(err => console.error('Error rendering tasks:', err));
+
+  } catch (error) {
+    console.error('Error fetching tasks:', error);
+  }
+}
+
+async function renderTasks(tasks) {
+  const tbody = document.getElementById('tasks-tbody');
+
+  // Apply task type filter
+  let filteredTasks = tasks;
+  if (currentFilter !== 'all') {
+    // Handle parse filter to include both parse and parse-upload types
+    if (currentFilter === 'parse') {
+      filteredTasks = tasks.filter(t => t.task_type === 'parse' || t.task_type === 'parse-upload');
+    } else {
+      filteredTasks = tasks.filter(t => t.task_type === currentFilter);
+    }
+  }
+
+  // Apply source filter (scheduled vs manual)
+  if (currentSourceFilter === 'scheduled') {
+    filteredTasks = filteredTasks.filter(t => t.task_id && t.task_id.startsWith('sched-'));
+  } else if (currentSourceFilter === 'manual') {
+    filteredTasks = filteredTasks.filter(t => !t.task_id || !t.task_id.startsWith('sched-'));
+  }
+
+  if (filteredTasks.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-5"><i class="bi bi-inbox me-2 fs-4"></i><div class="mt-2 fs-5">No tasks found</div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filteredTasks.map(task => {
+      const statusClass = `status-${task.status}`;
+      const statusIcon = {
+        pending: 'clock-history',
+        running: 'hourglass-split',
+        completed: 'check-circle-fill',
+        failed: 'x-circle-fill',
+        cancelled: 'dash-circle'
+      }[task.status] || 'question-circle';
+
+      const duration = calculateDuration(task);
+      const createdTime = formatTime(task.created_at);
+      // Display username if available, otherwise show "-" or "System" for historical tasks
+      const username = task.username || (task.user_id ? 'Unknown' : 'System');
+      const usernameDisplay = username === 'System' ? 
+        `<span class="username-cell username-system"><i class="bi bi-server me-1"></i>${username}</span>` :
+        `<span class="username-cell username-user"><i class="bi bi-person me-1"></i>${username}</span>`;
+
+      // Determine badge class and label based on task type
+      let badgeClass = 'bg-secondary';
+      let taskLabel = task.task_type;
+      if (task.task_type === 'port_scan') {
+        badgeClass = 'bg-info';
+      } else if (task.task_type === 'credential_test') {
+        badgeClass = 'bg-warning text-dark';
+      } else if (task.task_type === 'enrich') {
+        badgeClass = 'bg-purple';
+        taskLabel = 'enrich';
+      } else if (task.task_type === 'parse') {
+        badgeClass = 'bg-success';
+        taskLabel = 'parse';
+      }
+
+      // Determine the correct detail link based on task type
+      const detailLink = `/tasks/${task.task_id}`;
+
+      // Determine if this is a scheduled task (ID starts with 'sched-')
+      const isScheduled = task.task_id && task.task_id.startsWith('sched-');
+      const sourceIcon = isScheduled ? 'bi-calendar-check' : 'bi-play-circle';
+      const sourceClass = isScheduled ? 'text-primary' : 'text-success';
+      const sourceTitle = isScheduled ? 'Scheduled Task' : 'Manual Task';
+      // Display the task ID without the 'sched-' prefix for cleaner display
+      const displayId = isScheduled ? task.task_id.substring(6, 14) : task.task_id.substring(0, 8);
+
+      return `
+        <tr data-task-id="${task.task_id}">
+          <td class="px-4">
+            <span class="d-flex align-items-center gap-2">
+              <i class="bi ${sourceIcon} ${sourceClass}" title="${sourceTitle}"></i>
+              <code class="text-info">${displayId}</code>
+            </span>
+          </td>
+          <td class="px-4"><span class="badge ${badgeClass}">${taskLabel}</span></td>
+          <td class="px-4">
+            <div class="command-cell">
+              ${task.description ? `<div class="text-light mb-1">${task.description}</div>` : ''}
+              <code class="text-light ${task.description ? 'small text-muted' : ''}">${task.command}</code>
+            </div>
+          </td>
+          <td class="px-4">
+            <span class="status-badge ${statusClass}">
+              <i class="bi bi-${statusIcon}"></i>${task.status}
+            </span>
+          </td>
+          <td class="px-4">${usernameDisplay}</td>
+          <td class="text-light px-4">${createdTime}</td>
+          <td class="text-light px-4">${duration}</td>
+          <td class="px-4">
+            <div class="cygor-action-group" role="group">
+              <a href="${detailLink}" class="cygor-action-btn cygor-action-view" title="View Details">
+                <i class="bi bi-eye-fill"></i>
+              </a>
+              ${task.status === 'running' ? `
+                <button onclick="cancelTask('${task.task_id}')" class="cygor-action-btn cygor-action-warn" title="Cancel Task">
+                  <i class="bi bi-stop-circle-fill"></i>
+                </button>
+              ` : ''}
+              ${task.status !== 'running' ? `
+                <button onclick="deleteTask('${task.task_id}')" class="cygor-action-btn cygor-action-danger" title="Delete Task">
+                  <i class="bi bi-trash-fill"></i>
+                </button>
+              ` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+  // If we arrived with ?focus=<task_id> (e.g. redirected from /tasks/<uuid>),
+  // scroll the row into view and pulse it briefly so the user can find it.
+  highlightFocusedTask();
+}
+
+function highlightFocusedTask() {
+  const params = new URLSearchParams(window.location.search);
+  const focus = params.get('focus');
+  if (!focus) return;
+  const row = document.querySelector(`tr[data-task-id="${CSS.escape(focus)}"]`);
+  if (!row) return;
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  row.classList.add('task-row-focused');
+  setTimeout(() => row.classList.remove('task-row-focused'), 2400);
+}
+
+/* formatTime now in cygor-datetime.js */
+
+function calculateDuration(task) {
+  if (!task.started_at) return '-';
+
+  try {
+    // Parse timestamps as UTC by appending 'Z' if not present
+    let startIso = task.started_at;
+    if (!startIso.endsWith('Z') && !startIso.includes('+') && !startIso.includes('-', 10)) {
+      startIso = startIso + 'Z';
+    }
+    const start = new Date(startIso);
+
+    let end;
+    if (task.completed_at) {
+      let endIso = task.completed_at;
+      if (!endIso.endsWith('Z') && !endIso.includes('+') && !endIso.includes('-', 10)) {
+        endIso = endIso + 'Z';
+      }
+      end = new Date(endIso);
+    } else {
+      end = new Date();
+    }
+
+    // Validate dates
+    if (isNaN(start.getTime())) {
+      console.error('Invalid start date:', task.started_at);
+      return '-';
+    }
+    if (isNaN(end.getTime())) {
+      console.error('Invalid end date:', task.completed_at);
+      return '-';
+    }
+
+    let diff = end - start;
+
+    // Handle negative durations (should not happen with UTC fix)
+    if (diff < 0) {
+      console.warn('Negative duration for task', task.task_id, ':', diff, 'ms');
+      diff = 0;
+    }
+
+    if (diff < 60000) return Math.floor(diff / 1000) + 's';
+    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ' + Math.floor((diff % 60000) / 1000) + 's';
+    return Math.floor(diff / 3600000) + 'h ' + Math.floor((diff % 3600000) / 60000) + 'm';
+  } catch (e) {
+    console.error('Error calculating duration for task', task.task_id, ':', e);
+    return '-';
+  }
+}
+
+async function cancelTask(taskId) {
+  // Store taskId for the confirm handler
+  window.pendingCancelTaskId = taskId;
+  
+  // Show confirmation modal
+  const modal = new bootstrap.Modal(document.getElementById('cancelTaskModal'));
+  modal.show();
+  
+  // Handle confirm button
+  const confirmBtn = document.getElementById('confirmCancelTaskBtn');
+  // Remove any existing listeners
+  const newConfirmBtn = confirmBtn.cloneNode(true);
+  confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+  
+  newConfirmBtn.addEventListener('click', async function() {
+    modal.hide();
+    const taskIdToCancel = window.pendingCancelTaskId;
+    delete window.pendingCancelTaskId;
+    
+    try {
+      const response = await fetch(`/api/tasks/${taskIdToCancel}/cancel`, { method: 'POST' });
+      if (!response.ok) throw new Error('Failed to cancel task');
+      await fetchTasks();
+    } catch (error) {
+      showAlert('Error cancelling task: ' + error.message, 'error');
+    }
+  });
+}
+
+async function deleteTask(taskId) {
+  // Store taskId for the confirm handler
+  window.pendingDeleteTaskId = taskId;
+  
+  // Show confirmation modal
+  const modal = new bootstrap.Modal(document.getElementById('deleteTaskModal'));
+  modal.show();
+  
+  // Handle confirm button
+  const confirmBtn = document.getElementById('confirmDeleteTaskBtn');
+  // Remove any existing listeners
+  const newConfirmBtn = confirmBtn.cloneNode(true);
+  confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+  
+  newConfirmBtn.addEventListener('click', async function() {
+    modal.hide();
+    const taskIdToDelete = window.pendingDeleteTaskId;
+    delete window.pendingDeleteTaskId;
+    
+    try {
+      const response = await fetch(`/api/tasks/${taskIdToDelete}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to delete task');
+      }
+      await fetchTasks();
+    } catch (error) {
+      showAlert('Error deleting task: ' + error.message, 'error');
+    }
+  });
+}
+
+function refreshTasks() {
+  fetchTasks();
+}
+
+// Auto-refresh running tasks
+function startAutoRefresh() {
+  refreshInterval = setInterval(fetchTasks, 3000); // Refresh every 3 seconds
+}
+
+function stopAutoRefresh() {
+  if (refreshInterval) {
+    clearInterval(refreshInterval);
+    refreshInterval = null;
+  }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  fetchTasks();
+  startAutoRefresh();
+});
+
+// Auto-refresh when page gains focus
+window.addEventListener('focus', () => {
+  console.log('Tasks page focused - refreshing...');
+  fetchTasks();
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', stopAutoRefresh);
+</script>
+
+{% endblock %}

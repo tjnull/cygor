@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="cy-page-header">
+    <h1><i class="bi bi-globe-americas"></i>Enrichment</h1>
+    <span class="cy-page-subtitle">External-source observations about the assets in scope</span>
+  </div>
+
+  {# ============================================================
+     Coverage card — neutral, observation-oriented framing.
+     ============================================================ #}
+  <div class="card cy-card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0 text-white"><i class="bi bi-bar-chart me-2 text-info"></i>Workspace coverage</h5>
+    </div>
+    <div class="card-body">
+      {% if coverage.total_hosts == 0 %}
+        <div class="alert alert-info bg-dark border-info text-light mb-0">
+          No hosts in this workspace yet. Run a scan first, then enrich the discovered assets.
+        </div>
+      {% else %}
+        {% set total = coverage.total_hosts %}
+        {% set rows = [
+          ("with_shodan",  "Have a Shodan record",       "bi-radar"),
+          ("with_cert",    "Have certificate data",      "bi-file-earmark-lock"),
+          ("with_ai",      "Have AI-service indicators", "bi-cpu"),
+          ("with_mcp",     "Have MCP indicators",        "bi-diagram-2"),
+          ("with_vt",      "Have VirusTotal records",    "bi-shield-check"),
+        ] %}
+        <div class="row g-3">
+          {% for key, label, icon in rows %}
+            {% set n = coverage.get(key, 0) %}
+            {% set pct = (n * 100 / total) if total else 0 %}
+            <div class="col-md-4 col-lg">
+              <div class="border border-secondary rounded p-3 h-100">
+                <div class="text-light small mb-1"><i class="bi {{ icon }} me-1"></i>{{ label }}</div>
+                <div class="h4 mb-0 text-white">{{ n }} <span class="text-light small">/ {{ total }}</span></div>
+                <div class="progress mt-2" style="height: 4px;">
+                  <div class="progress-bar bg-info" role="progressbar" style="width: {{ pct }}%;"></div>
+                </div>
+                <div class="small text-light mt-1">{{ "%.0f"|format(pct) }}%</div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ============================================================
+     Recent runs list — most recent first.
+     ============================================================ #}
+  <div class="card cy-card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0 text-white"><i class="bi bi-clock-history me-2 text-info"></i>Recent runs</h5>
+      <a href="/tasks/enrich/new" class="btn btn-sm btn-info">
+        <i class="bi bi-plus-circle me-1"></i>New enrichment run
+      </a>
+    </div>
+    <div class="card-body p-0">
+      {% if not runs %}
+        <div class="p-4 text-center text-light">
+          No enrichment runs yet. Kick one off from <a href="/tasks/enrich/new" class="text-info">/tasks/enrich/new</a>
+          or via the CLI: <code>cygor enrich &lt;file&gt;</code>.
+        </div>
+      {% else %}
+        <table class="table table-sm table-dark cy-table mb-0">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Started</th>
+              <th>Completed</th>
+              <th>Sources</th>
+              <th class="text-end">IOCs</th>
+              <th class="text-end">Findings</th>
+              <th>Output</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in runs %}
+              <tr>
+                <td><strong>#{{ r.id }}</strong></td>
+                <td class="small">{{ r.started_at.strftime('%Y-%m-%d %H:%M') if r.started_at else '' }}</td>
+                <td class="small">
+                  {% if r.completed_at %}
+                    {{ r.completed_at.strftime('%H:%M:%S') }}
+                  {% else %}
+                    <span class="badge bg-warning text-dark">running</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% for s in (r.sources or []) %}
+                    <span class="badge bg-secondary me-1" style="font-size: 0.7rem;">{{ s }}</span>
+                  {% endfor %}
+                </td>
+                <td class="text-end">{{ r.ioc_count }}</td>
+                <td class="text-end">{{ r.finding_count }}</td>
+                <td class="small text-muted"><code>{{ r.output_path.split('/')[-1] }}</code></td>
+                <td>
+                  <a href="/enrichment/{{ r.id }}" class="btn btn-sm btn-outline-info">
+                    <i class="bi bi-arrow-right"></i> Open
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

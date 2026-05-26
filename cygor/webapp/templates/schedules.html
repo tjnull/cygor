@@ -1,0 +1,543 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="cy-page-header">
+    <h1><i class="bi bi-calendar3"></i>Scheduled Tasks</h1>
+    <span class="cy-page-subtitle">Recurring scans, parsers, and module runs</span>
+    <div class="cy-page-actions">
+      <a href="/schedules/new" class="cy-btn cy-btn-primary">
+        <i class="bi bi-plus-circle"></i>New Schedule
+      </a>
+      <div class="dropdown">
+        <button class="cy-btn cy-btn-icon" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="About Scheduled Tasks">
+          <i class="bi bi-question-circle"></i>
+        </button>
+            <div class="dropdown-menu dropdown-menu-dark p-4" style="min-width: 480px; max-width: 520px;">
+              <h5 class="text-info mb-3">
+                <i class="bi bi-info-circle-fill me-2"></i>About Scheduled Tasks
+              </h5>
+              <p class="text-light mb-3">
+                Schedule recurring security assessments to run automatically. Set up port scans, credential tests, and more to run at specific times or intervals.
+              </p>
+
+              <hr class="my-3 border-secondary">
+
+              <h6 class="text-warning mb-3"><i class="bi bi-diagram-3 me-2"></i>How It Works</h6>
+              <div class="mb-3">
+                <div class="d-flex align-items-start mb-2">
+                  <span class="badge bg-primary rounded-circle me-2" style="width: 24px; height: 24px; line-height: 16px;">1</span>
+                  <div>
+                    <strong class="text-light">Create Schedule</strong>
+                    <p class="text-secondary small mb-0">Click "New Schedule" to configure a task with targets, options, and timing (cron, interval, or one-time).</p>
+                  </div>
+                </div>
+                <div class="d-flex align-items-start mb-2">
+                  <span class="badge bg-primary rounded-circle me-2" style="width: 24px; height: 24px; line-height: 16px;">2</span>
+                  <div>
+                    <strong class="text-light">Automatic Execution</strong>
+                    <p class="text-secondary small mb-0">Tasks run automatically at scheduled times. The scheduler handles job queuing and execution.</p>
+                  </div>
+                </div>
+                <div class="d-flex align-items-start mb-2">
+                  <span class="badge bg-primary rounded-circle me-2" style="width: 24px; height: 24px; line-height: 16px;">3</span>
+                  <div>
+                    <strong class="text-light">Monitor & Control</strong>
+                    <p class="text-secondary small mb-0">View run history, pause/resume schedules, or trigger immediate execution from this dashboard.</p>
+                  </div>
+                </div>
+                <div class="d-flex align-items-start">
+                  <span class="badge bg-success rounded-circle me-2" style="width: 24px; height: 24px; line-height: 16px;">4</span>
+                  <div>
+                    <strong class="text-light">Review Results</strong>
+                    <p class="text-secondary small mb-0">Access results through the Task Manager or dedicated dashboards (CredRecon, etc.).</p>
+                  </div>
+                </div>
+              </div>
+
+              <hr class="my-3 border-secondary">
+
+              <h6 class="text-info mb-2"><i class="bi bi-clock-history me-2"></i>Schedule Types</h6>
+              <div class="row g-2 mb-3">
+                <div class="col-4">
+                  <div class="d-flex align-items-center">
+                    <span class="badge bg-purple me-2">Cron</span>
+                    <span class="text-secondary small">Unix-style timing</span>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="d-flex align-items-center">
+                    <span class="badge bg-teal me-2">Interval</span>
+                    <span class="text-secondary small">Repeat every X time</span>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="d-flex align-items-center">
+                    <span class="badge bg-orange me-2">One-time</span>
+                    <span class="text-secondary small">Run once at date</span>
+                  </div>
+                </div>
+              </div>
+
+              <hr class="my-3 border-secondary">
+
+              <div class="d-flex align-items-center text-muted small">
+                <i class="bi bi-lightbulb text-warning me-2"></i>
+                <span>Use filters above to find specific schedules. Click "Run Now" to trigger a task immediately without waiting for the scheduled time.</span>
+              </div>
+            </div>
+          </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="row mb-4">
+    <div class="col-md-12">
+      <div class="card bg-dark border-secondary">
+        <div class="card-body">
+          <form id="filterForm" class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Task Type</label>
+              <select class="form-select" id="filterTaskType" name="task_type">
+                <option value="">All Types</option>
+                <option value="port_scan">Port Scan</option>
+                <option value="module_scan">Module Scan</option>
+                <option value="credrecon">Credential Recon</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Status</label>
+              <select class="form-select" id="filterStatus" name="status">
+                <option value="">All</option>
+                <option value="active">Active Only</option>
+                <option value="paused">Paused Only</option>
+                <option value="inactive">Inactive Only</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Schedule Type</label>
+              <select class="form-select" id="filterScheduleType" name="schedule_type">
+                <option value="">All</option>
+                <option value="cron">Cron</option>
+                <option value="interval">Interval</option>
+                <option value="date">One-time</option>
+              </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+              <button type="button" class="cygor-btn w-100" onclick="loadSchedules()">
+                <i class="bi bi-funnel"></i> Apply Filters
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Schedules Table -->
+  <div class="row">
+    <div class="col-md-12">
+      <div class="card bg-dark border-secondary">
+        <div class="card-body">
+          <div id="schedulesContainer">
+            <div class="text-center py-5">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteScheduleModal" tabindex="-1" aria-labelledby="deleteScheduleModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark">
+      <div class="modal-header bg-dark border-danger">
+        <h5 class="modal-title text-danger" id="deleteScheduleModalLabel">
+          <i class="bi bi-exclamation-triangle me-2"></i>Confirm Deletion
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete schedule <strong id="deleteScheduleName"></strong>?</p>
+        <p class="text-danger"><strong>This will permanently remove the schedule and its history.</strong></p>
+        <input type="hidden" id="deleteScheduleId">
+      </div>
+      <div class="modal-footer bg-dark border-secondary">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" onclick="confirmDeleteSchedule()">
+          <i class="bi bi-trash me-2"></i>Delete Schedule
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Trigger Confirmation Modal -->
+<div class="modal fade" id="triggerScheduleModal" tabindex="-1" aria-labelledby="triggerScheduleModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark">
+      <div class="modal-header bg-dark border-primary">
+        <h5 class="modal-title text-primary" id="triggerScheduleModalLabel">
+          <i class="bi bi-lightning-fill me-2"></i>Run Task Now
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Run this scheduled task now?</p>
+        <p class="text-info"><strong id="triggerScheduleName"></strong></p>
+        <input type="hidden" id="triggerScheduleId">
+      </div>
+      <div class="modal-footer bg-dark border-secondary">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="confirmTriggerSchedule()">
+          <i class="bi bi-lightning-fill me-2"></i>Run Now
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let schedules = [];
+
+// Load schedules on page load
+document.addEventListener('DOMContentLoaded', function() {
+  loadSchedules();
+  // Refresh every 30 seconds
+  setInterval(loadSchedules, 30000);
+});
+
+async function loadSchedules() {
+  try {
+    const taskType = document.getElementById('filterTaskType').value;
+    const status = document.getElementById('filterStatus').value;
+    const scheduleType = document.getElementById('filterScheduleType').value;
+
+    let url = '/api/schedules?';
+    const params = new URLSearchParams();
+
+    if (taskType) params.append('task_type', taskType);
+    if (status === 'active') {
+      params.append('is_active', 'true');
+      params.append('is_paused', 'false');
+    } else if (status === 'paused') {
+      params.append('is_paused', 'true');
+    } else if (status === 'inactive') {
+      params.append('is_active', 'false');
+    }
+
+    const response = await fetch(url + params.toString());
+    const data = await response.json();
+    schedules = data.schedules || [];
+
+    renderSchedules();
+  } catch (error) {
+    console.error('Error loading schedules:', error);
+    document.getElementById('schedulesContainer').innerHTML =
+      '<div class="alert alert-danger">Failed to load schedules: ' + error.message + '</div>';
+  }
+}
+
+function renderSchedules() {
+  const container = document.getElementById('schedulesContainer');
+
+  if (schedules.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-5">
+        <i class="bi bi-calendar-x" style="font-size: 3rem; color: #9ca3ab;"></i>
+        <p class="mt-3 text-light">No scheduled tasks found</p>
+        <a href="/schedules/new" class="cygor-btn cygor-btn-primary mt-2">
+          <i class="bi bi-plus-circle"></i> Create Your First Schedule
+        </a>
+      </div>
+    `;
+    return;
+  }
+
+  let html = `
+    <div class="table-responsive">
+      <table class="table table-dark table-hover table-lg">
+        <thead>
+          <tr>
+            <th style="font-size: 1.1rem;">Name</th>
+            <th style="font-size: 1.1rem;">Type</th>
+            <th style="font-size: 1.1rem;">Schedule</th>
+            <th style="font-size: 1.1rem;">Next Run</th>
+            <th style="font-size: 1.1rem;">Last Run</th>
+            <th style="font-size: 1.1rem;">Status</th>
+            <th style="font-size: 1.1rem;">Runs</th>
+            <th style="font-size: 1.1rem;">Actions</th>
+          </tr>
+        </thead>
+        <tbody style="font-size: 1rem;">
+  `;
+
+  schedules.forEach(schedule => {
+    const statusBadge = getStatusBadge(schedule);
+    const taskTypeBadge = getTaskTypeBadge(schedule.task_type);
+    const scheduleTypeBadge = getScheduleTypeBadge(schedule.schedule_type);
+
+    html += `
+      <tr>
+        <td>
+          <a href="/schedules/${schedule.id}" class="text-decoration-none">
+            <strong>${escapeHtml(schedule.name)}</strong>
+          </a>
+        </td>
+        <td>${taskTypeBadge}</td>
+        <td>${scheduleTypeBadge}</td>
+        <td>${schedule.next_run ? formatDateTime(schedule.next_run) : '<span class="text-muted">-</span>'}</td>
+        <td>
+          ${schedule.last_run ? formatDateTime(schedule.last_run) : '<span class="text-muted">Never</span>'}
+          ${schedule.last_run_status ? '<br>' + getLastRunBadge(schedule.last_run_status) : ''}
+          ${schedule.last_run_status === 'failed' && schedule.max_retries > 0 ? ' <span class="badge bg-purple" title="Retries configured">Retry</span>' : ''}
+        </td>
+        <td>${statusBadge}</td>
+        <td>${schedule.run_count}</td>
+        <td>
+          <div class="cygor-action-group flex-wrap">
+            ${schedule.is_paused ?
+              `<button class="cygor-btn cygor-btn-success cygor-btn-sm" onclick="resumeSchedule(${schedule.id})">
+                <i class="bi bi-play-fill"></i> Resume
+              </button>` :
+              `<button class="cygor-btn cygor-btn-warn cygor-btn-sm" onclick="pauseSchedule(${schedule.id})">
+                <i class="bi bi-pause-fill"></i> Pause
+              </button>`
+            }
+            <button class="cygor-btn cygor-btn-primary cygor-btn-sm" onclick="triggerNow(${schedule.id})">
+              <i class="bi bi-lightning-fill"></i> Run Now
+            </button>
+            <a href="/schedules/${schedule.id}" class="cygor-btn cygor-btn-info cygor-btn-sm">
+              <i class="bi bi-eye-fill"></i> View
+            </a>
+            ${!schedule.is_active ?
+              `<button class="cygor-btn cygor-btn-success cygor-btn-sm" onclick="reactivateSchedule(${schedule.id})">
+                <i class="bi bi-arrow-counterclockwise"></i> Reactivate
+              </button>` : ''
+            }
+            <button class="cygor-btn cygor-btn-danger cygor-btn-sm" onclick="deleteSchedule(${schedule.id}, '${escapeHtml(schedule.name)}')">
+              <i class="bi bi-trash-fill"></i> Delete
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += `
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  container.innerHTML = html;
+}
+
+function getStatusBadge(schedule) {
+  if (!schedule.is_active) {
+    return '<span class="badge bg-secondary fs-6">Inactive</span>';
+  }
+  if (schedule.is_paused) {
+    return '<span class="badge bg-warning text-dark fs-6">Paused</span>';
+  }
+  return '<span class="badge bg-success fs-6">Active</span>';
+}
+
+function getTaskTypeBadge(taskType) {
+  const badges = {
+    'port_scan': '<span class="badge bg-primary fs-6">Port Scan</span>',
+    'module_scan': '<span class="badge bg-info fs-6">Module Scan</span>',
+    'credrecon': '<span class="badge bg-warning text-dark fs-6">Cred Recon</span>'
+  };
+  return badges[taskType] || '<span class="badge bg-secondary fs-6">' + taskType + '</span>';
+}
+
+function getScheduleTypeBadge(scheduleType) {
+  const badges = {
+    'cron': '<span class="badge bg-purple fs-6">Cron</span>',
+    'interval': '<span class="badge bg-teal fs-6">Interval</span>',
+    'date': '<span class="badge bg-orange fs-6">One-time</span>'
+  };
+  return badges[scheduleType] || '<span class="badge bg-secondary fs-6">' + scheduleType + '</span>';
+}
+
+function getLastRunBadge(status) {
+  const badges = {
+    'success': '<span class="badge bg-success">Success</span>',
+    'failed': '<span class="badge bg-danger">Failed</span>',
+    'running': '<span class="badge bg-primary">Running</span>',
+    'queued': '<span class="badge bg-info">Queued</span>'
+  };
+  return badges[status] || '<span class="badge bg-secondary">' + status + '</span>';
+}
+
+/* formatDateTime now in global cygor-datetime.js */
+
+async function pauseSchedule(id) {
+  try {
+    const response = await fetch(`/api/schedules/${id}/pause`, {
+      method: 'POST'
+    });
+    if (response.ok) {
+      loadSchedules();
+      showToast('Schedule paused successfully', 'success');
+    } else {
+      throw new Error('Failed to pause schedule');
+    }
+  } catch (error) {
+    showToast('Error pausing schedule: ' + error.message, 'danger');
+  }
+}
+
+async function resumeSchedule(id) {
+  try {
+    const response = await fetch(`/api/schedules/${id}/resume`, {
+      method: 'POST'
+    });
+    if (response.ok) {
+      loadSchedules();
+      showToast('Schedule resumed successfully', 'success');
+    } else {
+      throw new Error('Failed to resume schedule');
+    }
+  } catch (error) {
+    showToast('Error resuming schedule: ' + error.message, 'danger');
+  }
+}
+
+function triggerNow(id) {
+  const schedule = schedules.find(s => s.id === id);
+  if (!schedule) return;
+
+  document.getElementById('triggerScheduleId').value = id;
+  document.getElementById('triggerScheduleName').textContent = schedule.name;
+  const modal = new bootstrap.Modal(document.getElementById('triggerScheduleModal'));
+  modal.show();
+}
+
+async function confirmTriggerSchedule() {
+  const id = document.getElementById('triggerScheduleId').value;
+
+  // Close modal
+  const modal = bootstrap.Modal.getInstance(document.getElementById('triggerScheduleModal'));
+  modal.hide();
+
+  try {
+    const response = await fetch(`/api/schedules/${id}/trigger`, {
+      method: 'POST'
+    });
+    const data = await response.json();
+    if (response.ok) {
+      showToast('Task triggered successfully! Task ID: ' + data.task_id, 'success');
+      setTimeout(() => {
+        // Route to appropriate page based on task type
+        const taskType = data.task_type;
+        if (taskType === 'credrecon') {
+          window.location.href = '/credrecon/scans/' + data.task_id;
+        } else {
+          window.location.href = '/tasks/' + data.task_id;
+        }
+      }, 1500);
+    } else {
+      throw new Error(data.detail || 'Failed to trigger task');
+    }
+  } catch (error) {
+    showToast('Error triggering task: ' + error.message, 'danger');
+  }
+}
+
+function deleteSchedule(id, name) {
+  document.getElementById('deleteScheduleId').value = id;
+  document.getElementById('deleteScheduleName').textContent = name;
+  const modal = new bootstrap.Modal(document.getElementById('deleteScheduleModal'));
+  modal.show();
+}
+
+async function confirmDeleteSchedule() {
+  const id = document.getElementById('deleteScheduleId').value;
+
+  // Close modal
+  const modal = bootstrap.Modal.getInstance(document.getElementById('deleteScheduleModal'));
+  modal.hide();
+
+  try {
+    const response = await fetch(`/api/schedules/${id}`, {
+      method: 'DELETE'
+    });
+    if (response.ok) {
+      loadSchedules();
+      showToast('Schedule deleted successfully', 'success');
+    } else {
+      throw new Error('Failed to delete schedule');
+    }
+  } catch (error) {
+    showToast('Error deleting schedule: ' + error.message, 'danger');
+  }
+}
+
+
+async function reactivateSchedule(id) {
+  try {
+    const response = await fetch('/api/schedules/' + id + '/reactivate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ reset_run_count: true })
+    });
+    if (response.ok) {
+      loadSchedules();
+      showToast('Schedule reactivated successfully', 'success');
+    } else {
+      throw new Error('Failed to reactivate schedule');
+    }
+  } catch (error) {
+    showToast('Error reactivating schedule: ' + error.message, 'danger');
+  }
+}
+
+/* escapeHtml now in global cygor-utils.js */
+</script>
+
+<style>
+.badge.bg-purple { background-color: #6f42c1 !important; }
+.badge.bg-teal { background-color: #20c997 !important; }
+.badge.bg-orange { background-color: #fd7e14 !important; }
+
+/* Increase table cell padding and improve readability */
+.table-lg td, .table-lg th {
+  padding: 1rem 0.75rem;
+  vertical-align: middle;
+}
+
+.table-lg tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Improve badge visibility */
+.badge {
+  padding: 0.5rem 0.75rem;
+  font-weight: 500;
+}
+
+/* Better button spacing */
+.d-flex.gap-2 {
+  gap: 0.5rem !important;
+}
+
+/* Make name links more visible */
+.table-lg td a strong {
+  color: #5bc0de;
+  font-size: 1.05rem;
+}
+
+.table-lg td a strong:hover {
+  color: #46b8da;
+  text-decoration: underline;
+}
+</style>
+
+{% endblock %}

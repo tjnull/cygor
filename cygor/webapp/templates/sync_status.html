@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container-fluid py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+
+      <!-- Header -->
+      <div class="d-flex align-items-center justify-content-between mb-4">
+        <h2 class="mb-0">
+          <i class="bi bi-clock-history me-2"></i>Database Sync Status
+        </h2>
+        <button class="btn btn-primary" id="triggerSyncBtn">
+          <i class="bi bi-arrow-repeat me-2"></i>Sync Now
+        </button>
+      </div>
+
+      <!-- Current Status Card -->
+      <div class="card bg-dark mb-4">
+        <div class="card-header">
+          <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Current Database Status</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-4">
+            <div class="col-md-3">
+              <div class="text-center">
+                <i class="bi bi-hdd-network fs-1 text-primary"></i>
+                <h3 class="mt-2 mb-0" id="totalHosts">{{ total_hosts }}</h3>
+                <p class="text-secondary mb-0">Total Hosts</p>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center">
+                <i class="bi bi-diagram-3 fs-1 text-success"></i>
+                <h3 class="mt-2 mb-0" id="totalPorts">{{ total_ports }}</h3>
+                <p class="text-secondary mb-0">Total Ports</p>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center">
+                <i class="bi bi-folder fs-1 text-warning"></i>
+                <h3 class="mt-2 mb-0" id="resultsDir">{{ results_dir | length }}</h3>
+                <p class="text-secondary mb-0">Results Directory</p>
+                <small class="text-light d-block" style="word-break: break-all;">{{ results_dir }}</small>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center">
+                <i class="bi bi-clock fs-1 text-info"></i>
+                <h3 class="mt-2 mb-0">Ready</h3>
+                <p class="text-secondary mb-0">Sync Status</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sync Instructions -->
+      <div class="card bg-dark mb-4">
+        <div class="card-header">
+          <h5 class="mb-0"><i class="bi bi-question-circle me-2"></i>About Database Sync</h5>
+        </div>
+        <div class="card-body">
+          <p class="text-light">
+            The database sync feature scans your results directory and ingests all Nmap XML and module JSON files into the database.
+            This is useful after running on-demand scans to immediately see results without restarting the web application.
+          </p>
+          <h6 class="text-secondary mt-3">What gets synced:</h6>
+          <ul class="text-light">
+            <li><strong>Nmap Scan Results</strong> - XML files containing host, port, and service information</li>
+            <li><strong>Module Results</strong> - JSON output from enumeration modules</li>
+            <li><strong>Deduplication</strong> - Existing hosts/ports are updated, duplicates are merged</li>
+          </ul>
+          <h6 class="text-secondary mt-3">When to sync:</h6>
+          <ul class="text-light">
+            <li>After completing an on-demand scan via the Tasks page</li>
+            <li>After running manual scans via CLI that output to the results directory</li>
+            <li>When you notice scan results are not appearing in the web UI</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Live Sync Output -->
+      <div class="card bg-dark mb-4" id="liveSyncCard" style="display:none;">
+        <div class="card-header py-3" style="cursor: pointer;" onclick="toggleSyncConsole()" id="syncConsoleHeader">
+          <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+              <i class="bi bi-terminal me-2"></i>Current Sync Output
+            </h5>
+            <i class="bi bi-chevron-down" id="syncConsoleChevron" style="font-size: 1.2rem; transition: transform 0.3s;"></i>
+          </div>
+        </div>
+        <div class="collapse show" id="syncConsoleCollapse">
+          <div class="card-body">
+            <div id="syncConsole" class="bg-black p-3 rounded" style="font-family: 'Courier New', monospace; font-size: 0.875rem; max-height: 400px; overflow-y: auto; color: #00ff00;">
+              <div class="text-secondary">Sync in progress...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sync History -->
+      <div class="card bg-dark">
+        <div class="card-header">
+          <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Sync History</h5>
+        </div>
+        <div class="card-body">
+          <div id="syncHistory">
+            <div class="text-secondary text-center py-4">No sync history available. Click "Sync Now" to perform your first sync.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const triggerSyncBtn = document.getElementById('triggerSyncBtn');
+const syncConsole = document.getElementById('syncConsole');
+const totalHostsEl = document.getElementById('totalHosts');
+const liveSyncCard = document.getElementById('liveSyncCard');
+const syncHistoryDiv = document.getElementById('syncHistory');
+let syncConsoleCollapsed = false;
+
+function toggleSyncConsole() {
+  const collapse = document.getElementById('syncConsoleCollapse');
+  const chevron = document.getElementById('syncConsoleChevron');
+  const bsCollapse = new bootstrap.Collapse(collapse, { toggle: false });
+
+  if (collapse.classList.contains('show')) {
+    bsCollapse.hide();
+    chevron.style.transform = 'rotate(-90deg)';
+    syncConsoleCollapsed = true;
+  } else {
+    bsCollapse.show();
+    chevron.style.transform = 'rotate(0deg)';
+    syncConsoleCollapsed = false;
+  }
+}
+
+function addConsoleLog(message, type = 'info') {
+  const timestamp = new Date().toLocaleTimeString();
+  const colors = {
+    info: '#00ff00',
+    success: '#00ff00',
+    error: '#ff4444',
+    warning: '#ffaa00'
+  };
+  const color = colors[type] || '#00ff00';
+
+  const line = document.createElement('div');
+  line.style.color = color;
+  line.textContent = `[${timestamp}] ${message}`;
+  syncConsole.appendChild(line);
+  syncConsole.scrollTop = syncConsole.scrollHeight;
+}
+
+function formatTime(isoString) {
+  if (!isoString) return '-';
+  try {
+    let iso = isoString;
+    if (!iso.endsWith('Z') && !iso.includes('+') && !iso.includes('-', 10)) {
+      iso = iso + 'Z';
+    }
+    const date = new Date(iso);
+    if (isNaN(date.getTime())) return '-';
+
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+  } catch (e) {
+    return '-';
+  }
+}
+
+function createHistoryEntry(sync, index) {
+  const timestamp = formatTime(sync.timestamp);
+  const collapseId = `historyCollapse${index}`;
+  const chevronId = `historyChevron${index}`;
+
+  // Prepare console output with larger, more readable formatting
+  const consoleLines = [
+    `Files ingested: ${sync.ingested_files}`,
+    '─'.repeat(60),
+    `Hosts before sync: ${sync.hosts_before}`,
+    `Hosts after sync:  ${sync.hosts_after}`,
+    `New hosts added:   +${sync.hosts_added}`,
+    '─'.repeat(60),
+    `Ports before sync: ${sync.ports_before}`,
+    `Ports after sync:  ${sync.ports_after}`,
+    `New ports added:   +${sync.ports_added}`,
+    '─'.repeat(60),
+    `Directory: ${sync.directory}`,
+    `Timestamp: ${sync.timestamp}`
+  ].join('\n');
+
+  return `
+    <div class="card bg-dark mb-3 border" style="border-color: rgba(255, 255, 255, 0.125) !important;">
+      <div class="card-header py-3 bg-dark" style="cursor: pointer; border-bottom: 1px solid rgba(255, 255, 255, 0.125);" onclick="toggleHistoryItem('${collapseId}', '${chevronId}')">
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="flex-grow-1">
+            <div class="d-flex align-items-center mb-2">
+              <i class="bi bi-check-circle-fill text-success me-3" style="font-size: 1.3rem;"></i>
+              <strong class="text-light" style="font-size: 1.2rem;">${timestamp}</strong>
+            </div>
+            <div class="d-flex align-items-center gap-4 ms-5" style="font-size: 1.1rem;">
+              <span class="text-light">
+                <i class="bi bi-file-earmark-plus me-2 text-info"></i>
+                <strong>${sync.ingested_files}</strong> files
+              </span>
+              <span class="text-light">
+                <i class="bi bi-hdd me-2 text-primary"></i>
+                <strong class="${sync.hosts_added > 0 ? 'text-success' : ''}">+${sync.hosts_added}</strong> hosts
+              </span>
+              <span class="text-light">
+                <i class="bi bi-diagram-3 me-2 text-warning"></i>
+                <strong class="${sync.ports_added > 0 ? 'text-success' : ''}">+${sync.ports_added}</strong> ports
+              </span>
+            </div>
+          </div>
+          <i class="bi bi-chevron-down text-secondary" id="${chevronId}" style="font-size: 1.3rem; transition: transform 0.3s;"></i>
+        </div>
+      </div>
+      <div class="collapse" id="${collapseId}">
+        <div class="card-body bg-dark">
+          <pre class="bg-black p-3 rounded mb-0" style="font-family: 'Courier New', monospace; font-size: 1rem; line-height: 1.6; color: #00ff00; max-height: 300px; overflow-y: auto;">${consoleLines}</pre>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function toggleHistoryItem(collapseId, chevronId) {
+  const collapse = document.getElementById(collapseId);
+  const chevron = document.getElementById(chevronId);
+  const bsCollapse = new bootstrap.Collapse(collapse, { toggle: false });
+
+  if (collapse.classList.contains('show')) {
+    bsCollapse.hide();
+    chevron.style.transform = 'rotate(-90deg)';
+  } else {
+    bsCollapse.show();
+    chevron.style.transform = 'rotate(0deg)';
+  }
+}
+
+async function loadSyncHistory() {
+  try {
+    const response = await fetch('/api/sync-history');
+    const data = await response.json();
+
+    if (data.status === 'success' && data.history && data.history.length > 0) {
+      syncHistoryDiv.innerHTML = data.history.map((sync, index) => createHistoryEntry(sync, index)).join('');
+    } else {
+      syncHistoryDiv.innerHTML = '<div class="text-secondary text-center py-4">No sync history available. Click "Sync Now" to perform your first sync.</div>';
+    }
+  } catch (error) {
+    console.error('Failed to load sync history:', error);
+    syncHistoryDiv.innerHTML = '<div class="text-danger text-center py-4">Failed to load sync history</div>';
+  }
+}
+
+// Load history on page load
+document.addEventListener('DOMContentLoaded', loadSyncHistory);
+
+triggerSyncBtn.addEventListener('click', async () => {
+  // Show live sync card
+  liveSyncCard.style.display = 'block';
+
+  // Disable button
+  triggerSyncBtn.disabled = true;
+  triggerSyncBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Syncing...';
+
+  // Clear console and reset collapse state
+  syncConsole.innerHTML = '';
+  const collapse = document.getElementById('syncConsoleCollapse');
+  if (!collapse.classList.contains('show')) {
+    const bsCollapse = new bootstrap.Collapse(collapse, { toggle: false });
+    bsCollapse.show();
+    document.getElementById('syncConsoleChevron').style.transform = 'rotate(0deg)';
+    syncConsoleCollapsed = false;
+  }
+
+  addConsoleLog('Starting database sync...', 'info');
+  addConsoleLog('Reading results directory: {{ results_dir }}', 'info');
+
+  try {
+    const response = await fetch('/api/sync-database', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.status === 'success') {
+      addConsoleLog('✓ Sync completed successfully!', 'success');
+      addConsoleLog('─'.repeat(60), 'info');
+      addConsoleLog(`Files ingested: ${result.ingested_files}`, 'info');
+      addConsoleLog('─'.repeat(60), 'info');
+      addConsoleLog(`Hosts before sync: ${result.hosts_before}`, 'info');
+      addConsoleLog(`Hosts after sync:  ${result.hosts_after}`, 'info');
+      addConsoleLog(`New hosts added:   +${result.hosts_added}`, result.hosts_added > 0 ? 'success' : 'info');
+      addConsoleLog('─'.repeat(60), 'info');
+      addConsoleLog(`Ports before sync: ${result.ports_before}`, 'info');
+      addConsoleLog(`Ports after sync:  ${result.ports_after}`, 'info');
+      addConsoleLog(`New ports added:   +${result.ports_added}`, result.ports_added > 0 ? 'success' : 'info');
+      addConsoleLog('─'.repeat(60), 'info');
+      addConsoleLog(`Directory: ${result.directory}`, 'info');
+      addConsoleLog(`Timestamp: ${result.timestamp}`, 'info');
+
+      // Update total hosts display
+      totalHostsEl.textContent = result.hosts_after;
+      document.getElementById('totalPorts').textContent = result.ports_after;
+
+      // Reload sync history to show new entry
+      await loadSyncHistory();
+
+      // Broadcast sync completion to other tabs/pages (e.g., dashboard)
+      try {
+        localStorage.setItem('cygor_last_sync', JSON.stringify({
+          timestamp: Date.now(),
+          hosts_added: result.hosts_added,
+          ports_added: result.ports_added,
+          hosts_after: result.hosts_after,
+          ports_after: result.ports_after
+        }));
+        // Remove immediately to trigger storage event in other tabs
+        localStorage.removeItem('cygor_last_sync');
+      } catch (e) {
+        console.warn('Failed to broadcast sync event:', e);
+      }
+
+      // Re-enable button
+      triggerSyncBtn.disabled = false;
+      triggerSyncBtn.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Sync Now';
+
+      // Show success message
+      addConsoleLog('─'.repeat(60), 'info');
+      addConsoleLog('✓ Database is now up to date!', 'success');
+      addConsoleLog('You can now close this page or run another sync.', 'info');
+
+      // Auto-collapse current sync console after completion
+      setTimeout(() => {
+        if (!syncConsoleCollapsed) {
+          const collapse = document.getElementById('syncConsoleCollapse');
+          const chevron = document.getElementById('syncConsoleChevron');
+          if (collapse.classList.contains('show')) {
+            const bsCollapse = new bootstrap.Collapse(collapse, { toggle: false });
+            bsCollapse.hide();
+            chevron.style.transform = 'rotate(-90deg)';
+            syncConsoleCollapsed = true;
+          }
+        }
+      }, 2000);
+    } else {
+      throw new Error(result.error || 'Sync failed');
+    }
+  } catch (error) {
+    addConsoleLog('✗ Sync failed!', 'error');
+    addConsoleLog(`Error: ${error.message}`, 'error');
+
+    // Re-enable button
+    triggerSyncBtn.disabled = false;
+    triggerSyncBtn.innerHTML = '<i class="bi bi-arrow-repeat me-2"></i>Sync Now';
+  }
+});
+</script>
+
+{% endblock %}

@@ -1,0 +1,2085 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container-fluid py-3">
+  <!-- Page header -->
+  <div class="cy-page-header">
+    <a href="/tasks" class="cy-btn cy-btn-icon" title="Back to Tasks">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <h1><i class="bi bi-radar"></i>Cygor Network Scanner</h1>
+    <span class="cy-page-subtitle">Configure and launch a port discovery scan</span>
+  </div>
+
+  <!-- About Scanner & Quick Guide (Collapsible) -->
+  <div class="card bg-dark mb-4">
+    <div class="card-header" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#scannerGuide">
+      <h5 class="mb-0 d-flex justify-content-between align-items-center" style="font-size: 1.25rem;">
+        <span>
+          <svg class="me-2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          About Network Scanner & Quick Guide
+        </span>
+        <i class="bi bi-chevron-down"></i>
+      </h5>
+    </div>
+    <div id="scannerGuide" class="collapse">
+      <div class="card-body">
+        <p class="text-light mb-4" style="font-size: 1.05rem; line-height: 1.7;">
+          Cygor's Network Scanner performs comprehensive host discovery and service enumeration using industry-standard tools.
+          It combines fast port scanning with detailed Nmap analysis to identify live hosts, open ports, and running services.
+        </p>
+        <h5 class="text-secondary mb-3" style="font-size: 1.15rem; font-weight: 600;">Scanning Pipeline:</h5>
+        <ul class="mb-4 text-light" style="font-size: 1rem; line-height: 1.8; padding-left: 1.5rem;">
+          <li class="mb-2"><strong>ICMP Discovery:</strong> Optional ping sweep to find live hosts before port scanning</li>
+          <li class="mb-2"><strong>Port Discovery:</strong> Fast scanning with Masscan and/or Naabu to identify open ports</li>
+          <li class="mb-2"><strong>Nmap Enumeration:</strong> Detailed service detection, version scanning, and OS fingerprinting</li>
+          <li class="mb-2"><strong>Fingerprinting:</strong> Device type identification using OUI, MAC, and behavioral analysis</li>
+        </ul>
+        <h5 class="text-secondary mb-3" style="font-size: 1.15rem; font-weight: 600;">Supported Input Formats:</h5>
+        <ul class="mb-0 text-light" style="font-size: 1rem; line-height: 1.8; padding-left: 1.5rem;">
+          <li class="mb-2"><strong>CIDR Notation:</strong> 192.168.1.0/24, 10.0.0.0/8</li>
+          <li class="mb-2"><strong>IP Ranges:</strong> 192.168.1.1-50, 10.0.0.1-10.0.0.100</li>
+          <li class="mb-2"><strong>Single IPs:</strong> 192.168.1.1, 10.0.0.1</li>
+          <li class="mb-2"><strong>Hostnames:</strong> server.example.com, internal.local</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <form id="scanForm">
+    <div class="row g-4">
+      <!-- ==================== LEFT: TAB NAVIGATION ==================== -->
+      <div class="col-lg-3 col-xl-2">
+        <div class="scan-nav-container">
+          <nav class="scan-nav">
+            <button type="button" class="scan-nav-item" data-tab="info">
+              <span class="nav-icon">
+                <!-- Book/documentation icon -->
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                  <line x1="8" y1="6" x2="16" y2="6"/>
+                  <line x1="8" y1="10" x2="16" y2="10"/>
+                  <line x1="8" y1="14" x2="12" y2="14"/>
+                </svg>
+              </span>
+              <span class="nav-text">Info & Help</span>
+              <span class="nav-status" id="status-info"></span>
+            </button>
+            <button type="button" class="scan-nav-item active" data-tab="targets">
+              <span class="nav-icon">
+                <!-- Crosshair/scope icon -->
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="22" y1="12" x2="18" y2="12"/>
+                  <line x1="6" y1="12" x2="2" y2="12"/>
+                  <line x1="12" y1="6" x2="12" y2="2"/>
+                  <line x1="12" y1="22" x2="12" y2="18"/>
+                </svg>
+              </span>
+              <span class="nav-text">Targets</span>
+              <span class="nav-status" id="status-targets"></span>
+            </button>
+            <button type="button" class="scan-nav-item" data-tab="discovery">
+              <span class="nav-icon">
+                <!-- Radar/scan icon -->
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 2a10 10 0 0 1 10 10"/>
+                  <circle cx="12" cy="12" r="6"/>
+                  <path d="M12 6a6 6 0 0 1 6 6"/>
+                  <circle cx="12" cy="12" r="2"/>
+                </svg>
+              </span>
+              <span class="nav-text">Discovery</span>
+              <span class="nav-status" id="status-discovery"></span>
+            </button>
+            <button type="button" class="scan-nav-item" data-tab="nmap">
+              <span class="nav-icon">
+                <!-- Terminal/command icon for Nmap -->
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="4" width="20" height="16" rx="2"/>
+                  <path d="M6 8l4 4-4 4"/>
+                  <line x1="12" y1="16" x2="18" y2="16"/>
+                </svg>
+              </span>
+              <span class="nav-text">Nmap Scanner</span>
+              <span class="nav-status" id="status-nmap"></span>
+            </button>
+          </nav>
+
+          <!-- Authentication Card in Sidebar -->
+          <div class="auth-card mt-4">
+            <div class="auth-card-header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              <span>Authentication</span>
+            </div>
+            <div class="auth-card-body">
+              <label class="form-label small">Sudo Password <span class="text-danger">*</span></label>
+              <input type="password" class="form-control form-control-sm" id="sudoPassword" placeholder="Required for scanning" autocomplete="current-password">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== RIGHT: TAB CONTENT ==================== -->
+      <div class="col-lg-9 col-xl-10">
+        <!-- TAB: Targets -->
+        <div class="scan-tab active" id="tab-targets">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="22" y1="12" x2="18" y2="12"/>
+                  <line x1="6" y1="12" x2="2" y2="12"/>
+                  <line x1="12" y1="6" x2="12" y2="2"/>
+                  <line x1="12" y1="22" x2="12" y2="18"/>
+                </svg>
+                Scan Targets
+              </h4>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Define the hosts, IP addresses, or network ranges you want to scan.</p>
+
+              <!-- Input Method Toggle -->
+              <div class="input-method-toggle mb-4">
+                <button type="button" class="method-btn active" data-method="manual" data-target="targets">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/>
+                    <path d="M18 8h.01"/><path d="M6 12h.01"/><path d="M10 12h.01"/>
+                    <path d="M14 12h.01"/><path d="M18 12h.01"/><path d="M6 16h12"/>
+                  </svg>
+                  Manual Input
+                </button>
+                <button type="button" class="method-btn" data-method="file" data-target="targets">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                  </svg>
+                  Upload File
+                </button>
+              </div>
+
+              <!-- Manual Input -->
+              <div class="input-method" id="method-manual-targets">
+                <textarea class="form-control target-input" id="targetsManual" rows="10" placeholder="Enter targets, one per line:
+
+192.168.1.0/24
+10.0.0.1-10.0.0.50
+example.com
+172.16.0.1"></textarea>
+                <div class="target-hints">
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    CIDR notation (10.0.0.0/24)
+                  </div>
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    IP ranges (10.0.0.1-50)
+                  </div>
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    Hostnames
+                  </div>
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    Single IPs
+                  </div>
+                </div>
+              </div>
+
+              <!-- File Upload -->
+              <div class="input-method" id="method-file-targets" style="display:none;">
+                <div class="upload-zone" id="targetUploadZone">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  <p>Drag & drop your target list here</p>
+                  <span>or click to browse</span>
+                  <input type="file" id="targetsFileInput" accept=".txt,.list,.csv" hidden>
+                </div>
+                <div class="file-info" id="targetFileInfo" style="display:none;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                  <span id="targetFileName"></span>
+                  <button type="button" class="btn-clear" id="clearTargetFile">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Exclusions -->
+              <div class="exclusions-section mt-5">
+                <div class="section-toggle" id="exclusionsToggle">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                  </svg>
+                  <span>Exclusions</span>
+                  <span class="badge bg-secondary">Optional</span>
+                  <svg class="toggle-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </div>
+                <div class="exclusions-content" id="exclusionsContent" style="display:none;">
+                  <p class="text-secondary small mb-3">Exclude IPs or ranges from scanning. Supports both manual input and file upload.</p>
+
+                  <!-- Exclusion Input Method Toggle -->
+                  <div class="input-method-toggle mb-3">
+                    <button type="button" class="method-btn active" data-method="manual" data-target="exclusions">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="4" width="20" height="16" rx="2"/>
+                        <path d="M6 16h12"/>
+                      </svg>
+                      Manual
+                    </button>
+                    <button type="button" class="method-btn" data-method="file" data-target="exclusions">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                      File
+                    </button>
+                  </div>
+
+                  <!-- Manual Exclusions -->
+                  <div class="input-method" id="method-manual-exclusions">
+                    <textarea class="form-control" id="exclusionsManual" rows="4" placeholder="IPs or ranges to exclude from scanning...
+
+10.0.0.1
+192.168.1.0/24"></textarea>
+                  </div>
+
+                  <!-- File Upload Exclusions -->
+                  <div class="input-method" id="method-file-exclusions" style="display:none;">
+                    <div class="upload-zone upload-zone-small" id="exclusionUploadZone">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                      </svg>
+                      <p>Drop exclusion list here or click to browse</p>
+                      <input type="file" id="exclusionsFileInput" accept=".txt,.list,.csv" hidden>
+                    </div>
+                    <div class="file-info" id="exclusionFileInfo" style="display:none;">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                      <span id="exclusionFileName"></span>
+                      <button type="button" class="btn-clear" id="clearExclusionFile">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Discovery -->
+        <div class="scan-tab" id="tab-discovery">
+          <div class="card bg-dark">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 2a10 10 0 0 1 10 10"/>
+                  <circle cx="12" cy="12" r="6"/>
+                  <path d="M12 6a6 6 0 0 1 6 6"/>
+                  <circle cx="12" cy="12" r="2"/>
+                </svg>
+                Host & Port Discovery
+              </h4>
+              <div class="scan-mode-toggle">
+                <label class="mode-option">
+                  <input type="radio" name="scanMode" value="full" checked>
+                  <span class="mode-label">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                      <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    Discovery + Nmap
+                  </span>
+                </label>
+                <label class="mode-option">
+                  <input type="radio" name="scanMode" value="discovery-only">
+                  <span class="mode-label">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="11" cy="11" r="8"/>
+                      <path d="M21 21l-4.35-4.35"/>
+                    </svg>
+                    Discovery Only
+                  </span>
+                </label>
+              </div>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Configure the tools that will find live hosts and open ports on your targets.</p>
+
+              <!-- ICMP Discovery -->
+              <div class="tool-section">
+                <div class="tool-section-header">
+                  <div class="tool-section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                      <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+                      <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+                      <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                      <circle cx="12" cy="20" r="1"/>
+                    </svg>
+                    ICMP Host Discovery
+                  </div>
+                  <span class="badge bg-secondary">Optional</span>
+                </div>
+                <p class="text-secondary small mb-3">Ping sweep to find live hosts before port scanning. Reduces scan time on large networks.</p>
+                <div class="tool-grid">
+                  <label class="tool-card">
+                    <input type="checkbox" id="discoverIcmpNaabu" value="icmp-naabu">
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">ICMP-Naabu</span>
+                        <a href="https://github.com/projectdiscovery/naabu" target="_blank" class="tool-link" title="View on GitHub">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Naabu's built-in ICMP ping mode</li>
+                        <li>Fast and efficient host discovery</li>
+                        <li>Integrates seamlessly with port scanning</li>
+                        <li>Go-based, modern implementation</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <label class="tool-card">
+                    <input type="checkbox" id="discoverIcmpFping" value="icmp-fping">
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">ICMP-Fping</span>
+                        <a href="https://fping.org/" target="_blank" class="tool-link" title="View Documentation">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>High-performance async ping sweep</li>
+                        <li>Handles thousands of hosts efficiently</li>
+                        <li>Minimal resource usage</li>
+                        <li>Battle-tested, widely used tool</li>
+                      </ul>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Port Scanners -->
+              <div class="tool-section mt-5">
+                <div class="tool-section-header">
+                  <div class="tool-section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                      <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                      <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                      <line x1="6" y1="6" x2="6.01" y2="6"/>
+                      <line x1="6" y1="18" x2="6.01" y2="18"/>
+                    </svg>
+                    Port Scanners
+                  </div>
+                  <span class="badge bg-primary">Required</span>
+                </div>
+                <p class="text-secondary small mb-3">Select at least one port scanner. Both can run together for better coverage.</p>
+                <div class="tool-grid">
+                  <label class="tool-card selected">
+                    <input type="checkbox" id="discoverMasscan" value="masscan" checked>
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">Masscan</span>
+                        <span class="tool-badge">Fastest</span>
+                        <a href="https://github.com/robertdavidgraham/masscan" target="_blank" class="tool-link" title="View on GitHub">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>World's fastest port scanner</li>
+                        <li>Scans entire internet in under 5 minutes</li>
+                        <li>Asynchronous SYN scanning</li>
+                        <li>Ideal for large network ranges</li>
+                      </ul>
+                      <div class="tool-input">
+                        <label>Custom Ports:</label>
+                        <input type="text" class="form-control form-control-sm" id="masscanPorts" placeholder="e.g., 80,443,8080-8090 (default: top 1000)">
+                      </div>
+                    </div>
+                  </label>
+                  <label class="tool-card">
+                    <input type="checkbox" id="discoverNaabu" value="naabu">
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">Naabu</span>
+                        <a href="https://github.com/projectdiscovery/naabu" target="_blank" class="tool-link" title="View on GitHub">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Modern Go-based scanner by ProjectDiscovery</li>
+                        <li>Smart CDN/WAF detection & exclusion</li>
+                        <li>Automatic rate limiting</li>
+                        <li>Detailed output with service hints</li>
+                      </ul>
+                      <div class="tool-input">
+                        <label>Custom Ports:</label>
+                        <input type="text" class="form-control form-control-sm" id="naabuPorts" placeholder="e.g., 1-1024,8080 (default: top 1000)">
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Workflow Info -->
+              <div class="workflow-info mt-5">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+                <div>
+                  <strong>Scan Pipeline:</strong>
+                  <span id="pipelineDescription">ICMP Discovery (if enabled) → Port Scanning → Nmap Enumeration</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Nmap Scanner -->
+        <div class="scan-tab" id="tab-nmap">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="4" width="20" height="16" rx="2"/>
+                  <path d="M6 8l4 4-4 4"/>
+                  <line x1="12" y1="16" x2="18" y2="16"/>
+                </svg>
+                Nmap Scanner Options
+              </h4>
+            </div>
+            <div class="card-body" id="nmapConfig">
+              <p class="text-secondary mb-4">Configure Nmap service detection and enumeration settings. These options are used when "Discovery + Nmap" mode is selected.</p>
+
+              <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                  <label class="form-label">Port Range</label>
+                  <select class="form-select" id="scanType">
+                    <option value="quick">Quick — Top 100 ports</option>
+                    <option value="top-ports" selected>Standard — Top 1,000 ports</option>
+                    <option value="top-10000">Comprehensive — Top 10,000 ports</option>
+                    <option value="fullscan">Full — All 65,535 ports</option>
+                    <option value="custom">Custom port specification</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Custom Ports</label>
+                  <input type="text" class="form-control" id="customPorts" placeholder="e.g., 22,80,443,8080-8090">
+                  <small class="form-text text-secondary">Overrides Port Range when set. Switches the dropdown to <em>Custom</em> automatically.</small>
+                </div>
+              </div>
+              <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                  <label class="form-label">Discovery Source</label>
+                  <select class="form-select" id="nmapSource">
+                    <option value="merge" selected>Merge all discovery results</option>
+                    <option value="masscan">Masscan results only</option>
+                    <option value="naabu">Naabu results only</option>
+                  </select>
+                  <small class="form-text text-secondary">Which port scanner results to use for Nmap input</small>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Parallel Processes</label>
+                  <input type="number" class="form-control" id="processes" value="10" min="1" max="50">
+                  <small class="form-text text-secondary">Number of concurrent Nmap scans</small>
+                </div>
+              </div>
+              <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                  <label class="form-label">Network Interface</label>
+                  <input type="text" class="form-control" id="interface" placeholder="e.g., eth0, tun0">
+                  <small class="form-text text-secondary">Leave empty for default interface</small>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">Additional Nmap Flags</label>
+                  <input type="text" class="form-control" id="nmapOptions" placeholder="e.g., -T4 --max-retries 2">
+                  <small class="form-text text-secondary">Extra command-line options</small>
+                </div>
+              </div>
+
+              <!-- Output Directory -->
+              <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                  <label class="form-label">Output Directory</label>
+                  <div class="input-group">
+                    <input type="text" class="form-control" id="outputDir"
+                           placeholder="{{ workspace_path or 'Default: results/' }}">
+                    <button class="btn btn-outline-secondary" type="button" id="browseDirBtn"
+                            title="Browse server filesystem">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <small class="form-text text-secondary">
+                    Leave empty to use the active workspace
+                    {% if workspace_path %}
+                      (<code>{{ workspace_path }}</code>)
+                    {% endif %}
+                  </small>
+                </div>
+              </div>
+
+              <!-- Server filesystem browser modal (shared pattern with parse_new / credrecon) -->
+              <div class="modal fade" id="dirBrowserModal" tabindex="-1" aria-labelledby="dirBrowserModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg modal-dialog-centered">
+                  <div class="modal-content bg-dark text-light">
+                    <div class="modal-header">
+                      <h5 class="modal-title" id="dirBrowserModalLabel">
+                        <i class="bi bi-folder2-open me-2"></i>Browse Server Filesystem
+                      </h5>
+                      <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                      <div class="mb-3">
+                        <label class="form-label small text-secondary">Current Path:</label>
+                        <div class="input-group">
+                          <input type="text" class="form-control bg-dark text-light border-secondary" id="dirBrowserCurrentPath">
+                          <button class="btn btn-outline-secondary" type="button" id="dirBrowserGoBtn" title="Go to path">
+                            <i class="bi bi-arrow-right-circle"></i>
+                          </button>
+                        </div>
+                        <small class="text-secondary">Type a path and press the arrow, or click directories below to navigate.</small>
+                      </div>
+                      <div id="dirBrowserList" class="file-browser-list" style="max-height: 400px; overflow-y: auto;">
+                        <div class="text-center py-5">
+                          <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading…</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                      <button type="button" class="btn btn-primary" id="dirBrowserSelectBtn">
+                        <i class="bi bi-check-circle me-2"></i>Select This Directory
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Fingerprinting -->
+              <div class="fingerprint-section mt-5">
+                <label class="fingerprint-toggle">
+                  <input type="checkbox" id="enableFingerprint">
+                  <div class="fingerprint-content">
+                    <div class="fingerprint-header">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 0 0 8 11a4 4 0 1 1 8 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0 0 15.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 0 0 8 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4"/>
+                      </svg>
+                      <span>Enable Device Fingerprinting</span>
+                    </div>
+                    <p>Identify device manufacturers (OUI lookup), device types, and operating systems from scan data.</p>
+                  </div>
+                </label>
+                <div class="fingerprint-sub" id="syncFpOption" style="display:none;">
+                  <label class="form-check">
+                    <input type="checkbox" class="form-check-input" id="syncFingerprintDb">
+                    <span class="form-check-label">Update fingerprint databases before scanning (OUI, JA3, p0f)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Info & Help -->
+        <div class="scan-tab" id="tab-info">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                  <line x1="8" y1="6" x2="16" y2="6"/>
+                  <line x1="8" y1="10" x2="16" y2="10"/>
+                  <line x1="8" y1="14" x2="12" y2="14"/>
+                </svg>
+                Cygor Scanner Documentation
+              </h4>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Learn how to use Cygor's network scanner effectively with these guides and examples.</p>
+
+              <!-- How It Works -->
+              <div class="info-section">
+                <h5 class="info-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d6efd" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  How Cygor Scan Works
+                </h5>
+                <div class="info-content">
+                  <ol class="workflow-steps">
+                    <li>
+                      <strong>ICMP Discovery (Optional)</strong>
+                      <p>Find live hosts via ping sweep using Naabu or Fping. Reduces scan time on large networks by filtering out unreachable hosts.</p>
+                    </li>
+                    <li>
+                      <strong>Port Discovery</strong>
+                      <p>Fast port scanning with Masscan and/or Naabu to identify open ports across your targets. Results are automatically merged.</p>
+                    </li>
+                    <li>
+                      <strong>Nmap Enumeration</strong>
+                      <p>Detailed service detection, version scanning, and OS fingerprinting on discovered ports. Runs in parallel for speed.</p>
+                    </li>
+                    <li>
+                      <strong>Output & Results</strong>
+                      <p>Organized results in your workspace with XML, JSON, and human-readable formats. Data is automatically synced to the database.</p>
+                    </li>
+                  </ol>
+                </div>
+              </div>
+
+              <!-- CLI Options Reference -->
+              <div class="info-section mt-5">
+                <h5 class="info-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <path d="M6 8l4 4-4 4"/>
+                    <line x1="12" y1="16" x2="18" y2="16"/>
+                  </svg>
+                  Command Line Options
+                </h5>
+                <div class="cli-options-grid">
+                  <div class="cli-option-group">
+                    <h6>Scope/Input</h6>
+                    <div class="cli-option">
+                      <code>-i, --interface</code>
+                      <span>Network interface to use (e.g., eth0, tun0)</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--ips</code>
+                      <span>List of IPs/CIDRs (comma or space separated)</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>-f, --file</code>
+                      <span>Path to file containing host/scope list</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>-o, --outdir</code>
+                      <span>Base output directory (default: results/)</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--exclusions</code>
+                      <span>File or CIDR(s) of IPs/ranges to exclude</span>
+                    </div>
+                  </div>
+                  <div class="cli-option-group">
+                    <h6>Discovery</h6>
+                    <div class="cli-option">
+                      <code>--discover</code>
+                      <span>Discovery tools: masscan, naabu, icmp-naabu, icmp-fping</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--masscan-ports</code>
+                      <span>Custom port list for Masscan</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--naabu-ports</code>
+                      <span>Custom port list for Naabu</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--discover-only</code>
+                      <span>Only run discovery, skip Nmap scanning</span>
+                    </div>
+                  </div>
+                  <div class="cli-option-group">
+                    <h6>Nmap Scanning</h6>
+                    <div class="cli-option">
+                      <code>--scan-type</code>
+                      <span>quick, top-ports, top-10000, fullscan, custom</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--ports</code>
+                      <span>Custom port specification for Nmap</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--nmap-options</code>
+                      <span>Custom Nmap switches (e.g., "-sC -sV -T4")</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--nmap-source</code>
+                      <span>Use: masscan, naabu, or merge results</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--processes</code>
+                      <span>Number of parallel Nmap processes</span>
+                    </div>
+                  </div>
+                  <div class="cli-option-group">
+                    <h6>Fingerprinting</h6>
+                    <div class="cli-option">
+                      <code>--fingerprint</code>
+                      <span>Enable device fingerprinting (OUI, OS detection)</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--sync-fp</code>
+                      <span>Sync fingerprint databases before scanning</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--sync-fp-only</code>
+                      <span>Only sync databases, don't scan</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Examples -->
+              <div class="info-section mt-5">
+                <h5 class="info-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                  </svg>
+                  Example Commands
+                </h5>
+                <div class="examples-list">
+                  <div class="example-item">
+                    <div class="example-desc">Basic scan with Masscan discovery</div>
+                    <code class="example-code">cygor scan -i eth0 -f scope.txt --discover masscan</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">Custom ports for Masscan</div>
+                    <code class="example-code">cygor scan -i eth0 -f scope.txt --discover masscan --masscan-ports 80,443,8443</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">Discovery only (no Nmap)</div>
+                    <code class="example-code">cygor scan -i eth0 -f scope.txt --discover masscan naabu --discover-only</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">ICMP discovery + port scanning</div>
+                    <code class="example-code">cygor scan -i eth0 -f scope.txt --discover icmp-naabu masscan</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">Full scan with 10 parallel processes</div>
+                    <code class="example-code">cygor scan -i eth0 -f scope.txt --discover naabu --processes 10 --scan-type fullscan</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">With exclusions file</div>
+                    <code class="example-code">cygor scan -i eth0 -f scope.txt --exclusions exclusions.txt --discover masscan</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">Enable device fingerprinting</div>
+                    <code class="example-code">cygor scan -i eth0 -f scope.txt --fingerprint --sync-fp</code>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tool Links -->
+              <div class="info-section mt-5">
+                <h5 class="info-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                  </svg>
+                  Tool Documentation
+                </h5>
+                <div class="tool-links-grid">
+                  <a href="https://github.com/robertdavidgraham/masscan" target="_blank" class="tool-doc-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                    </svg>
+                    <span>Masscan</span>
+                  </a>
+                  <a href="https://github.com/projectdiscovery/naabu" target="_blank" class="tool-doc-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                    </svg>
+                    <span>Naabu</span>
+                  </a>
+                  <a href="https://nmap.org/book/man.html" target="_blank" class="tool-doc-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                    </svg>
+                    <span>Nmap Manual</span>
+                  </a>
+                  <a href="https://fping.org/" target="_blank" class="tool-doc-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                      <polyline points="15 3 21 3 21 9"/>
+                      <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                    <span>Fping</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- IP Rotation Status Badge -->
+        <div id="ipRotationBadge" class="mb-2" style="display:none;">
+          <span class="badge bg-info bg-opacity-25 text-info border border-info">
+            <i class="bi bi-shuffle me-1"></i>
+            <span id="ipRotationBadgeText">IP Rotation: Active</span>
+          </span>
+        </div>
+
+        <!-- Submit Bar -->
+        <div class="submit-bar mt-4">
+          <a href="/tasks" class="btn btn-outline-secondary btn-lg px-4">
+            <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+            Cancel
+          </a>
+          <button type="submit" class="btn btn-primary btn-lg px-5" id="scanSubmitBtn">
+            <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            Start Scan
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+<style>
+/* ==================== SCAN NAV ==================== */
+.scan-nav-container {
+  position: sticky;
+  top: 80px;
+}
+
+.scan-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.scan-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: #adb5bd;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+  font-size: 1.05rem;
+}
+
+.scan-nav-item:hover {
+  background: rgba(13, 110, 253, 0.1);
+  border-color: rgba(13, 110, 253, 0.3);
+  color: #fff;
+}
+
+.scan-nav-item.active {
+  background: rgba(13, 110, 253, 0.15);
+  border-color: #0d6efd;
+  color: #fff;
+}
+
+.scan-nav-item .nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.scan-nav-item .nav-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.scan-nav-item .nav-text {
+  flex: 1;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.scan-nav-item .nav-status {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.scan-nav-item .nav-status.configured {
+  background: #22c55e;
+}
+
+/* ==================== AUTH CARD ==================== */
+.auth-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.auth-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: rgba(220, 53, 69, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: #dc3545;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.auth-card-body {
+  padding: 1.25rem;
+}
+
+/* ==================== TABS ==================== */
+.scan-tab {
+  display: none;
+}
+
+.scan-tab.active {
+  display: block;
+}
+
+/* ==================== SCAN MODE TOGGLE ==================== */
+.scan-mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mode-option {
+  cursor: pointer;
+}
+
+.mode-option input {
+  display: none;
+}
+
+.mode-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  color: #adb5bd;
+  transition: all 0.2s;
+}
+
+.mode-option:hover .mode-label {
+  border-color: rgba(13, 110, 253, 0.3);
+  color: #fff;
+}
+
+.mode-option input:checked + .mode-label {
+  background: rgba(13, 110, 253, 0.15);
+  border-color: #0d6efd;
+  color: #fff;
+}
+
+/* ==================== INPUT METHOD TOGGLE ==================== */
+.input-method-toggle {
+  display: flex;
+  gap: 1rem;
+}
+
+.method-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #adb5bd;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 1rem;
+}
+
+.method-btn:hover {
+  border-color: rgba(13, 110, 253, 0.5);
+  color: #fff;
+}
+
+.method-btn.active {
+  background: rgba(13, 110, 253, 0.15);
+  border-color: #0d6efd;
+  color: #fff;
+}
+
+/* ==================== TARGET INPUT ==================== */
+.target-input {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  font-size: 1rem;
+  background: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 4px !important;
+  line-height: 1.7;
+  padding: 1rem !important;
+}
+
+.target-input:focus {
+  border-color: #0d6efd !important;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15) !important;
+}
+
+.target-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.hint-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+  color: #9ca3af;
+}
+
+/* ==================== UPLOAD ZONE ==================== */
+.upload-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.upload-zone-small {
+  padding: 2rem 1.5rem;
+}
+
+.upload-zone:hover {
+  border-color: #0d6efd;
+  background: rgba(13, 110, 253, 0.05);
+}
+
+.upload-zone svg {
+  color: #6b7280;
+  margin-bottom: 1.25rem;
+}
+
+.upload-zone p {
+  margin: 0;
+  color: #9ca3af;
+  font-size: 1rem;
+}
+
+.upload-zone span {
+  color: #0d6efd;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 4px;
+}
+
+.file-info span {
+  flex: 1;
+  font-family: monospace;
+  font-size: 1rem;
+  color: #22c55e;
+}
+
+.btn-clear {
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.btn-clear:hover {
+  background: rgba(220, 53, 69, 0.2);
+  color: #dc3545;
+}
+
+/* ==================== EXCLUSIONS ==================== */
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #adb5bd;
+  font-size: 1rem;
+}
+
+.section-toggle:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.section-toggle.open {
+  border-radius: 4px 4px 0 0;
+  border-bottom: none;
+}
+
+.toggle-arrow {
+  margin-left: auto;
+  transition: transform 0.2s;
+}
+
+.section-toggle.open .toggle-arrow {
+  transform: rotate(180deg);
+}
+
+.exclusions-content {
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+}
+
+.exclusions-content .input-method-toggle {
+  gap: 0.75rem;
+}
+
+.exclusions-content .method-btn {
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+}
+
+/* ==================== TOOL SECTIONS ==================== */
+.tool-section {
+  margin-bottom: 2rem;
+}
+
+.tool-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.tool-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.tool-section-title svg {
+  width: 24px;
+  height: 24px;
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 992px) {
+  .tool-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (min-width: 1900px) {
+  .tool-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ==================== TOOL CARDS ==================== */
+.tool-card {
+  display: block;
+  cursor: pointer;
+}
+
+.tool-card input {
+  display: none;
+}
+
+.tool-card-content {
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  transition: all 0.2s;
+  height: 100%;
+}
+
+.tool-card:hover .tool-card-content {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.tool-card.selected .tool-card-content,
+.tool-card input:checked + .tool-card-content {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.tool-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.tool-name {
+  font-weight: 600;
+  font-size: 1.15rem;
+}
+
+.tool-badge {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.6rem;
+  background: #f59e0b;
+  color: #000;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.tool-link {
+  margin-left: auto;
+  color: #6b7280;
+  padding: 0.375rem;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.tool-link svg {
+  width: 18px;
+  height: 18px;
+}
+
+.tool-link:hover {
+  color: #0d6efd;
+  background: rgba(13, 110, 253, 0.1);
+}
+
+.tool-features {
+  margin: 0;
+  padding: 0 0 0 1.25rem;
+  list-style: disc;
+}
+
+.tool-features li {
+  font-size: 0.9rem;
+  color: #9ca3af;
+  margin-bottom: 0.5rem;
+  line-height: 1.5;
+}
+
+.tool-input {
+  padding-top: 1rem;
+  margin-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tool-input label {
+  display: block;
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin-bottom: 0.5rem;
+}
+
+.tool-input .form-control {
+  font-size: 0.9375rem;
+  padding: 0.625rem 0.875rem;
+}
+
+/* ==================== WORKFLOW INFO ==================== */
+.workflow-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: rgba(13, 110, 253, 0.1);
+  border: 1px solid rgba(13, 110, 253, 0.3);
+  border-radius: 4px;
+}
+
+.workflow-info svg {
+  color: #0d6efd;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+}
+
+.workflow-info strong {
+  color: #60a5fa;
+  font-size: 1rem;
+}
+
+.workflow-info span {
+  color: #9ca3af;
+  font-size: 0.9375rem;
+}
+
+/* ==================== FINGERPRINT ==================== */
+.fingerprint-toggle {
+  display: flex;
+  cursor: pointer;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.fingerprint-toggle input {
+  display: none;
+}
+
+.fingerprint-toggle:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.fingerprint-toggle:has(input:checked) {
+  border-color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.fingerprint-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin-bottom: 0.75rem;
+}
+
+.fingerprint-header svg {
+  color: #8b5cf6;
+  width: 24px;
+  height: 24px;
+}
+
+.fingerprint-content p {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: #9ca3af;
+  line-height: 1.5;
+}
+
+.fingerprint-sub {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(139, 92, 246, 0.05);
+  border-radius: 4px;
+}
+
+.fingerprint-sub .form-check-label {
+  font-size: 0.9375rem;
+}
+
+/* ==================== INFO SECTIONS ==================== */
+.info-section {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 1.5rem;
+}
+
+.info-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.workflow-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.workflow-steps li {
+  position: relative;
+  padding-left: 3rem;
+  margin-bottom: 1.5rem;
+  counter-increment: step;
+}
+
+.workflow-steps li:before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2rem;
+  height: 2rem;
+  background: rgba(13, 110, 253, 0.2);
+  border: 2px solid #0d6efd;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #0d6efd;
+}
+
+.workflow-steps li strong {
+  display: block;
+  font-size: 1rem;
+  color: #e5e7eb;
+  margin-bottom: 0.25rem;
+}
+
+.workflow-steps li p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #9ca3af;
+  line-height: 1.5;
+}
+
+/* CLI Options */
+.cli-options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 992px) {
+  .cli-options-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (min-width: 1900px) {
+  .cli-options-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.cli-option-group h6 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #60a5fa;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cli-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.625rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.cli-option code {
+  font-family: 'SF Mono', 'Monaco', monospace;
+  font-size: 0.875rem;
+  color: #22c55e;
+  background: transparent;
+}
+
+.cli-option span {
+  font-size: 0.8125rem;
+  color: #9ca3af;
+}
+
+/* Examples */
+.examples-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.example-item {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  padding: 1rem;
+}
+
+.example-desc {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin-bottom: 0.5rem;
+}
+
+.example-code {
+  display: block;
+  font-family: 'SF Mono', 'Monaco', monospace;
+  font-size: 0.875rem;
+  color: #22c55e;
+  background: transparent;
+  padding: 0;
+  word-break: break-all;
+}
+
+/* Tool Links */
+.tool-links-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .tool-links-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.tool-doc-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #adb5bd;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.tool-doc-link:hover {
+  background: rgba(13, 110, 253, 0.1);
+  border-color: rgba(13, 110, 253, 0.3);
+  color: #fff;
+}
+
+.tool-doc-link span {
+  font-weight: 500;
+}
+
+/* ==================== SUBMIT BAR ==================== */
+.submit-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 0;
+}
+
+.submit-bar .btn {
+  padding: 0.875rem 2rem;
+  font-size: 1rem;
+}
+
+/* ==================== FORM CONTROLS ==================== */
+.form-control, .form-select {
+  background: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 4px !important;
+  color: #e5e7eb !important;
+  font-size: 0.9375rem;
+  padding: 0.75rem 1rem;
+}
+
+.form-control:focus, .form-select:focus {
+  border-color: #0d6efd !important;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15) !important;
+}
+
+.form-control::placeholder {
+  color: #6b7280 !important;
+}
+
+.form-label {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.form-text {
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+/* ==================== CARD OVERRIDES ==================== */
+.card.bg-dark {
+  border-radius: 4px !important;
+}
+
+.card-header {
+  padding: 1.25rem 1.5rem;
+  border-radius: 4px 4px 0 0 !important;
+}
+
+.card-header h4 {
+  font-size: 1.25rem;
+}
+
+.card-header h4 svg {
+  width: 28px;
+  height: 28px;
+}
+
+.card-body {
+  padding: 1.75rem;
+}
+
+.card-body > p.text-secondary {
+  font-size: 1rem;
+  margin-bottom: 1.5rem !important;
+}
+
+/* Server filesystem browser modal — shared visual pattern with parse_new.html */
+.file-browser-list {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  padding: 0.5rem;
+}
+.file-browser-item {
+  display: flex;
+  align-items: center;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  gap: 0.75rem;
+}
+.file-browser-item:hover { background: rgba(13, 110, 253, 0.15); }
+.file-browser-item.selected {
+  background: rgba(13, 110, 253, 0.3);
+  border: 1px solid #0d6efd;
+}
+.file-browser-icon { font-size: 1.2rem; min-width: 22px; }
+.file-browser-icon.directory { color: #ffc107; }
+.file-browser-icon.parent    { color: #6c757d; }
+.file-browser-name { flex: 1; color: #fff; font-weight: 500; }
+</style>
+
+<script>
+// ==================== STATE ====================
+let uploadedTargetContent = null;
+let uploadedExclusionContent = null;
+
+// ==================== TAB NAVIGATION ====================
+document.querySelectorAll('.scan-nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    // Update nav
+    document.querySelectorAll('.scan-nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // Update tabs
+    const tabId = btn.dataset.tab;
+    document.querySelectorAll('.scan-tab').forEach(tab => tab.classList.remove('active'));
+    document.getElementById(`tab-${tabId}`).classList.add('active');
+  });
+});
+
+// ==================== INPUT METHOD TOGGLE ====================
+document.querySelectorAll('.method-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.target;
+    const method = btn.dataset.method;
+
+    // Update active state for this group
+    document.querySelectorAll(`.method-btn[data-target="${target}"]`).forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // Show/hide methods for this target
+    document.getElementById(`method-manual-${target}`).style.display = method === 'manual' ? 'block' : 'none';
+    document.getElementById(`method-file-${target}`).style.display = method === 'file' ? 'block' : 'none';
+  });
+});
+
+// ==================== TOOL CARD SELECTION ====================
+document.querySelectorAll('.tool-card input[type="checkbox"]').forEach(checkbox => {
+  checkbox.addEventListener('change', (e) => {
+    const card = e.target.closest('.tool-card');
+    card.classList.toggle('selected', e.target.checked);
+  });
+});
+
+// ==================== EXCLUSIONS TOGGLE ====================
+const exclusionsToggle = document.getElementById('exclusionsToggle');
+if (exclusionsToggle) {
+  exclusionsToggle.addEventListener('click', function() {
+    this.classList.toggle('open');
+    const content = document.getElementById('exclusionsContent');
+    content.style.display = content.style.display === 'none' ? 'block' : 'none';
+  });
+}
+
+// ==================== SCAN MODE TOGGLE ====================
+document.querySelectorAll('input[name="scanMode"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    const isDiscoveryOnly = e.target.value === 'discovery-only';
+    document.getElementById('nmapConfig').style.opacity = isDiscoveryOnly ? '0.4' : '1';
+    document.getElementById('nmapConfig').style.pointerEvents = isDiscoveryOnly ? 'none' : 'auto';
+
+    // Update pipeline description
+    const pipeline = document.getElementById('pipelineDescription');
+    if (isDiscoveryOnly) {
+      pipeline.textContent = 'ICMP Discovery (if enabled) → Port Scanning → Results saved';
+    } else {
+      pipeline.textContent = 'ICMP Discovery (if enabled) → Port Scanning → Nmap Enumeration';
+    }
+  });
+});
+
+// ==================== SCAN TYPE ====================
+// Custom Ports stays enabled regardless of Port Range. When the user types a
+// custom port spec we auto-switch the dropdown to "Custom" so the form payload
+// is internally consistent and the user doesn't have to find the dropdown.
+const scanTypeSelect = document.getElementById('scanType');
+const customPortsField = document.getElementById('customPorts');
+
+if (scanTypeSelect && customPortsField) {
+  scanTypeSelect.addEventListener('change', (e) => {
+    if (e.target.value !== 'custom') {
+      // Switching to a preset — clear any stale custom port input.
+      customPortsField.value = '';
+    }
+  });
+  customPortsField.addEventListener('input', () => {
+    if (customPortsField.value.trim() && scanTypeSelect.value !== 'custom') {
+      scanTypeSelect.value = 'custom';
+    }
+  });
+}
+
+// ==================== FINGERPRINT ====================
+const enableFingerprint = document.getElementById('enableFingerprint');
+if (enableFingerprint) {
+  enableFingerprint.addEventListener('change', (e) => {
+    document.getElementById('syncFpOption').style.display = e.target.checked ? 'block' : 'none';
+    if (!e.target.checked) document.getElementById('syncFingerprintDb').checked = false;
+  });
+}
+
+// ==================== TARGET FILE UPLOAD ====================
+const targetUploadZone = document.getElementById('targetUploadZone');
+const targetFileInput = document.getElementById('targetsFileInput');
+
+if (targetUploadZone && targetFileInput) {
+  targetUploadZone.addEventListener('click', () => targetFileInput.click());
+  targetUploadZone.addEventListener('dragover', (e) => { e.preventDefault(); targetUploadZone.style.borderColor = '#0d6efd'; });
+  targetUploadZone.addEventListener('dragleave', () => { targetUploadZone.style.borderColor = ''; });
+  targetUploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    targetUploadZone.style.borderColor = '';
+    if (e.dataTransfer.files.length) handleTargetFile(e.dataTransfer.files[0]);
+  });
+  targetFileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) handleTargetFile(e.target.files[0]);
+  });
+}
+
+function handleTargetFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    uploadedTargetContent = e.target.result;
+    document.getElementById('targetFileName').textContent = file.name;
+    if (targetUploadZone) targetUploadZone.style.display = 'none';
+    document.getElementById('targetFileInfo').style.display = 'flex';
+  };
+  reader.readAsText(file);
+}
+
+const clearTargetFile = document.getElementById('clearTargetFile');
+if (clearTargetFile) {
+  clearTargetFile.addEventListener('click', () => {
+    uploadedTargetContent = null;
+    if (targetFileInput) targetFileInput.value = '';
+    if (targetUploadZone) targetUploadZone.style.display = 'flex';
+    document.getElementById('targetFileInfo').style.display = 'none';
+  });
+}
+
+// ==================== EXCLUSION FILE UPLOAD ====================
+const exclusionUploadZone = document.getElementById('exclusionUploadZone');
+const exclusionFileInput = document.getElementById('exclusionsFileInput');
+
+if (exclusionUploadZone && exclusionFileInput) {
+  exclusionUploadZone.addEventListener('click', () => exclusionFileInput.click());
+  exclusionUploadZone.addEventListener('dragover', (e) => { e.preventDefault(); exclusionUploadZone.style.borderColor = '#0d6efd'; });
+  exclusionUploadZone.addEventListener('dragleave', () => { exclusionUploadZone.style.borderColor = ''; });
+  exclusionUploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    exclusionUploadZone.style.borderColor = '';
+    if (e.dataTransfer.files.length) handleExclusionFile(e.dataTransfer.files[0]);
+  });
+  exclusionFileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) handleExclusionFile(e.target.files[0]);
+  });
+}
+
+function handleExclusionFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    uploadedExclusionContent = e.target.result;
+    document.getElementById('exclusionFileName').textContent = file.name;
+    if (exclusionUploadZone) exclusionUploadZone.style.display = 'none';
+    document.getElementById('exclusionFileInfo').style.display = 'flex';
+  };
+  reader.readAsText(file);
+}
+
+const clearExclusionFile = document.getElementById('clearExclusionFile');
+if (clearExclusionFile) {
+  clearExclusionFile.addEventListener('click', () => {
+    uploadedExclusionContent = null;
+    if (exclusionFileInput) exclusionFileInput.value = '';
+    if (exclusionUploadZone) exclusionUploadZone.style.display = 'flex';
+    document.getElementById('exclusionFileInfo').style.display = 'none';
+  });
+}
+
+// ==================== DIRECTORY (server-side browser) ====================
+// The folder button opens a Bootstrap modal that drives /api/browse on the
+// server. The previous implementation used <input type="file" webkitdirectory>
+// which only returns a directory NAME on the client side and is useless for a
+// server-side scanner that needs an absolute filesystem path.
+(function initDirBrowser() {
+  const triggerBtn   = document.getElementById('browseDirBtn');
+  const targetField  = document.getElementById('outputDir');
+  const modalEl      = document.getElementById('dirBrowserModal');
+  const listEl       = document.getElementById('dirBrowserList');
+  const pathField    = document.getElementById('dirBrowserCurrentPath');
+  const goBtn        = document.getElementById('dirBrowserGoBtn');
+  const selectBtn    = document.getElementById('dirBrowserSelectBtn');
+  if (!triggerBtn || !modalEl || !targetField) return;
+
+  let currentPath = '';
+  let selectedPath = '';
+  let modalInstance = null;
+
+  function openBrowser() {
+    if (!modalInstance) {
+      modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+    }
+    modalInstance.show();
+    loadDirectory(targetField.value || '');
+  }
+
+  async function loadDirectory(path) {
+    listEl.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div></div>';
+    try {
+      const res = await fetch('/api/browse?path=' + encodeURIComponent(path || ''));
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        listEl.innerHTML = `<div class="alert alert-danger mb-0">Error: ${data.error || res.statusText}</div>`;
+        return;
+      }
+      currentPath = data.current_path;
+      pathField.value = currentPath;
+      selectedPath = currentPath;  // default selection is the current dir
+      renderItems(data.items || []);
+    } catch (err) {
+      listEl.innerHTML = `<div class="alert alert-danger mb-0">Error: ${err.message}</div>`;
+    }
+  }
+
+  function renderItems(items) {
+    if (!items.length) {
+      listEl.innerHTML = '<div class="text-center py-4 text-secondary">Empty directory</div>';
+      return;
+    }
+    listEl.innerHTML = '';
+    items.forEach(item => {
+      if (item.type === 'file') return;  // dirs only for output dir picker
+      const row = document.createElement('div');
+      row.className = 'file-browser-item';
+      row.dataset.path = item.path;
+      const icon = item.type === 'parent' ? 'bi-arrow-up-circle-fill' : 'bi-folder-fill';
+      row.innerHTML = `<i class="bi ${icon} file-browser-icon ${item.type}"></i><span class="file-browser-name">${item.name}</span>`;
+      row.addEventListener('click', () => loadDirectory(item.path));
+      row.addEventListener('dblclick', () => {
+        selectedPath = item.path;
+        confirmSelection();
+      });
+      listEl.appendChild(row);
+    });
+  }
+
+  function confirmSelection() {
+    targetField.value = selectedPath || currentPath;
+    targetField.dispatchEvent(new Event('input', { bubbles: true }));
+    if (modalInstance) modalInstance.hide();
+  }
+
+  triggerBtn.addEventListener('click', openBrowser);
+  if (goBtn) goBtn.addEventListener('click', () => loadDirectory(pathField.value || ''));
+  if (selectBtn) selectBtn.addEventListener('click', confirmSelection);
+  if (pathField) {
+    pathField.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        loadDirectory(pathField.value || '');
+      }
+    });
+  }
+})();
+
+// ==================== FORM SUBMISSION ====================
+const scanForm = document.getElementById('scanForm');
+if (scanForm) {
+  scanForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+  // Get targets
+  const isTargetFileMethod = document.querySelector('.method-btn[data-target="targets"][data-method="file"]').classList.contains('active');
+  let targets = [];
+
+  if (isTargetFileMethod && uploadedTargetContent) {
+    targets = uploadedTargetContent.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  } else {
+    const manual = document.getElementById('targetsManual').value.trim();
+    if (!manual) {
+      showAlert('Please enter at least one target', 'warning');
+      return;
+    }
+    targets = manual.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  }
+
+  if (targets.length === 0) {
+    showAlert('No valid targets found', 'warning');
+    return;
+  }
+
+  // Discovery tools
+  const discover = [];
+  if (document.getElementById('discoverIcmpNaabu').checked) discover.push('icmp-naabu');
+  if (document.getElementById('discoverIcmpFping').checked) discover.push('icmp-fping');
+  if (document.getElementById('discoverMasscan').checked) discover.push('masscan');
+  if (document.getElementById('discoverNaabu').checked) discover.push('naabu');
+
+  if (!discover.includes('masscan') && !discover.includes('naabu')) {
+    showAlert('Please select at least one port scanner (Masscan or Naabu)', 'warning');
+    return;
+  }
+
+  // Exclusions
+  let exclusions = [];
+  const isExclusionFileMethod = document.querySelector('.method-btn[data-target="exclusions"][data-method="file"]')?.classList.contains('active');
+
+  if (isExclusionFileMethod && uploadedExclusionContent) {
+    exclusions = uploadedExclusionContent.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  } else {
+    const exclusionText = document.getElementById('exclusionsManual').value.trim();
+    if (exclusionText) {
+      exclusions = exclusionText.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    }
+  }
+
+  // Nmap enabled (based on scan mode selection in Discovery tab)
+  const nmapEnabled = document.querySelector('input[name="scanMode"]:checked').value === 'full';
+  const scanType = document.getElementById('scanType').value;
+  const customPorts = document.getElementById('customPorts').value.trim();
+
+  if (nmapEnabled && scanType === 'custom' && !customPorts) {
+    showAlert('Please specify custom ports', 'warning');
+    return;
+  }
+
+  const scanData = {
+    targets,
+    discover,
+    discover_only: !nmapEnabled,
+    scan_type: scanType,
+    ports: customPorts || null,
+    nmap_options: document.getElementById('nmapOptions').value.trim() || null,
+    interface: document.getElementById('interface').value.trim() || null,
+    output_dir: document.getElementById('outputDir').value.trim() || null,
+    exclusions: exclusions.length > 0 ? exclusions : null,
+    sudo_password: document.getElementById('sudoPassword').value || null,
+    fingerprint: document.getElementById('enableFingerprint').checked,
+    masscan_ports: document.getElementById('masscanPorts').value.trim() || null,
+    naabu_ports: document.getElementById('naabuPorts').value.trim() || null,
+    processes: parseInt(document.getElementById('processes').value) || 10,
+    nmap_source: document.getElementById('nmapSource').value,
+    sync_fp: document.getElementById('syncFingerprintDb').checked
+  };
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Starting...';
+
+  try {
+    const response = await fetch('/api/scans', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(scanData)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to create scan');
+    }
+
+    const result = await response.json();
+    window.location.href = `/tasks/${result.task_id}`;
+
+  } catch (error) {
+    showAlert('Error: ' + error.message, 'danger');
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+});
+}
+
+// IP rotation status check removed (enterprise-only feature).
+</script>
+
+{% endblock %}

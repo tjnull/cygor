@@ -1,0 +1,1563 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+/* Material dashboard styling */
+.compact .card-body {
+  padding: 1rem !important;
+}
+
+.compact .card-body i.fs-1 {
+  font-size: 1.75rem !important;
+  padding: 0.5rem;
+  border-radius: 4px;
+  background: rgba(59,130,246,0.1);
+  transition: all 0.15s ease;
+}
+
+.compact .card-body:hover i.fs-1 {
+  background: rgba(59,130,246,0.15);
+}
+
+/* Custom stat icons */
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  padding: 0.5rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.stat-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.stat-icon-discovered {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.15) 0%, rgba(59, 130, 246, 0.1) 100%);
+  border: 1px solid rgba(14, 165, 233, 0.2);
+}
+
+.stat-icon-discovered svg {
+  color: #0ea5e9;
+  filter: drop-shadow(0 0 8px rgba(14, 165, 233, 0.3));
+}
+
+.compact .card-body:hover .stat-icon-discovered {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.25) 0%, rgba(59, 130, 246, 0.15) 100%);
+  border-color: rgba(14, 165, 233, 0.35);
+}
+
+.stat-icon-scanned {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(16, 185, 129, 0.1) 100%);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.stat-icon-scanned svg {
+  color: #22c55e;
+  filter: drop-shadow(0 0 8px rgba(34, 197, 94, 0.3));
+}
+
+.compact .card-body:hover .stat-icon-scanned {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.25) 0%, rgba(16, 185, 129, 0.15) 100%);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+/* Light theme stat icon overrides */
+body.light-theme .stat-icon-discovered {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.1) 0%, rgba(59, 130, 246, 0.08) 100%);
+  border-color: rgba(14, 165, 233, 0.25);
+}
+
+body.light-theme .stat-icon-scanned {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(16, 185, 129, 0.08) 100%);
+  border-color: rgba(34, 197, 94, 0.25);
+}
+
+.compact h6 {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #71717a !important;
+}
+
+.compact h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ffffff !important;
+}
+
+/* Chart card helpers */
+.chart-card .card-body { display: flex; flex-direction: column; padding: 1rem; }
+
+/* Dashboard canvas sizing */
+.chart-canvas-wrap {
+  position: relative;
+  width: 100%;
+  min-height: 200px;
+  margin-bottom: 0.5rem;
+  overflow: visible;
+  padding: 0;
+}
+.chart-canvas-wrap canvas { width: 100% !important; height: 100% !important; display: block; max-height: 420px; }
+.chart-canvas-wrap svg { width: 100% !important; height: auto !important; display: block; max-height: none !important; }
+#scanTimelineWrap {
+  overflow: visible !important;
+  min-height: 500px !important;
+  background: transparent;
+  border-radius: 6px;
+  padding: 0;
+}
+
+/* Gantt Timeline Enhancements */
+#scanTimelineWrap svg {
+  max-height: none !important;
+  height: auto !important;
+}
+
+#scanTimelineWrap .timeline-controls {
+  background: rgba(10, 10, 10, 0.8) !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid #1a1a1a;
+}
+
+body.light-theme #scanTimelineWrap .timeline-controls {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid #e5e7eb;
+}
+
+#scanTimelineWrap .reset-zoom-btn {
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(13, 110, 253, 0.3);
+}
+
+#scanTimelineWrap .reset-zoom-btn:hover {
+  background: #1a5fd7 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(13, 110, 253, 0.5);
+}
+
+.scan-timeline-tooltip {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  max-width: 350px;
+  line-height: 1.5;
+  backdrop-filter: blur(10px);
+}
+
+/* Timeline controls styling */
+#scanTimelineWrap input[type="text"],
+#scanTimelineWrap input[type="datetime-local"] {
+  transition: all 0.2s ease;
+}
+
+#scanTimelineWrap input[type="text"]:focus,
+#scanTimelineWrap input[type="datetime-local"]:focus {
+  outline: none;
+  border-color: #0d6efd !important;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+}
+
+#scanTimelineWrap .btn-timeline:hover {
+  background: #1a1a1a !important;
+  border-color: #0d6efd !important;
+}
+
+body.light-theme #scanTimelineWrap .btn-timeline:hover {
+  background: #f1f5f9 !important;
+}
+
+/* Minimap brush styling */
+#scanTimelineWrap .brush .selection {
+  fill: #0d6efd;
+  fill-opacity: 0.2;
+  stroke: #0d6efd;
+  stroke-width: 2px;
+}
+
+#scanTimelineWrap .brush .handle {
+  fill: #0d6efd;
+  fill-opacity: 0.8;
+}
+
+/* Dropdown menu overrides */
+#scanTimelineWrap .dropdown-menu {
+  background: #0a0a0a !important;
+  border: 1px solid #1a1a1a !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+
+body.light-theme #scanTimelineWrap .dropdown-menu {
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+#scanTimelineWrap .dropdown-item:hover {
+  background: #1a1a1a !important;
+  color: #0d6efd !important;
+}
+
+body.light-theme #scanTimelineWrap .dropdown-item:hover {
+  background: #f1f5f9 !important;
+  color: #0d6efd !important;
+}
+
+/* small popup/expand button - placed in card header area */
+.card-header .chart-popup-btn {
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: #fff;
+  padding: 0.18rem 0.36rem;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+}
+.card-header .chart-popup-btn:hover { background: rgba(255,255,255,0.04); color: #eaeaea; }
+.card-header .chart-popup-btn svg { width: 16px; height: 16px; display:block; }
+
+/* HIDE any popup buttons that mistakenly end up inside the canvas area (prevents duplicates) */
+.chart-canvas-wrap .chart-popup-btn { display: none !important; }
+
+/* Custom HTML legend placed in header (top-right) */
+.custom-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0,0,0,0.18);
+  padding: 6px 10px;
+  border-radius: 4px;
+  color: #ffffff !important;
+  font-weight: 600;
+  font-size: 13px;
+  user-select: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.03);
+}
+.custom-legend .legend-item { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; opacity: 1; transition: opacity .15s ease; }
+.custom-legend .legend-item.dim { opacity: 0.45; }
+.custom-legend .legend-swatch { width: 14px; height: 14px; border-radius: 4px; display: inline-block; box-shadow: 0 2px 8px rgba(0,0,0,0.45); border: 2px solid rgba(0,0,0,0.12); }
+.custom-legend .legend-text { color: #ffffff; font-weight: 600; }
+
+/* Modal holder scroll area: horizontal scroll for timeline popup; services popup will not show scrollbar */
+#chartPopupModal .modal-body { padding: 0.6rem; }
+#popupCanvasHolder {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  display: block;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+#popupCanvasHolder::-webkit-scrollbar {
+  height: 14px;
+  background: rgba(0,0,0,0.3);
+}
+#popupCanvasHolder::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+  margin: 0 10px;
+}
+#popupCanvasHolder::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.3);
+  border-radius: 4px;
+  border: 2px solid rgba(0,0,0,0.2);
+}
+#popupCanvasHolder::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.5);
+}
+
+/* Make legend and labels readable */
+.modal-content .chartjs-legend { text-align:center; margin-top:6px; }
+.chartjs-legend, .chartjs-legend ul, .chartjs-legend li { color: #ffffff !important; }
+
+/* Tooltip high contrast fallback */
+.chartjs-tooltip,
+.chartjs-tooltip * { color: #ffffff !important; }
+
+/* minor responsive tidy */
+@media (max-width: 991px) {
+  .chart-canvas-wrap { min-height: 180px; }
+}
+
+/* small helper text under Hosts Discovered when adjusted */
+.hosts-adjusted-note {
+  color: #f1c40f; /* yellow */
+  font-weight: 600;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+/* Material chart card styling */
+.chart-card {
+  border-radius: 6px !important;
+  overflow: hidden;
+  transition: all 0.15s ease;
+}
+
+.chart-card .card-header {
+  border-radius: 6px 6px 0 0 !important;
+  padding: 1rem 1.25rem;
+}
+
+.chart-card .card-header h5,
+.chart-card .card-header h6 {
+  font-weight: 600;
+  margin-bottom: 0;
+  letter-spacing: 0;
+  color: #ffffff !important;
+}
+
+/* Material OS Discovery section */
+.display-6 {
+  font-weight: 700 !important;
+  transition: color 0.15s ease;
+}
+
+.display-6 a {
+  transition: color 0.15s ease;
+}
+
+.display-6 a:hover {
+  color: #3b82f6 !important;
+}
+
+/* Material table styling */
+.table-dark {
+  border-radius: 4px;
+  overflow: hidden;
+  background: #0a0a0a !important;
+  border: 1px solid #18181b !important;
+}
+
+.table-dark thead th {
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  background: #0f0f0f !important;
+  border-bottom: 1px solid #18181b !important;
+  padding: 0.75rem 1rem;
+  color: #71717a !important;
+}
+
+.table-dark tbody tr {
+  border-bottom: 1px solid #18181b !important;
+  transition: background 0.15s ease;
+}
+
+.table-dark tbody tr:hover {
+  background: #18181b !important;
+}
+
+/* Material popup button styling */
+.chart-popup-btn {
+  border-radius: 4px !important;
+  transition: all 0.15s ease !important;
+  padding: 0.4rem 0.7rem !important;
+  background: #18181b !important;
+  border: 1px solid #27272a !important;
+  box-shadow: none !important;
+}
+
+.chart-popup-btn:hover {
+  background: #27272a !important;
+  border-color: #3f3f46 !important;
+}
+
+/* Material legend styling */
+.custom-legend {
+  background: #0a0a0a !important;
+  border: 1px solid #18181b !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+  border-radius: 4px !important;
+  padding: 6px 12px !important;
+}
+
+.custom-legend .legend-swatch {
+  box-shadow: none !important;
+  border-radius: 2px !important;
+}
+
+/* Light theme overrides for dashboard */
+body.light-theme .custom-legend {
+  background: #ffffff !important;
+  border: 1px solid rgba(0,0,0,0.15) !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+}
+
+body.light-theme .custom-legend .legend-text {
+  color: #212529 !important;
+}
+
+body.light-theme .custom-legend .legend-item {
+  color: #212529 !important;
+}
+
+body.light-theme .chart-popup-btn {
+  background: #f8f9fa !important;
+  border-color: rgba(0,0,0,0.15) !important;
+  color: #212529 !important;
+}
+
+body.light-theme .chart-popup-btn:hover {
+  background: #e9ecef !important;
+  border-color: rgba(0,0,0,0.2) !important;
+}
+
+body.light-theme .display-6 {
+  color: #212529 !important;
+}
+
+body.light-theme .display-6 a {
+  color: #0d6efd !important;
+}
+
+body.light-theme .display-6 a:hover {
+  color: #0a58ca !important;
+}
+
+body.light-theme .table-dark {
+  background: #ffffff !important;
+  border: 1px solid rgba(0,0,0,0.1) !important;
+}
+
+body.light-theme .table-dark thead th {
+  background: #f8f9fa !important;
+  color: #212529 !important;
+  border-color: rgba(0,0,0,0.1) !important;
+}
+
+body.light-theme .table-dark tbody td {
+  color: #212529 !important;
+  border-color: rgba(0,0,0,0.08) !important;
+}
+
+body.light-theme .table-dark tbody tr {
+  border-color: rgba(0,0,0,0.08) !important;
+}
+
+body.light-theme .table-dark tbody tr:hover {
+  background: rgba(13,110,253,0.05) !important;
+}
+
+body.light-theme .table-striped tbody tr:nth-of-type(odd) {
+  background: #f8f9fa !important;
+}
+
+body.light-theme .table-striped tbody tr:nth-of-type(even) {
+  background: #ffffff !important;
+}
+
+body.light-theme .table-dark.table-striped tbody tr:nth-of-type(odd) {
+  background: #f8f9fa !important;
+}
+
+body.light-theme .table-dark.table-striped tbody tr:nth-of-type(even) {
+  background: #ffffff !important;
+}
+
+body.light-theme .badge.bg-secondary {
+  background: #6c757d !important;
+  color: #ffffff !important;
+}
+
+body.light-theme .btn-outline-info {
+  color: #0dcaf0 !important;
+  border-color: #0dcaf0 !important;
+}
+
+body.light-theme .btn-outline-info:hover {
+  background: #0dcaf0 !important;
+  color: #000000 !important;
+}
+
+body.light-theme .compact h6 {
+  color: #6c757d !important;
+}
+
+body.light-theme .compact h2 {
+  color: #212529 !important;
+}
+
+body.light-theme .compact .card-body i.fs-1 {
+  background: rgba(13,110,253,0.1) !important;
+}
+
+body.light-theme .text-info {
+  color: #0dcaf0 !important;
+}
+
+body.light-theme .text-success {
+  color: #198754 !important;
+}
+
+body.light-theme .hosts-adjusted-note {
+  color: #856404 !important;
+}
+
+body.light-theme .chart-card {
+  background: #ffffff !important;
+  border: 1px solid rgba(0,0,0,0.1) !important;
+}
+
+body.light-theme .chart-card .card-header {
+  background: #f8f9fa !important;
+  border-bottom: 1px solid rgba(0,0,0,0.1) !important;
+}
+
+body.light-theme .chart-card .card-header h5,
+body.light-theme .chart-card .card-header h6 {
+  color: #212529 !important;
+}
+
+body.light-theme .chart-card .small {
+  color: #6c757d !important;
+}
+
+body.light-theme .modal-header {
+  background: #f8f9fa !important;
+  border-bottom: 1px solid rgba(0,0,0,0.1) !important;
+}
+
+body.light-theme .modal-header h5,
+body.light-theme .modal-title {
+  color: #212529 !important;
+}
+
+body.light-theme .btn-close-white {
+  filter: invert(1);
+}
+
+body.light-theme hr {
+  border-color: rgba(0,0,0,0.1) !important;
+  opacity: 1 !important;
+}
+</style>
+
+<div class="container-fluid py-3">
+
+  <!-- Page header -->
+  <div class="cy-page-header">
+    <h1><i class="bi bi-speedometer2"></i>Dashboard</h1>
+    <span class="cy-page-subtitle">Overview of discovered assets and services</span>
+    <div class="cy-page-actions"></div>
+  </div>
+
+  <!-- Stat widgets -->
+  <div class="row gx-3 gy-3 mb-3 align-items-stretch">
+    <div class="col-12 col-xl-6">
+      <div class="card bg-gradient-dark text-white shadow-sm h-100 position-relative compact">
+        <div class="card-body d-flex align-items-center">
+          <div class="stat-icon stat-icon-discovered me-3">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <!-- Network globe with nodes -->
+              <circle cx="12" cy="12" r="9" opacity="0.3"/>
+              <circle cx="12" cy="12" r="9"/>
+              <ellipse cx="12" cy="12" rx="9" ry="4"/>
+              <line x1="12" y1="3" x2="12" y2="21"/>
+              <!-- Discovery nodes -->
+              <circle cx="6" cy="8" r="1.5" fill="currentColor" stroke="none"/>
+              <circle cx="18" cy="8" r="1.5" fill="currentColor" stroke="none"/>
+              <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+              <circle cx="8" cy="16" r="1.5" fill="currentColor" stroke="none"/>
+              <circle cx="16" cy="16" r="1.5" fill="currentColor" stroke="none"/>
+            </svg>
+          </div>
+          <div>
+            <h6 class="text-uppercase text-secondary fw-bold">Hosts Discovered</h6>
+            <h2 id="hostsTotalValue" class="mb-0">{{ hosts_total }}</h2>
+            <div id="hostsAdjustedNote" class="hosts-adjusted-note" style="display:none;">
+              Adjusted to unique hosts (from scan files)
+            </div>
+          </div>
+        </div>
+        <a href="/hosts" class="stretched-link" aria-label="View all discovered hosts"></a>
+      </div>
+    </div>
+
+    <div class="col-12 col-xl-6">
+      <div class="card bg-gradient-dark text-white shadow-sm h-100 position-relative compact">
+        <div class="card-body d-flex align-items-center">
+          <div class="stat-icon stat-icon-scanned me-3">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <!-- Radar/scan sweep -->
+              <circle cx="12" cy="12" r="9" opacity="0.2"/>
+              <circle cx="12" cy="12" r="6" opacity="0.4"/>
+              <circle cx="12" cy="12" r="3" opacity="0.6"/>
+              <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+              <!-- Scan line -->
+              <line x1="12" y1="12" x2="19" y2="5" stroke-width="2"/>
+              <!-- Detected points -->
+              <circle cx="15" cy="9" r="1.2" fill="currentColor" stroke="none" opacity="0.8"/>
+              <circle cx="8" cy="14" r="1.2" fill="currentColor" stroke="none" opacity="0.8"/>
+              <circle cx="16" cy="15" r="1.2" fill="currentColor" stroke="none" opacity="0.8"/>
+            </svg>
+          </div>
+          <div>
+            <h6 class="text-uppercase text-secondary fw-bold">Hosts Scanned</h6>
+            <h2 id="hostsScannedValue" class="mb-0">{{ hosts_scanned }}</h2>
+          </div>
+        </div>
+        <a href="/hosts?status=scanned" class="stretched-link" aria-label="View scanned hosts"></a>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Row 1: Top Services and Identified Services -->
+  <div class="row gx-3 gy-3 mb-3">
+    <!-- Top Services (left half) -->
+    <div class="col-lg-6">
+      <div class="card bg-dark shadow-sm h-100 chart-card">
+        <div class="card-header border-0 d-flex align-items-center justify-content-between">
+          <h5 class="card-title text-white mb-0"><i class="bi bi-diagram-3 me-2"></i> Top Services</h5>
+          <div class="d-flex align-items-center">
+            <button type="button" class="chart-popup-btn" id="servicesPopupBtn" aria-label="Expand services" style="cursor: pointer; z-index: 10;">
+              <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M1 9v6h6" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M9 1h6v6" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M6.5 9.5L15 1" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M1 15L9.5 6.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="card-body d-flex flex-column" style="position:relative;">
+          <div id="servicesWrap" class="chart-canvas-wrap">
+            <canvas id="servicesChart" style="width:100%; height:100%; display:block;"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Identified Services Info (right half) -->
+    <div class="col-lg-6">
+      <div class="card bg-dark shadow-sm h-100 chart-card">
+        <div class="card-header border-0">
+          <h5 class="card-title text-white mb-0"><i class="bi bi-info-circle me-2"></i> Identified Services</h5>
+          <small class="text-secondary">Services discovered across all hosts</small>
+        </div>
+        <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+          <div class="table-responsive">
+            <table class="table table-dark table-sm table-hover">
+              <thead>
+                <tr>
+                  <th>Service/Product</th>
+                  <th class="text-end">Count</th>
+                </tr>
+              </thead>
+              <tbody id="identifiedServicesTable">
+                <tr>
+                  <td colspan="2" class="text-center text-secondary">
+                    <div class="spinner-border spinner-border-sm me-2" role="status">
+                      <span class="visually-hidden">Loading...</span>
+                    </div>
+                    Loading service information...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: Live Hosts/Ports Over Time and Ports Tested Per Second -->
+  <div class="row gx-3 gy-3 mb-3">
+    <!-- Live Hosts and Ports Over Time (left half) -->
+    <div class="col-lg-6">
+      <div class="card bg-dark shadow-sm h-100 chart-card">
+        <div class="card-header border-0">
+          <h5 class="card-title text-white mb-0"><i class="bi bi-activity me-2"></i> Live Hosts and Open Ports Over Time</h5>
+          <small class="text-secondary">Cumulative discovery timeline</small>
+        </div>
+        <div class="card-body">
+          <div class="chart-canvas-wrap">
+            <canvas id="liveHostsChart" style="width:100%; height:300px; display:block;"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ports Tested Per Second by Host (right half) -->
+    <div class="col-lg-6">
+      <div class="card bg-dark shadow-sm h-100 chart-card">
+        <div class="card-header border-0">
+          <h5 class="card-title text-white mb-0"><i class="bi bi-speedometer2 me-2"></i> Port Scan Speed by Host</h5>
+          <small class="text-secondary">Ports tested per second</small>
+        </div>
+        <div class="card-body">
+          <div class="chart-canvas-wrap">
+            <canvas id="portsScanSpeedChart" style="width:100%; height:300px; display:block;"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3: Device Categories -->
+  {% if device_categories is defined and device_categories %}
+  <div class="row gx-3 gy-3 mb-3">
+    <div class="col-lg-6">
+      <div class="card bg-dark shadow-sm h-100 chart-card">
+        <div class="card-header border-0">
+          <h5 class="card-title text-white mb-0"><i class="bi bi-device-hdd me-2"></i> Device Categories</h5>
+          <small class="text-secondary">Breakdown of discovered device types</small>
+        </div>
+        <div class="card-body">
+          <div class="chart-canvas-wrap">
+            <canvas id="deviceCategoryChart" style="width:100%; height:300px; display:block;"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- OS Discovery -->
+  {% set c = (os_summary.counts if os_summary is defined and os_summary and os_summary.counts is defined else {}) %}
+  <div class="cy-card mb-3">
+    <div class="cy-card-header">
+      <div class="cy-card-title"><i class="bi bi-laptop"></i>OS Discovery</div>
+    </div>
+    <div class="cy-card-body">
+      <!-- OS Family Tiles — primary OS -->
+      <div class="cy-stat-row cy-cols-6 mb-3">
+        <a href="/hosts?os=Windows" class="cy-stat-tile">
+          <div class="cy-stat-tile-icon"><i class="bi bi-windows"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value">{{ c.get('Windows', 0) }}</div>
+            <div class="cy-stat-tile-label">Windows</div>
+          </div>
+        </a>
+        <a href="/hosts?os=Linux" class="cy-stat-tile">
+          <div class="cy-stat-tile-icon"><i class="bi bi-terminal"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value">{{ c.get('Linux', 0) }}</div>
+            <div class="cy-stat-tile-label">Linux</div>
+          </div>
+        </a>
+        <a href="/hosts?os=macOS" class="cy-stat-tile">
+          <div class="cy-stat-tile-icon"><i class="bi bi-apple"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value">{{ c.get('macOS', 0) }}</div>
+            <div class="cy-stat-tile-label">macOS</div>
+          </div>
+        </a>
+        <a href="/hosts?os=BSD/Unix" class="cy-stat-tile">
+          <div class="cy-stat-tile-icon"><i class="bi bi-terminal-fill"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value">{{ c.get('BSD/Unix', 0) }}</div>
+            <div class="cy-stat-tile-label">BSD/Unix</div>
+          </div>
+        </a>
+        <a href="/hosts?os=Android" class="cy-stat-tile">
+          <div class="cy-stat-tile-icon"><i class="bi bi-phone"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value">{{ c.get('Android', 0) }}</div>
+            <div class="cy-stat-tile-label">Android</div>
+          </div>
+        </a>
+        <a href="/hosts?os=iOS" class="cy-stat-tile">
+          <div class="cy-stat-tile-icon"><i class="bi bi-phone-fill"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value">{{ c.get('iOS', 0) }}</div>
+            <div class="cy-stat-tile-label">iOS</div>
+          </div>
+        </a>
+      </div>
+
+      <!-- OS Family Tiles — devices / unknown -->
+      <div class="cy-stat-row cy-cols-6">
+        <a href="/hosts?os=Network Device" class="cy-stat-tile">
+          <div class="cy-stat-tile-icon cy-stat-tile-icon--warn"><i class="bi bi-router"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value">{{ c.get('Network Device', 0) }}</div>
+            <div class="cy-stat-tile-label">Network Device</div>
+          </div>
+        </a>
+        <a href="/hosts?os=Virtualization/Hypervisor" class="cy-stat-tile">
+          <div class="cy-stat-tile-icon cy-stat-tile-icon--warn"><i class="bi bi-box"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value">{{ c.get('Virtualization/Hypervisor', 0) }}</div>
+            <div class="cy-stat-tile-label">Virtualization</div>
+          </div>
+        </a>
+        <a href="/hosts?os=Printer/Peripheral" class="cy-stat-tile">
+          <div class="cy-stat-tile-icon cy-stat-tile-icon--warn"><i class="bi bi-printer"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value">{{ c.get('Printer/Peripheral', 0) }}</div>
+            <div class="cy-stat-tile-label">Printer/Peripheral</div>
+          </div>
+        </a>
+        <a href="/hosts?os=Specialized Device" class="cy-stat-tile">
+          <div class="cy-stat-tile-icon cy-stat-tile-icon--warn"><i class="bi bi-cpu"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value">{{ c.get('Specialized Device', 0) }}</div>
+            <div class="cy-stat-tile-label">Specialized</div>
+          </div>
+        </a>
+        <a href="/hosts?os=Other" class="cy-stat-tile">
+          <div class="cy-stat-tile-icon" style="background: rgba(139,148,158,0.12); color: var(--text-3);"><i class="bi bi-question-circle"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value" style="color: var(--text-3);">{{ c.get('Other', 0) }}</div>
+            <div class="cy-stat-tile-label">Other</div>
+          </div>
+        </a>
+        <a href="/hosts?os=Unknown" class="cy-stat-tile">
+          <div class="cy-stat-tile-icon" style="background: rgba(139,148,158,0.12); color: var(--text-3);"><i class="bi bi-dash-circle"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value" style="color: var(--text-3);">{{ c.get('Unknown', 0) }}</div>
+            <div class="cy-stat-tile-label">Unknown</div>
+          </div>
+        </a>
+      </div>
+
+      {% if os_summary.top_items %}
+      <!-- Top 10 fingerprinted hosts table -->
+      <div style="margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border-subtle);">
+        <div class="cy-card-title" style="margin-bottom: var(--space-3);">
+          <i class="bi bi-fingerprint"></i>Top 10 Fingerprinted Hosts
+        </div>
+        <div class="table-responsive">
+          <table class="cy-table">
+            <thead>
+              <tr>
+                <th>IP Address</th>
+                <th>Hostname</th>
+                <th>Operating System</th>
+                <th>Confidence</th>
+                <th>Status</th>
+                <th style="text-align: right;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in os_summary.top_items %}
+              <tr>
+                <td><code class="cy-mono">{{ item.host.address }}</code></td>
+                <td>
+                  {% if item.hostname_display %}
+                    <span class="cy-cell-strong">{{ item.hostname_display }}</span>
+                  {% else %}
+                    <span class="cy-cell-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if item.os_display %}
+                    <span class="cy-cell-strong">{{ item.os_display }}</span>
+                    {% if item.manufacturer %}
+                      <div class="cy-cell-muted" style="font-size: var(--fs-xs);">{{ item.manufacturer }}</div>
+                    {% endif %}
+                  {% else %}
+                    <span class="cy-cell-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if item.confidence is not none and item.confidence > 0 %}
+                    {% set conf_pct = (item.confidence * 100)|int %}
+                    {% if item.confidence >= 0.7 %}
+                      <span class="cy-badge cy-badge-success">{{ conf_pct }}%</span>
+                    {% elif item.confidence >= 0.4 %}
+                      <span class="cy-badge cy-badge-warn">{{ conf_pct }}%</span>
+                    {% else %}
+                      <span class="cy-badge cy-badge-danger">{{ conf_pct }}%</span>
+                    {% endif %}
+                  {% elif item.accuracy %}
+                    <span class="cy-badge">{{ item.accuracy }}%</span>
+                  {% else %}
+                    <span class="cy-cell-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if item.validation_status == 'VALIDATED' %}
+                    <span class="cy-badge cy-badge-success">Validated</span>
+                  {% elif item.validation_status == 'PLAUSIBLE' %}
+                    <span class="cy-badge cy-badge-accent">Plausible</span>
+                  {% elif item.validation_status == 'SUSPECT' %}
+                    <span class="cy-badge cy-badge-warn">Suspect</span>
+                  {% else %}
+                    <span class="cy-badge">Unknown</span>
+                  {% endif %}
+                </td>
+                <td style="text-align: right;">
+                  <a href="/hosts/{{ item.host.id }}" class="cy-btn">
+                    View Host<i class="bi bi-arrow-right"></i>
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <div class="cy-empty">
+        <div class="cy-empty-title">No OS fingerprint data yet</div>
+        Run a scan with OS detection to populate this view.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Chart libs -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
+
+<script>
+/* Theme defaults for dark UI */
+window.updateChartDefaults = function() {
+  if (typeof Chart === 'undefined') return;
+
+  const isLight = document.body.classList.contains('light-theme');
+
+  if (isLight) {
+    // Light theme chart colors
+    Chart.defaults.color = '#212529';
+    Chart.defaults.font.family = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial';
+    Chart.defaults.font.size = 12;
+    Chart.defaults.plugins.legend.labels.color = '#212529';
+    Chart.defaults.plugins.tooltip.titleColor = '#212529';
+    Chart.defaults.plugins.tooltip.bodyColor = '#212529';
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+    Chart.defaults.plugins.tooltip.borderColor = 'rgba(0, 0, 0, 0.1)';
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
+    Chart.defaults.plugins.legend.labels.usePointStyle = true;
+
+    // Light theme scale colors
+    Chart.defaults.scale.ticks.color = '#495057';
+    Chart.defaults.scale.grid.color = 'rgba(0, 0, 0, 0.1)';
+  } else {
+    // Dark theme chart colors
+    Chart.defaults.color = '#cfcfcf';
+    Chart.defaults.font.family = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial';
+    Chart.defaults.font.size = 12;
+    Chart.defaults.plugins.legend.labels.color = '#e0e0e0';
+    Chart.defaults.plugins.tooltip.titleColor = '#ffffff';
+    Chart.defaults.plugins.tooltip.bodyColor = '#e6e6e6';
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    Chart.defaults.plugins.tooltip.borderColor = 'rgba(255, 255, 255, 0.1)';
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
+    Chart.defaults.plugins.legend.labels.usePointStyle = true;
+
+    // Dark theme scale colors
+    Chart.defaults.scale.ticks.color = '#e0e0e0';
+    Chart.defaults.scale.grid.color = 'rgba(255, 255, 255, 0.06)';
+  }
+}
+
+// Function to refresh all charts on the page
+window.refreshCharts = function() {
+  const isLight = document.body.classList.contains('light-theme');
+  const tickColor = isLight ? '#495057' : '#e0e0e0';
+  const gridColor = isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.06)';
+
+  if (window.servicesChart) {
+    // Update services chart scale colors
+    if (window.servicesChart.options.scales.x) {
+      window.servicesChart.options.scales.x.ticks.color = tickColor;
+      window.servicesChart.options.scales.x.grid.color = gridColor;
+    }
+    if (window.servicesChart.options.scales.y) {
+      window.servicesChart.options.scales.y.ticks.color = tickColor;
+      window.servicesChart.options.scales.y.grid.color = gridColor;
+    }
+    window.servicesChart.update();
+  }
+
+  if (window.timelineChart) {
+    // Update timeline chart scale colors
+    if (window.timelineChart.options.scales.x) {
+      window.timelineChart.options.scales.x.ticks.color = tickColor;
+      window.timelineChart.options.scales.x.grid.color = gridColor;
+    }
+    if (window.timelineChart.options.scales.y) {
+      window.timelineChart.options.scales.y.ticks.color = tickColor;
+      window.timelineChart.options.scales.y.grid.color = gridColor;
+    }
+    window.timelineChart.update();
+  }
+}
+
+// Initialize chart defaults
+window.updateChartDefaults();
+
+
+/* ---- Services chart ---- */
+function renderServicesChart() {
+  try {
+    const labels = {{ service_summary.keys()|list|tojson }};
+    const values = {{ service_summary.values()|list|tojson }};
+
+    if (!values || values.length === 0 || values.every(v => v === 0)) {
+      const el = document.getElementById("servicesChart");
+      if (el) el.outerHTML = "<div class='text-center text-secondary py-5'>No data yet</div>";
+      return;
+    }
+
+    const ctx = document.getElementById("servicesChart").getContext('2d');
+    try { if (window.servicesChart) window.servicesChart.destroy(); } catch (e) {}
+    window.servicesChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ data: values, backgroundColor: "#0d6efd" }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        devicePixelRatio: window.devicePixelRatio || 2,
+        plugins: { legend: { display: false } },
+        onClick: (evt, elements) => {
+          if (elements.length > 0) {
+            const idx = elements[0].index;
+            window.location.href = `/services/${String(labels[idx]).toLowerCase()}`;
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              color: document.body.classList.contains('light-theme') ? "#212529" : "#e0e0e0",
+              font: { size: 11 }
+            },
+            grid: { color: document.body.classList.contains('light-theme') ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.06)" }
+          },
+          y: {
+            ticks: {
+              color: document.body.classList.contains('light-theme') ? "#212529" : "#e0e0e0",
+              precision: 0,
+              font: { size: 11 }
+            },
+            grid: { color: document.body.classList.contains('light-theme') ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.06)" }
+          }
+        }
+      }
+    });
+    ctx._chartInstance = window.servicesChart;
+  } catch (err) { console.error("renderServicesChart error:", err); }
+}
+
+/* ---- Identified Services Table ---- */
+async function renderIdentifiedServicesTable() {
+  try {
+    const response = await fetch('/api/dashboard/identified-services');
+    const data = await response.json();
+
+    const tbody = document.getElementById('identifiedServicesTable');
+
+    if (!data.services || data.services.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" class="text-center text-secondary">No service information available</td></tr>';
+      return;
+    }
+
+    let html = '';
+    data.services.forEach(service => {
+      html += `
+        <tr>
+          <td><span class="text-white">${service.service}</span></td>
+          <td class="text-end"><span class="badge bg-secondary">${service.count}</span></td>
+        </tr>
+      `;
+    });
+
+    tbody.innerHTML = html;
+  } catch (err) {
+    console.error("renderIdentifiedServicesTable error:", err);
+    document.getElementById('identifiedServicesTable').innerHTML =
+      '<tr><td colspan="2" class="text-center text-danger">Failed to load service information</td></tr>';
+  }
+}
+
+/* ---- Live Hosts and Ports Over Time Chart ---- */
+async function renderLiveHostsChart() {
+  try {
+    // Fetch timeline data from scan times
+    const response = await fetch('/api/dashboard/timeline-data');
+    const data = await response.json();
+
+    const ctx = document.getElementById("liveHostsChart").getContext('2d');
+    try { if (window.liveHostsChart) window.liveHostsChart.destroy(); } catch (e) {}
+
+    window.liveHostsChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.timestamps,
+        datasets: [
+          {
+            label: 'Total Hosts',
+            data: data.cumulative_hosts,
+            borderColor: '#22c55e',
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            fill: true,
+            tension: 0.4
+          },
+          {
+            label: 'Open Ports',
+            data: data.cumulative_ports,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            fill: true,
+            tension: 0.4
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: {
+              color: document.body.classList.contains('light-theme') ? "#212529" : "#e0e0e0",
+              usePointStyle: true
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return context.dataset.label + ': ' + context.parsed.y.toLocaleString();
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: 'time',
+            time: {
+              unit: 'day',
+              displayFormats: {
+                day: 'MMM d'
+              }
+            },
+            ticks: {
+              color: document.body.classList.contains('light-theme') ? "#212529" : "#e0e0e0"
+            },
+            grid: { color: document.body.classList.contains('light-theme') ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.06)" }
+          },
+          y: {
+            beginAtZero: true,
+            ticks: {
+              color: document.body.classList.contains('light-theme') ? "#212529" : "#e0e0e0",
+              precision: 0
+            },
+            grid: { color: document.body.classList.contains('light-theme') ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.06)" }
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.error("renderLiveHostsChart error:", err);
+    document.getElementById("liveHostsChart").outerHTML = "<div class='text-center text-secondary py-5'>Unable to load timeline data</div>";
+  }
+}
+
+/* ---- Ports Tested Per Second by Host Chart ---- */
+async function renderPortsScanSpeedChart() {
+  try {
+    // Fetch scan speed data
+    const response = await fetch('/api/dashboard/scan-speed-data');
+    const data = await response.json();
+
+    const ctx = document.getElementById("portsScanSpeedChart").getContext('2d');
+    try { if (window.portsScanSpeedChart) window.portsScanSpeedChart.destroy(); } catch (e) {}
+
+    window.portsScanSpeedChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: data.hosts,
+        datasets: [{
+          label: 'Ports/Second',
+          data: data.speeds,
+          backgroundColor: '#8b5cf6',
+          borderColor: '#7c3aed',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: 'y',
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return 'Speed: ' + context.parsed.x.toFixed(2) + ' ports/sec';
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            ticks: {
+              color: document.body.classList.contains('light-theme') ? "#212529" : "#e0e0e0"
+            },
+            grid: { color: document.body.classList.contains('light-theme') ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.06)" }
+          },
+          y: {
+            ticks: {
+              color: document.body.classList.contains('light-theme') ? "#212529" : "#e0e0e0",
+              font: { size: 11 }
+            },
+            grid: { display: false }
+          }
+        }
+      }
+    });
+  } catch (err) {
+    console.error("renderPortsScanSpeedChart error:", err);
+    document.getElementById("portsScanSpeedChart").outerHTML = "<div class='text-center text-secondary py-5'>Unable to load scan speed data</div>";
+  }
+}
+
+/* ---- helpers ---- */
+function debounce(fn, wait) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); }; }
+
+function syncChartHeights() {
+  try {
+    // Only sync the services chart canvas, not the D3 timeline SVG
+    const rightWrap = document.querySelector('#servicesChart')?.closest('.chart-canvas-wrap');
+    const rightCanvas = document.getElementById('servicesChart');
+
+    if (rightWrap && rightCanvas) {
+      // Set reasonable height for services chart
+      const rightH = rightWrap.getBoundingClientRect().height;
+      let target = Math.max(rightH, 300);
+      target = Math.min(target, 420);
+      rightWrap.style.minHeight = target + 'px';
+      rightCanvas.style.height = target + 'px';
+
+      if (rightCanvas._chartInstance && typeof rightCanvas._chartInstance.resize === 'function') {
+        rightCanvas._chartInstance.resize();
+      }
+    }
+
+    // Don't touch the D3 timeline - it manages its own height
+  } catch (e) { console.error(e); }
+}
+
+function computeServicesCanvasWidth(labelCount) {
+  const perLabel = 70;
+  const minW = 900, maxW = 3000;
+  let w = Math.max(minW, labelCount * perLabel);
+  w = Math.min(w, maxW);
+  return w;
+}
+function computeTimelineCanvasWidth(durationMs) {
+  const minW = 900, maxW = 4000;
+  const base = 900;
+  const days = Math.max(0, durationMs / (1000*60*60*24));
+  const extra = Math.round((Math.log10(days + 1) / Math.log10(8)) * (maxW - base));
+  let w = base + extra;
+  if (days < 0.25) w = 700;
+  if (w < minW) w = minW;
+  if (w > maxW) w = maxW;
+  return w;
+}
+
+
+/* ---- Device Category Chart ---- */
+function renderDeviceCategoryChart() {
+  const el = document.getElementById('deviceCategoryChart');
+  if (!el) return;
+  const deviceCategories = {{ device_categories | default([]) | tojson }};
+  if (!deviceCategories || deviceCategories.length === 0) return;
+  const ctx = el.getContext('2d');
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: deviceCategories.map(d => d.category),
+      datasets: [{
+        data: deviceCategories.map(d => d.count),
+        backgroundColor: ['#3fb950', '#58a6ff', '#d29922', '#f85149', '#bc8cff', '#39d2c0', '#f0883e', '#8b949e'],
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { color: '#c9d1d9', font: { size: 11 }, usePointStyle: true, padding: 12 } }
+      }
+    }
+  });
+}
+
+/* ---- Popup modal behavior ---- */
+document.addEventListener('DOMContentLoaded', () => {
+  try { renderServicesChart(); } catch (e) { console.error(e); }
+  try { renderIdentifiedServicesTable(); } catch (e) { console.error(e); }
+  try { renderLiveHostsChart(); } catch (e) { console.error(e); }
+  try { renderPortsScanSpeedChart(); } catch (e) { console.error(e); }
+  try { renderDeviceCategoryChart(); } catch (e) { console.error(e); }
+
+  setTimeout(syncChartHeights, 220);
+
+  const svcBtn  = document.getElementById('servicesPopupBtn');
+
+  let popupModal = null;
+  function ensurePopupModal() {
+    if (popupModal) return popupModal;
+    const isLight = document.body.classList.contains('light-theme');
+    const div = document.createElement('div');
+    div.id = 'chartPopupModal';
+    div.className = 'modal fade';
+    div.tabIndex = -1;
+    div.innerHTML = `
+      <div class="modal-dialog modal-dialog-centered" role="document" style="max-width:90vw;">
+        <div class="modal-content ${isLight ? 'bg-light text-dark' : 'bg-dark text-white'}">
+          <div class="modal-header border-0 d-flex justify-content-between align-items-center">
+            <h5 class="modal-title" id="chartPopupTitle">Chart</h5>
+            <div class="d-flex align-items-center">
+              <button type="button" class="btn-close ${isLight ? '' : 'btn-close-white'}" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+          </div>
+          <div class="modal-body" style="max-height: 80vh; overflow-y: auto; overflow-x: hidden; padding: 0;"><div id="popupCanvasHolder" style="padding: 1rem;"></div></div>
+        </div>
+      </div>`;
+    document.body.appendChild(div);
+    popupModal = div;
+    return popupModal;
+  }
+
+  function openPopupForCanvas(canvasId, title) {
+    const modalEl = ensurePopupModal();
+    const holder = modalEl.querySelector('#popupCanvasHolder');
+    const titleEl = modalEl.querySelector('#chartPopupTitle');
+
+    const targetElement = document.getElementById(canvasId);
+    if (!targetElement) {
+      console.error(`Element ${canvasId} not found for popup`);
+      return;
+    }
+
+    const placeholder = document.createElement('div');
+    placeholder.className = 'canvas-placeholder';
+    placeholder.style.width = targetElement.getBoundingClientRect().width + 'px';
+    placeholder.style.height = targetElement.getBoundingClientRect().height + 'px';
+    targetElement.parentNode.insertBefore(placeholder, targetElement);
+
+    holder.innerHTML = '';
+
+    if (canvasId === 'servicesChart') {
+      // Calculate width based on number of services for proper spacing
+      const chart = window.servicesChart || targetElement._chartInstance;
+      let serviceCount = 20; // default
+      if (chart && chart.data && chart.data.labels) {
+        serviceCount = chart.data.labels.length;
+      }
+
+      // Use same logic as computeServicesCanvasWidth: 70px per service
+      const perLabel = 70;
+      const minW = 1200, maxW = 5000;
+      let calculatedWidth = Math.max(minW, serviceCount * perLabel);
+      calculatedWidth = Math.min(calculatedWidth, maxW);
+
+      // Create a wrapper div to hold the canvas at the proper width
+      const canvasWrap = document.createElement('div');
+      canvasWrap.style.width = calculatedWidth + 'px';
+      canvasWrap.style.height = Math.max(480, window.innerHeight * 0.55) + 'px';
+      canvasWrap.style.position = 'relative';
+
+      canvasWrap.appendChild(targetElement);
+      holder.appendChild(canvasWrap);
+
+      targetElement.style.width = '100%';
+      targetElement.style.height = '100%';
+
+      holder.style.overflowX = 'auto';
+      holder.style.overflowY = 'hidden';
+    } else {
+      // For other chart types, append normally
+      holder.appendChild(targetElement);
+      targetElement.style.width = '900px';
+      targetElement.style.height = '480px';
+      holder.style.overflowX = 'auto';
+    }
+
+    titleEl.textContent = title || 'Chart';
+    modalEl._activeElement = targetElement;
+    modalEl._placeholder = placeholder;
+    modalEl._isServicesChart = (canvasId === 'servicesChart');
+
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+
+    modalEl.addEventListener('shown.bs.modal', function onShown() {
+      if (canvasId === 'servicesChart') {
+        // For services chart, destroy and recreate at larger size for better quality
+        setTimeout(() => {
+          try {
+            const chart = window.servicesChart;
+            if (chart) {
+              // Store the chart data
+              const chartData = {
+                labels: chart.data.labels,
+                values: chart.data.datasets[0].data
+              };
+
+              // Destroy the old chart
+              chart.destroy();
+
+              // Recreate with higher pixel ratio for the modal
+              const ctx = targetElement.getContext('2d');
+              window.servicesChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                  labels: chartData.labels,
+                  datasets: [{
+                    data: chartData.values,
+                    backgroundColor: "#0d6efd"
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  devicePixelRatio: window.devicePixelRatio * 1.5 || 3,
+                  plugins: { legend: { display: false } },
+                  onClick: (evt, elements) => {
+                    if (elements.length > 0) {
+                      const idx = elements[0].index;
+                      window.location.href = `/services/${String(chartData.labels[idx]).toLowerCase()}`;
+                    }
+                  },
+                  scales: {
+                    x: {
+                      ticks: {
+                        color: document.body.classList.contains('light-theme') ? "#212529" : "#e0e0e0",
+                        font: { size: 12 }
+                      },
+                      grid: { color: document.body.classList.contains('light-theme') ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.06)" }
+                    },
+                    y: {
+                      ticks: {
+                        color: document.body.classList.contains('light-theme') ? "#212529" : "#e0e0e0",
+                        precision: 0,
+                        font: { size: 12 }
+                      },
+                      grid: { color: document.body.classList.contains('light-theme') ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.06)" }
+                    }
+                  }
+                }
+              });
+              targetElement._chartInstance = window.servicesChart;
+            }
+          } catch (e) {
+            console.error("Services chart resize error:", e);
+          }
+        }, 150);
+      } else {
+        try { if (targetElement._chartInstance && typeof targetElement._chartInstance.resize === 'function') targetElement._chartInstance.resize(); } catch (e) { console.error(e); }
+      }
+      modalEl.removeEventListener('shown.bs.modal', onShown);
+    });
+
+    modalEl.addEventListener('hidden.bs.modal', function onHidden() {
+      try {
+        if (modalEl._activeElement && modalEl._placeholder) {
+          modalEl._placeholder.parentNode.insertBefore(modalEl._activeElement, modalEl._placeholder);
+          modalEl._placeholder.parentNode.removeChild(modalEl._placeholder);
+          modalEl._activeElement.style.width = '';
+          modalEl._activeElement.style.height = '';
+          modalEl._activeElement.style.minHeight = '';
+
+          if (modalEl._isServicesChart) {
+            // Recreate services chart at dashboard size
+            setTimeout(() => {
+              try {
+                renderServicesChart();
+              } catch (e) {
+                console.error("Services chart restore error:", e);
+              }
+            }, 150);
+          } else {
+            try { if (modalEl._activeElement._chartInstance) modalEl._activeElement._chartInstance.resize(); } catch (e) { console.error(e); }
+          }
+
+          modalEl._activeElement = null;
+          modalEl._placeholder = null;
+          modalEl._isServicesChart = false;
+          setTimeout(syncChartHeights, 80);
+        }
+      } catch (e) { console.error("restore error:", e); }
+      modalEl.removeEventListener('hidden.bs.modal', onHidden);
+    });
+  }
+
+  if (svcBtn) {
+    svcBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        openPopupForCanvas('servicesChart', 'Top Services');
+      } catch (error) {
+        console.error('Error opening services chart popup:', error);
+      }
+    });
+    console.log('[Dashboard] Services chart popup button listener attached');
+  } else {
+    console.warn('[Dashboard] servicesPopupBtn not found - popup button may not work');
+  }
+
+  // Auto-refresh dashboard when page gains focus (user switches back to tab)
+  window.addEventListener('focus', () => {
+    console.log('Dashboard focused - refreshing data...');
+    window.location.reload();
+  });
+
+  // Listen for database sync events from other tabs/pages
+  window.addEventListener('storage', (e) => {
+    // Check if this is a sync completion event
+    if (e.key === 'cygor_last_sync' && e.newValue) {
+      try {
+        const syncData = JSON.parse(e.newValue);
+        console.log('Database sync detected from another tab:', syncData);
+
+        // Show a brief notification before reloading
+        const notification = document.createElement('div');
+        notification.className = 'alert alert-success position-fixed top-0 start-50 translate-middle-x mt-3';
+        notification.style.zIndex = '9999';
+        notification.innerHTML = `
+          <i class="bi bi-check-circle-fill me-2"></i>
+          Database synced! ${syncData.hosts_added} new host(s), ${syncData.ports_added} new port(s). Refreshing...
+        `;
+        document.body.appendChild(notification);
+
+        // Reload after brief delay to show notification
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } catch (err) {
+        console.error('Failed to parse sync event:', err);
+      }
+    }
+  });
+
+  // Optional: Auto-refresh every 60 seconds for live monitoring
+  // Uncomment the line below to enable periodic auto-refresh
+  // setInterval(() => { window.location.reload(); }, 60000);
+});
+
+window.addEventListener('resize', debounce(syncChartHeights, 150));
+
+</script>
+
+{% endblock %}

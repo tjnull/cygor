@@ -1,0 +1,614 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% set SERVICE_ICONS = {
+    "ssh": "bi-terminal", "http": "bi-globe", "https": "bi-globe2",
+    "smb": "bi-folder-symlink", "rdp": "bi-display", "ftp": "bi-folder2-open",
+    "dns": "bi-signpost-2", "mysql": "bi-database", "postgres": "bi-database",
+    "mssql": "bi-database", "oracle": "bi-database", "mongodb": "bi-database",
+    "redis": "bi-lightning", "smtp": "bi-envelope", "imap": "bi-envelope",
+    "pop3": "bi-envelope", "snmp": "bi-broadcast", "ldap": "bi-person-badge",
+    "ldaps": "bi-person-badge", "kerberos": "bi-shield-lock", "krb524": "bi-shield-lock",
+    "vnc": "bi-window-desktop", "nfs": "bi-hdd-network", "rpc": "bi-diagram-3",
+    "proxy": "bi-arrow-left-right", "telnet": "bi-terminal-fill", "cups": "bi-printer",
+    "upnp": "bi-router", "mdns": "bi-wifi", "dcom": "bi-diagram-2",
+    "ajp": "bi-arrow-repeat", "msrpc": "bi-diagram-3", "palace-6": "bi-plugin"
+} %}
+
+{% set SERVICE_DISPLAY = {
+    "ssh": "SSH", "http": "HTTP", "https": "HTTPS", "smb": "SMB",
+    "rdp": "RDP", "ftp": "FTP", "dns": "DNS", "mysql": "MySQL",
+    "mssql": "MSSQL", "ldap": "LDAP", "ldaps": "LDAPS", "nfs": "NFS",
+    "rpc": "RPC", "msrpc": "MSRPC", "smtp": "SMTP", "imap": "IMAP",
+    "pop3": "POP3", "snmp": "SNMP", "vnc": "VNC", "dcom": "DCOM",
+    "ajp": "AJP", "upnp": "UPnP", "mdns": "mDNS", "krb524": "Kerberos",
+    "kerberos": "Kerberos", "postgres": "PostgreSQL", "oracle": "Oracle",
+    "mongodb": "MongoDB", "redis": "Redis", "telnet": "Telnet",
+    "cups": "CUPS", "proxy": "Proxy"
+} %}
+
+{% set svc_display = SERVICE_DISPLAY.get(service, service|capitalize) %}
+{% set svc_icon = SERVICE_ICONS.get(service, 'bi-hdd-rack') %}
+{% set percentage = (host_count / total_hosts * 100) if total_hosts > 0 else 0 %}
+
+<!-- Page header -->
+<div class="cy-page-header">
+  <h1><i class="bi {{ svc_icon }}"></i>{{ svc_display }}</h1>
+  <span class="cy-page-subtitle">{{ host_count }} host{{ 's' if host_count != 1 else '' }} · {{ '%.1f'|format(percentage) }}% of inventory</span>
+  <div class="cy-page-actions">
+    <a href="/services" class="cy-btn"><i class="bi bi-arrow-left"></i>All Services</a>
+  </div>
+</div>
+
+<!-- Summary stat tiles — horizontal -->
+<div class="cy-stat-row cy-cols-4 mb-3">
+  <div class="cy-stat-tile">
+    <div class="cy-stat-tile-icon"><i class="bi bi-pc-display-horizontal"></i></div>
+    <div class="cy-stat-tile-meta">
+      <div class="cy-stat-tile-value">{{ host_count }}</div>
+      <div class="cy-stat-tile-label">Unique Hosts</div>
+    </div>
+  </div>
+  <div class="cy-stat-tile">
+    <div class="cy-stat-tile-icon cy-stat-tile-icon--success"><i class="bi bi-ethernet"></i></div>
+    <div class="cy-stat-tile-meta">
+      <div class="cy-stat-tile-value">{{ total_port_instances }}</div>
+      <div class="cy-stat-tile-label">Port Instances</div>
+    </div>
+  </div>
+  <div class="cy-stat-tile">
+    <div class="cy-stat-tile-icon cy-stat-tile-icon--warn"><i class="bi bi-hash"></i></div>
+    <div class="cy-stat-tile-meta" style="min-width: 0;">
+      <div class="d-flex flex-wrap gap-1" style="margin: 2px 0;">
+        {% for p in common_ports %}
+          <span class="port-badge">{{ p }}</span>
+        {% endfor %}
+        {% if not common_ports %}
+          <span class="cy-stat-tile-value" style="font-size: var(--fs-md); color: var(--text-3);">—</span>
+        {% endif %}
+      </div>
+      <div class="cy-stat-tile-label">Common Ports</div>
+    </div>
+  </div>
+  <div class="cy-stat-tile">
+    <div class="cy-stat-tile-icon"><i class="bi bi-percent"></i></div>
+    <div class="cy-stat-tile-meta">
+      <div class="cy-stat-tile-value">{{ "%.0f"|format(percentage) }}%</div>
+      <div class="cy-stat-tile-label">Coverage · of {{ total_hosts }} hosts</div>
+    </div>
+  </div>
+</div>
+
+<!-- Detected products (when present) -->
+{% if top_products %}
+<div class="cy-card mb-3">
+  <div class="cy-card-body" style="display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-4);">
+    <span class="cy-card-title" style="margin: 0; padding: 0; border: 0;">
+      <i class="bi bi-box-seam"></i>Detected Products
+    </span>
+    <div class="d-flex flex-wrap gap-1" style="flex: 1;">
+      {% for prod in top_products %}
+        <span class="cy-badge cy-badge-accent">{{ prod }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Coverage bar -->
+<div class="cy-card mb-3">
+  <div class="cy-card-body" style="padding: var(--space-3) var(--space-4);">
+    <div class="d-flex justify-content-between" style="margin-bottom: var(--space-2);">
+      <span style="font-size: var(--fs-sm); color: var(--text-2);">{{ host_count }} of {{ total_hosts }} hosts running {{ svc_display }}</span>
+      <span style="font-size: var(--fs-sm); color: var(--text-3); font-variant-numeric: tabular-nums;">{{ "%.1f"|format(percentage) }}%</span>
+    </div>
+    <div class="hosts-bar" style="height: 4px;">
+      <div class="hosts-bar-fill {% if percentage >= 50 %}hosts-bar-fill--high{% elif percentage >= 20 %}hosts-bar-fill--mid{% else %}hosts-bar-fill--low{% endif %}" style="width: {{ percentage }}%;"></div>
+    </div>
+  </div>
+</div>
+
+{% if not host_services %}
+<div class="cy-card">
+  <div class="cy-empty">
+    <div class="cy-empty-title">No hosts recorded for this service</div>
+    Run a scan that detects {{ svc_display }} to populate this view.
+  </div>
+</div>
+{% endif %}
+
+<!-- Hosts table -->
+{% if host_services %}
+<div class="cy-card">
+  <div class="cy-card-body cy-card-body--flush">
+    <div class="table-responsive">
+      <table id="serviceHostsTable" class="table table-dark table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Host</th>
+            <th>Hostname</th>
+            <th>Port</th>
+            <th>Protocol</th>
+            <th>Product / Version</th>
+            <th>Banner</th>
+            <th class="text-end" style="width: 56px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in host_services %}
+          <tr>
+            <!-- Host IP -->
+            <td>
+              <a href="/hosts/{{ entry.host.id }}" class="host-ip text-decoration-none">
+                {{ entry.host.address }}
+              </a>
+            </td>
+
+            <!-- Hostname -->
+            <td>
+              {% if entry.host.hostname %}
+                <span class="host-hostname">{{ entry.host.hostname }}</span>
+              {% else %}
+                <span class="cy-cell-muted">—</span>
+              {% endif %}
+            </td>
+
+            <!-- Port -->
+            <td>
+              {% set banner_lower = (entry.banner or "")|lower %}
+              {% set use_https = ("ssl" in banner_lower or "https" in banner_lower or entry.port in [443, 8443]) %}
+              <a href="{{ 'https' if use_https else 'http' }}://{{ entry.host.address }}:{{ entry.port }}"
+                 target="_blank"
+                 class="port-badge text-decoration-none">
+                {{ entry.port }}
+              </a>
+            </td>
+
+            <!-- Protocol -->
+            <td>
+              <span class="cy-badge cy-badge-success">{{ (entry.protocol or "—")|upper }}</span>
+            </td>
+
+            <!-- Product / Version -->
+            <td>
+              {% if entry.product %}
+                <span class="cy-cell-strong">{{ entry.product }}{% if entry.version %} {{ entry.version }}{% endif %}</span>
+                {% if entry.extrainfo %}
+                  <div class="cy-cell-muted" style="font-size: var(--fs-xs);">{{ entry.extrainfo }}</div>
+                {% endif %}
+              {% else %}
+                <span class="cy-cell-muted">—</span>
+              {% endif %}
+            </td>
+
+            <!-- Banner -->
+            <td>
+              {% if entry.banner %}
+                <span style="font-size: var(--fs-sm); color: var(--text-2); font-family: var(--font-mono);">{{ entry.banner }}</span>
+              {% else %}
+                <span class="cy-cell-muted">—</span>
+              {% endif %}
+            </td>
+
+            <!-- View row affordance -->
+            <td class="text-end">
+              <a href="/hosts/{{ entry.host.id }}" class="cy-btn cy-btn-icon cy-btn-ghost" title="View host">
+                <i class="bi bi-arrow-right"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- jQuery + DataTables -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css"/>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<style>
+/* Service-detail review table — same density as #hostsTable */
+#serviceHostsTable { font-size: var(--fs-md); }
+#serviceHostsTable thead th {
+  font-size: var(--fs-xs);
+  padding: var(--space-3) !important;
+}
+#serviceHostsTable tbody td {
+  padding: var(--space-3) !important;
+  vertical-align: middle;
+}
+
+/* ===== DataTables controls dark theme ===== */
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_paginate {
+  color: #94a3b8 !important;
+  padding: 0.75rem 1rem;
+}
+
+.dataTables_wrapper .dataTables_length label,
+.dataTables_wrapper .dataTables_filter label {
+  color: #94a3b8 !important;
+}
+
+.dataTables_wrapper .dataTables_filter input {
+  background: #0a0a1a;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  color: #e4e4e7;
+  padding: 0.4rem 0.75rem;
+  margin-left: 0.5rem;
+  transition: border-color 0.2s ease;
+}
+
+.dataTables_wrapper .dataTables_filter input::placeholder {
+  color: #64748b;
+}
+
+.dataTables_wrapper .dataTables_filter input:focus {
+  border-color: #0d6efd;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.2);
+}
+
+.dataTables_wrapper .dataTables_length select {
+  background: #0a0a1a;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  color: #e4e4e7;
+  padding: 0.4rem 2rem 0.4rem 0.75rem;
+  margin: 0 0.5rem;
+}
+
+/* ===== Flat inline pagination toolbar ===== */
+.dataTables_wrapper .dt-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1.25rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+.dataTables_wrapper .dataTables_paginate {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.dataTables_wrapper .dataTables_paginate span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #2a2a3a !important;
+  border: none !important;
+  border-radius: 6px !important;
+  color: #b0b0b8 !important;
+  width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
+  margin: 0 2px !important;
+  font-size: 0.82rem !important;
+  font-weight: 500;
+  line-height: 1;
+  text-align: center;
+  transition: background 0.15s ease, color 0.15s ease;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.first,
+.dataTables_wrapper .dataTables_paginate .paginate_button.previous,
+.dataTables_wrapper .dataTables_paginate .paginate_button.next,
+.dataTables_wrapper .dataTables_paginate .paginate_button.last {
+  color: #94a3b8 !important;
+  font-size: 0.7rem !important;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+  background: #3a3a4a !important;
+  color: #fff !important;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.current {
+  background: #404052 !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+  background: #4a4a5c !important;
+  color: #fff !important;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
+  background: #1e1e2a !important;
+  color: #4a4a5c !important;
+  cursor: default;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled:hover {
+  background: #1e1e2a !important;
+  color: #4a4a5c !important;
+}
+
+.dt-bottom-bar .dataTables_length {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 !important;
+  color: #94a3b8 !important;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.dt-bottom-bar .dataTables_length label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: #94a3b8 !important;
+}
+
+.dt-bottom-bar .dataTables_length select {
+  background: #1a1a2e;
+  border: 1px solid #2d2d44;
+  border-radius: 6px;
+  color: #e4e4e7;
+  padding: 0.3rem 1.75rem 0.3rem 0.6rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.dt-bottom-bar .dataTables_info {
+  margin-left: auto;
+  padding: 0 !important;
+  color: #64748b !important;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.dataTables_wrapper > .dataTables_length {
+  display: none !important;
+}
+
+/* Sorting indicators */
+table.dataTable thead th {
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+}
+
+table.dataTable thead th.sorting,
+table.dataTable thead th.sorting_asc,
+table.dataTable thead th.sorting_desc {
+  padding-right: 28px;
+}
+
+table.dataTable thead th.sorting:before,
+table.dataTable thead th.sorting_asc:before,
+table.dataTable thead th.sorting_desc:before {
+  right: 0.8em;
+  content: "\2195";
+  color: #475569;
+  opacity: 0.6;
+  font-size: 0.85em;
+}
+
+table.dataTable thead th.sorting_asc:before {
+  content: "\2191";
+  color: #0d6efd;
+  opacity: 1;
+}
+
+table.dataTable thead th.sorting_desc:before {
+  content: "\2193";
+  color: #0d6efd;
+  opacity: 1;
+}
+
+table.dataTable thead th.sorting:after,
+table.dataTable thead th.sorting_asc:after,
+table.dataTable thead th.sorting_desc:after {
+  display: none;
+}
+
+.dataTables_wrapper .dataTables_empty {
+  color: #64748b;
+  padding: 2rem !important;
+}
+
+/* ===== Light theme overrides ===== */
+body.light-theme .stat-icon-container {
+  opacity: 0.9;
+}
+
+body.light-theme .card.bg-dark {
+  background: #fff !important;
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme .card.bg-dark .text-white,
+body.light-theme .card.bg-dark .display-5 {
+  color: #212529 !important;
+}
+
+body.light-theme .card.bg-dark:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+body.light-theme .port-badge {
+  background: rgba(13, 110, 253, 0.1);
+  color: #0550ae;
+  border-color: rgba(13, 110, 253, 0.2);
+}
+
+body.light-theme .protocol-badge {
+  background: rgba(25, 135, 84, 0.1);
+  color: #116329;
+  border-color: rgba(25, 135, 84, 0.2);
+}
+
+body.light-theme .product-badge {
+  background: rgba(130, 80, 223, 0.1);
+  color: #8250df;
+  border-color: rgba(130, 80, 223, 0.2);
+}
+
+body.light-theme #serviceHostsTable {
+  --bs-table-bg: #fff;
+  --bs-table-hover-bg: rgba(13, 110, 253, 0.05);
+}
+
+body.light-theme #serviceHostsTable thead th {
+  background: #f8f9fa;
+  color: #495057;
+  border-bottom-color: #dee2e6;
+}
+
+body.light-theme #serviceHostsTable tbody td {
+  color: #212529;
+  border-bottom-color: #f0f0f0;
+}
+
+body.light-theme #serviceHostsTable tbody tr:hover {
+  background-color: rgba(13, 110, 253, 0.05) !important;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_filter input,
+body.light-theme .dataTables_wrapper .dataTables_length select {
+  background: #fff;
+  border-color: #ced4da;
+  color: #212529;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_length,
+body.light-theme .dataTables_wrapper .dataTables_filter,
+body.light-theme .dataTables_wrapper .dataTables_info,
+body.light-theme .dataTables_wrapper .dataTables_paginate {
+  color: #495057 !important;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_length label,
+body.light-theme .dataTables_wrapper .dataTables_filter label {
+  color: #495057 !important;
+}
+
+body.light-theme .dt-bottom-bar {
+  border-top-color: #e9ecef;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_paginate .paginate_button {
+  background: #e8e8ec !important;
+  color: #495057 !important;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+  background: #d8d8de !important;
+  color: #212529 !important;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+  background: #ced4da !important;
+  color: #212529 !important;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+  background: #c0c6cc !important;
+  color: #212529 !important;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
+  background: #f0f0f2 !important;
+  color: #b0b4b8 !important;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_paginate .paginate_button.disabled:hover {
+  background: #f0f0f2 !important;
+  color: #b0b4b8 !important;
+}
+
+body.light-theme .dt-bottom-bar .dataTables_length,
+body.light-theme .dt-bottom-bar .dataTables_length label {
+  color: #495057 !important;
+}
+
+body.light-theme .dt-bottom-bar .dataTables_length select {
+  background: #fff;
+  border-color: #ced4da;
+  color: #212529;
+}
+
+body.light-theme .dt-bottom-bar .dataTables_info {
+  color: #6c757d !important;
+}
+
+body.light-theme .progress {
+  background: #e9ecef !important;
+}
+</style>
+
+<script>
+$(document).ready(function() {
+  var totalRows = $('#serviceHostsTable tbody tr').length;
+  if (totalRows === 0) return;
+
+  var steps = [25, 50, 100, 250];
+  var menuValues = [];
+  var menuLabels = [];
+  for (var i = 0; i < steps.length; i++) {
+    if (steps[i] < totalRows) {
+      menuValues.push(steps[i]);
+      menuLabels.push(steps[i]);
+    }
+  }
+  menuValues.push(-1);
+  menuLabels.push("All (" + totalRows + ")");
+
+  $('#serviceHostsTable').DataTable({
+    paging: true,
+    pagingType: 'full_numbers',
+    searching: true,
+    ordering: true,
+    pageLength: 25,
+    lengthMenu: [menuValues, menuLabels],
+    dom: '<"dataTables_top"f>t<"dt-bottom-bar"pli>',
+    order: [[0, 'asc']],
+    autoWidth: false,
+    language: {
+      search: "_INPUT_",
+      searchPlaceholder: "Search hosts...",
+      lengthMenu: "_MENU_ Items per page",
+      info: "_START_ - _END_ of _TOTAL_ items",
+      infoEmpty: "No hosts found",
+      infoFiltered: "(filtered from _MAX_ total)",
+      emptyTable: "No hosts recorded for this service",
+      paginate: {
+        first: '&#x23EE;',
+        previous: '&#x25C0;',
+        next: '&#x25B6;',
+        last: '&#x23ED;'
+      }
+    }
+  });
+
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+    new bootstrap.Tooltip(el);
+  });
+});
+</script>
+{% endblock %}

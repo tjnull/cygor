@@ -1,0 +1,1684 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="cy-page-header">
+    <h1><i class="bi bi-camera-fill"></i>Screenshots</h1>
+    <span class="cy-page-subtitle">Unified gallery — Web, RDP, VNC & X11</span>
+    {% if total_screenshots > 0 %}
+    <div class="cy-page-actions">
+      <label class="text-secondary small text-uppercase fw-semibold text-nowrap mb-0">Scan Snapshot:</label>
+      <select id="snapshotSelect" class="form-select bg-dark text-light border-secondary" style="min-width:320px; max-height:none;">
+        <option value="current" selected>Current Scan</option>
+      </select>
+    </div>
+    {% endif %}
+  </div>
+  <!-- Archive banner (shown when viewing an archived snapshot) -->
+  <div id="archiveBanner" class="alert alert-info d-flex align-items-center mb-4" style="display:none !important;">
+    <i class="bi bi-clock-history fs-4 me-3"></i>
+    <div>
+      <strong>Viewing archived snapshot:</strong> <span id="archiveBannerLabel"></span>
+      <button class="btn btn-sm btn-outline-light ms-3" onclick="document.getElementById('snapshotSelect').value='current';document.getElementById('snapshotSelect').dispatchEvent(new Event('change'));">
+        <i class="bi bi-arrow-counterclockwise me-1"></i>Back to Current
+      </button>
+    </div>
+  </div>
+
+  {% if total_screenshots > 0 %}
+  <!-- Security Alerts -->
+  {% if vnc_noauth > 0 or x11_open > 0 %}
+  <div class="alert alert-danger d-flex align-items-start mb-4" role="alert">
+    <i class="bi bi-shield-exclamation fs-3 me-3"></i>
+    <div>
+      <strong class="fs-5">Security Vulnerabilities Detected</strong>
+      <ul class="mb-0 mt-2">
+        {% if vnc_noauth > 0 %}
+        <li><strong>{{ vnc_noauth }}</strong> VNC server(s) with no authentication</li>
+        {% endif %}
+        {% if x11_open > 0 %}
+        <li><strong>{{ x11_open }}</strong> X11 server(s) with open access (keylogging/screen capture possible)</li>
+        {% endif %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Dashboard stats — horizontal cy-stat-tile (interactive: data-tab
+       drives the screenshot filter; .stat-card class kept so existing
+       JS click handler keeps working) -->
+  <div class="cy-stat-row cy-cols-5 mb-3">
+    <div class="cy-stat-tile stat-card" data-tab="all" style="cursor: pointer;">
+      <div class="cy-stat-tile-icon"><i class="bi bi-images"></i></div>
+      <div class="cy-stat-tile-meta">
+        <div class="cy-stat-tile-value">{{ total_screenshots }}</div>
+        <div class="cy-stat-tile-label">Total Screenshots</div>
+      </div>
+    </div>
+    <div class="cy-stat-tile stat-card" data-tab="web" style="cursor: pointer;">
+      <div class="cy-stat-tile-icon"><i class="bi bi-globe"></i></div>
+      <div class="cy-stat-tile-meta">
+        <div class="cy-stat-tile-value">{{ web_success }} <span style="color: var(--text-3); font-size: var(--fs-sm); font-weight: 400;">/ {{ web_count }}</span></div>
+        <div class="cy-stat-tile-label">Web (HTTP/HTTPS)</div>
+      </div>
+    </div>
+    <div class="cy-stat-tile stat-card" data-tab="rdp" style="cursor: pointer;">
+      <div class="cy-stat-tile-icon cy-stat-tile-icon--success"><i class="bi bi-display"></i></div>
+      <div class="cy-stat-tile-meta">
+        <div class="cy-stat-tile-value">{{ rdp_success }} <span style="color: var(--text-3); font-size: var(--fs-sm); font-weight: 400;">/ {{ rdp_count }}</span></div>
+        <div class="cy-stat-tile-label">RDP</div>
+      </div>
+    </div>
+    <div class="cy-stat-tile stat-card" data-tab="vnc" style="cursor: pointer;">
+      <div class="cy-stat-tile-icon {% if vnc_noauth > 0 %}cy-stat-tile-icon--danger{% else %}cy-stat-tile-icon--warn{% endif %}"><i class="bi bi-pc-display"></i></div>
+      <div class="cy-stat-tile-meta">
+        <div class="cy-stat-tile-value">{{ vnc_success }} <span style="color: var(--text-3); font-size: var(--fs-sm); font-weight: 400;">/ {{ vnc_count }}</span></div>
+        <div class="cy-stat-tile-label">VNC</div>
+      </div>
+    </div>
+    <div class="cy-stat-tile stat-card" data-tab="x11" style="cursor: pointer;">
+      <div class="cy-stat-tile-icon {% if x11_open > 0 %}cy-stat-tile-icon--danger{% endif %}"><i class="bi bi-window-desktop"></i></div>
+      <div class="cy-stat-tile-meta">
+        <div class="cy-stat-tile-value">{{ x11_success }} <span style="color: var(--text-3); font-size: var(--fs-sm); font-weight: 400;">/ {{ x11_count }}</span></div>
+        <div class="cy-stat-tile-label">X11</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search Tile -->
+  <div class="card bg-dark mb-4">
+    <div class="card-header bg-dark border-secondary">
+      <h6 class="mb-0 text-white fw-semibold">
+        <i class="bi bi-search me-2"></i>Search
+      </h6>
+    </div>
+    <div class="card-body">
+      <input id="screenshotFilter" class="form-control form-control-lg bg-dark border-secondary text-light" type="text" placeholder="Search by host, URL, port, status code, or info..." />
+    </div>
+  </div>
+
+  <!-- Filters & Review Controls Tile -->
+  <div class="card bg-dark mb-4">
+    <div class="card-header bg-dark border-secondary">
+      <h6 class="mb-0 text-white fw-semibold">
+        <i class="bi bi-funnel me-2"></i>Filters & Review
+      </h6>
+    </div>
+    <div class="card-body">
+      <div class="row g-3 mb-3">
+        <div class="col-md-4">
+          <label class="form-label text-secondary small text-uppercase fw-semibold">Screenshot Status</label>
+          <div class="btn-group w-100">
+            <button class="btn btn-outline-secondary quick-filter active" data-filter="all">All</button>
+            <button class="btn btn-outline-success quick-filter" data-filter="success">Success</button>
+            <button class="btn btn-outline-danger quick-filter" data-filter="failed">Failed</button>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label text-secondary small text-uppercase fw-semibold">Review Status</label>
+          <div class="btn-group w-100">
+            <button class="btn btn-outline-secondary review-filter active" data-review="all">All</button>
+            <button class="btn btn-outline-success review-filter" data-review="reviewed">Reviewed</button>
+            <button class="btn btn-outline-warning review-filter" data-review="unreviewed">Unreviewed</button>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label text-secondary small text-uppercase fw-semibold">Review Progress</label>
+          <div id="reviewCounter" class="d-flex align-items-center h-100 pb-2">
+            <i class="bi bi-check2-circle me-2 text-success fs-5"></i>
+            <span class="text-white fw-semibold"><span id="reviewedCount">0</span> / <span id="totalCount">{{ total_screenshots }}</span> Reviewed</span>
+          </div>
+        </div>
+      </div>
+      <hr class="border-secondary my-3">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="text-secondary small">Bulk Actions:</span>
+        <div class="btn-group">
+          <button id="markAllReviewed" class="btn btn-sm btn-outline-success">
+            <i class="bi bi-check2-all me-1"></i>Mark Visible Reviewed
+          </button>
+          <button id="markAllUnreviewed" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-x-square me-1"></i>Mark Visible Unreviewed
+          </button>
+          <button id="clearAllReviews" class="btn btn-sm btn-outline-danger">
+            <i class="bi bi-trash me-1"></i>Clear All Reviews
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HTTP Status Code Filter Tile (Web Screenshots Only) -->
+  <div class="card bg-dark mb-4" id="statusCodeFilterCard">
+    <div class="card-header bg-dark border-secondary">
+      <h6 class="mb-0 text-white fw-semibold">
+        <i class="bi bi-123 me-2"></i>HTTP Status Code Filter <span class="badge bg-info ms-2">Web Only</span>
+      </h6>
+    </div>
+    <div class="card-body">
+      <div class="d-flex flex-wrap gap-2" id="statusCodeFilters">
+        <button class="btn btn-outline-light status-code-filter active" data-status="all">
+          <i class="bi bi-grid-3x3 me-1"></i>All Codes
+        </button>
+        <button class="btn btn-outline-success status-code-filter" data-status="2xx">
+          <i class="bi bi-check-circle me-1"></i>2xx Success
+          <span class="badge bg-success ms-1" id="count-2xx">0</span>
+        </button>
+        <button class="btn btn-outline-info status-code-filter" data-status="3xx">
+          <i class="bi bi-arrow-right-circle me-1"></i>3xx Redirect
+          <span class="badge bg-info ms-1" id="count-3xx">0</span>
+        </button>
+        <button class="btn btn-outline-warning status-code-filter" data-status="4xx">
+          <i class="bi bi-exclamation-circle me-1"></i>4xx Client Error
+          <span class="badge bg-warning text-dark ms-1" id="count-4xx">0</span>
+        </button>
+        <button class="btn btn-outline-danger status-code-filter" data-status="5xx">
+          <i class="bi bi-x-circle me-1"></i>5xx Server Error
+          <span class="badge bg-danger ms-1" id="count-5xx">0</span>
+        </button>
+        <button class="btn btn-outline-secondary status-code-filter" data-status="unknown">
+          <i class="bi bi-question-circle me-1"></i>Unknown
+          <span class="badge bg-secondary ms-1" id="count-unknown">0</span>
+        </button>
+      </div>
+      <div class="mt-3 pt-2 border-top border-secondary">
+        <span class="text-secondary small me-3">Common Codes:</span>
+        <div class="d-inline-flex flex-wrap gap-1">
+          <button class="btn btn-sm btn-outline-success specific-code-filter" data-code="200">200</button>
+          <button class="btn btn-sm btn-outline-success specific-code-filter" data-code="201">201</button>
+          <button class="btn btn-sm btn-outline-info specific-code-filter" data-code="301">301</button>
+          <button class="btn btn-sm btn-outline-info specific-code-filter" data-code="302">302</button>
+          <button class="btn btn-sm btn-outline-warning specific-code-filter" data-code="401">401</button>
+          <button class="btn btn-sm btn-outline-warning specific-code-filter" data-code="403">403</button>
+          <button class="btn btn-sm btn-outline-warning specific-code-filter" data-code="404">404</button>
+          <button class="btn btn-sm btn-outline-danger specific-code-filter" data-code="500">500</button>
+          <button class="btn btn-sm btn-outline-danger specific-code-filter" data-code="502">502</button>
+          <button class="btn btn-sm btn-outline-danger specific-code-filter" data-code="503">503</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="card bg-dark mb-4">
+    <div class="card-header bg-dark border-secondary p-0">
+      <ul class="nav nav-tabs card-header-tabs" id="screenshotTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all-panel" type="button" role="tab">
+            <i class="bi bi-grid-3x3-gap me-1"></i>All <span class="badge bg-primary ms-1">{{ total_screenshots }}</span>
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="web-tab" data-bs-toggle="tab" data-bs-target="#web-panel" type="button" role="tab">
+            <i class="bi bi-globe me-1"></i>Web <span class="badge bg-info ms-1">{{ web_success }}</span>
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="rdp-tab" data-bs-toggle="tab" data-bs-target="#rdp-panel" type="button" role="tab">
+            <i class="bi bi-display me-1"></i>RDP <span class="badge bg-success ms-1">{{ rdp_success }}</span>
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="vnc-tab" data-bs-toggle="tab" data-bs-target="#vnc-panel" type="button" role="tab">
+            <i class="bi bi-pc-display me-1"></i>VNC <span class="badge {% if vnc_noauth > 0 %}bg-danger{% else %}bg-warning{% endif %} ms-1">{{ vnc_success }}</span>
+            {% if vnc_noauth > 0 %}<i class="bi bi-exclamation-triangle-fill text-danger ms-1"></i>{% endif %}
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="x11-tab" data-bs-toggle="tab" data-bs-target="#x11-panel" type="button" role="tab">
+            <i class="bi bi-window-desktop me-1"></i>X11 <span class="badge {% if x11_open > 0 %}bg-danger{% else %}bg-secondary{% endif %} ms-1">{{ x11_success }}</span>
+            {% if x11_open > 0 %}<i class="bi bi-exclamation-triangle-fill text-danger ms-1"></i>{% endif %}
+          </button>
+        </li>
+      </ul>
+    </div>
+    <div class="card-body">
+      <div class="tab-content" id="screenshotTabContent">
+        <!-- ALL Tab -->
+        <div class="tab-pane fade show active" id="all-panel" role="tabpanel">
+          <div class="shots-grid" id="allGrid">
+            {% for it in lockon_items %}
+              {% if not it.screenshot_failed %}
+              {% set key = 'web_' ~ it.url|replace('://', '_')|replace('/', '_')|replace(':', '_') %}
+              <div class="shot-card" data-service="web" data-host="{{ it.host }}" data-status="success" data-review="unreviewed" data-key="{{ key }}" data-status-code="{{ it.status_code or '' }}">
+                <div class="shot-tile bg-dark">
+                  <div class="screenshot-wrap" data-img="{{ it.screenshot_url }}" data-target="{{ it.url }}" data-service="Web" data-key="{{ key }}" data-screenshot-file="{{ it.screenshot_file }}">
+                    <img src="{{ it.screenshot_url }}" alt="{{ it.url }}" class="screenshot-img">
+                  </div>
+                  <div class="url-bar">
+                    <a href="{{ it.url }}" target="_blank" class="target-text">{{ it.url }}</a>
+                    {% if it.source %}<span class="badge bg-primary" title="discovered & captured via {{ it.source }}"><i class="bi bi-binoculars me-1"></i>{{ it.source }}</span>{% endif %}
+                    <span class="badge bg-{% if it.status_code and it.status_code >= 200 and it.status_code < 300 %}success{% elif it.status_code and it.status_code >= 300 and it.status_code < 400 %}info{% elif it.status_code and it.status_code >= 400 %}warning{% else %}secondary{% endif %}">{{ it.status_code or '?' }}</span>
+                  </div>
+                  <div class="review-toggle">
+                    <label class="form-check-label m-0">
+                      <input type="checkbox" class="form-check-input review-checkbox me-1"> <strong>Reviewed</strong>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              {% endif %}
+            {% endfor %}
+            {% for it in rdp_items %}
+              {% if not it.screenshot_failed %}
+              {% set key = 'rdp_' ~ it.host ~ '_' ~ it.port %}
+              <div class="shot-card" data-service="rdp" data-host="{{ it.host }}" data-status="success" data-review="unreviewed" data-key="{{ key }}">
+                <div class="shot-tile bg-dark">
+                  <div class="screenshot-wrap" data-img="{{ it.screenshot_url }}" data-target="{{ it.host }}:{{ it.port }}" data-service="RDP" data-key="{{ key }}" data-screenshot-file="{{ it.screenshot_file }}">
+                    <img src="{{ it.screenshot_url }}" alt="{{ it.host }}" class="screenshot-img">
+                  </div>
+                  <div class="url-bar">
+                    <span class="target-text">{{ it.host }}:{{ it.port }}</span>
+                    <span class="badge bg-success">RDP</span>
+                  </div>
+                  <div class="review-toggle">
+                    <label class="form-check-label m-0">
+                      <input type="checkbox" class="form-check-input review-checkbox me-1"> <strong>Reviewed</strong>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              {% endif %}
+            {% endfor %}
+            {% for it in vnc_items %}
+              {% if not it.screenshot_failed %}
+              {% set key = 'vnc_' ~ it.host ~ '_' ~ it.port %}
+              <div class="shot-card" data-service="vnc" data-host="{{ it.host }}" data-status="success" data-auth="{{ it.auth_type }}" data-review="unreviewed" data-key="{{ key }}">
+                <div class="shot-tile bg-dark {% if 'None' in it.auth_type %}border-danger{% endif %}">
+                  <div class="screenshot-wrap" data-img="{{ it.screenshot_url }}" data-target="{{ it.host }}:{{ it.port }}" data-service="VNC" data-key="{{ key }}" data-screenshot-file="{{ it.screenshot_file }}">
+                    <img src="{{ it.screenshot_url }}" alt="{{ it.host }}" class="screenshot-img">
+                    {% if 'None' in it.auth_type %}
+                    <div class="alert-badge"><i class="bi bi-unlock-fill"></i> NO AUTH</div>
+                    {% endif %}
+                  </div>
+                  <div class="url-bar">
+                    <span class="target-text">{{ it.host }}:{{ it.port }}</span>
+                    <span class="badge bg-warning">VNC</span>
+                  </div>
+                  <div class="review-toggle">
+                    <label class="form-check-label m-0">
+                      <input type="checkbox" class="form-check-input review-checkbox me-1"> <strong>Reviewed</strong>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              {% endif %}
+            {% endfor %}
+            {% for it in x11_items %}
+              {% if not it.screenshot_failed %}
+              {% set key = 'x11_' ~ it.host ~ '_' ~ it.port ~ '_' ~ it.display %}
+              <div class="shot-card" data-service="x11" data-host="{{ it.host }}" data-status="success" data-auth="{{ it.auth_type }}" data-review="unreviewed" data-key="{{ key }}">
+                <div class="shot-tile bg-dark {% if it.auth_type == 'open_access' %}border-danger{% endif %}">
+                  <div class="screenshot-wrap" data-img="{{ it.screenshot_url }}" data-target="{{ it.host }}:{{ it.port }} (:{{ it.display }})" data-service="X11" data-key="{{ key }}" data-screenshot-file="{{ it.screenshot_file }}">
+                    <img src="{{ it.screenshot_url }}" alt="{{ it.host }}" class="screenshot-img">
+                    {% if it.auth_type == 'open_access' %}
+                    <div class="alert-badge"><i class="bi bi-exclamation-triangle-fill"></i> OPEN</div>
+                    {% endif %}
+                  </div>
+                  <div class="url-bar">
+                    <span class="target-text">{{ it.host }}:{{ it.port }} <small class="text-info">(:{{ it.display }})</small></span>
+                    <span class="badge bg-secondary">X11</span>
+                  </div>
+                  <div class="review-toggle">
+                    <label class="form-check-label m-0">
+                      <input type="checkbox" class="form-check-input review-checkbox me-1"> <strong>Reviewed</strong>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+          {% if total_screenshots == 0 %}
+          <div class="text-center py-5 text-secondary">
+            <i class="bi bi-camera-slash fs-1 mb-3 d-block"></i>
+            <p class="mb-0">No screenshots in this view.</p>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- WEB Tab -->
+        <div class="tab-pane fade" id="web-panel" role="tabpanel">
+          <div class="shots-grid">
+            {% for it in lockon_items %}
+            {% set key = 'web_' ~ it.url|replace('://', '_')|replace('/', '_')|replace(':', '_') %}
+            <div class="shot-card" data-service="web" data-host="{{ it.host }}" data-status="{% if it.screenshot_failed %}failed{% else %}success{% endif %}" data-review="unreviewed" data-key="{{ key }}" data-status-code="{{ it.status_code or '' }}">
+              <div class="shot-tile bg-dark">
+                <div class="screenshot-wrap" data-img="{{ it.screenshot_url or '/static/no-screenshot.png' }}" data-target="{{ it.url }}" data-service="Web" data-key="{{ key }}" data-screenshot-file="{{ it.screenshot_file }}">
+                  <img src="{{ it.screenshot_url or '/static/no-screenshot.png' }}" alt="{{ it.url }}" class="screenshot-img">
+                  <div class="thumb-fallback{% if not it.screenshot_failed %} d-none{% endif %}"><i class="bi bi-globe"></i></div>
+                </div>
+                <div class="url-bar">
+                  <a href="{{ it.url }}" target="_blank" class="target-text">{{ it.url }}</a>
+                  {% if it.source %}<span class="badge bg-primary" title="discovered & captured via {{ it.source }}"><i class="bi bi-binoculars me-1"></i>{{ it.source }}</span>{% endif %}
+                  <span class="badge bg-{% if it.status_code and it.status_code >= 200 and it.status_code < 300 %}success{% elif it.status_code and it.status_code >= 300 and it.status_code < 400 %}info{% elif it.status_code and it.status_code >= 400 %}warning{% else %}secondary{% endif %}">{{ it.status_code or '?' }}</span>
+                </div>
+                <div class="review-toggle">
+                  <label class="form-check-label m-0">
+                    <input type="checkbox" class="form-check-input review-checkbox me-1"> <strong>Reviewed</strong>
+                  </label>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% if web_count == 0 %}
+          <div class="text-center py-5 text-secondary">
+            <i class="bi bi-globe fs-1 mb-3"></i>
+            <p>No web screenshots. Run <code>cygor enum lockon -f targets.txt</code> to capture HTTP/HTTPS screenshots.</p>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- RDP Tab -->
+        <div class="tab-pane fade" id="rdp-panel" role="tabpanel">
+          <div class="shots-grid">
+            {% for it in rdp_items %}
+            {% set key = 'rdp_' ~ it.host ~ '_' ~ it.port %}
+            <div class="shot-card" data-service="rdp" data-host="{{ it.host }}" data-status="{% if it.screenshot_failed %}failed{% else %}success{% endif %}" data-review="unreviewed" data-key="{{ key }}">
+              <div class="shot-tile bg-dark">
+                <div class="screenshot-wrap" data-img="{{ it.screenshot_url or '/static/no-screenshot.png' }}" data-target="{{ it.host }}:{{ it.port }}" data-service="RDP" data-key="{{ key }}" data-screenshot-file="{{ it.screenshot_file }}">
+                  <img src="{{ it.screenshot_url or '/static/no-screenshot.png' }}" alt="{{ it.host }}" class="screenshot-img">
+                  <div class="thumb-fallback{% if not it.screenshot_failed %} d-none{% endif %}"><i class="bi bi-display"></i></div>
+                </div>
+                <div class="url-bar">
+                  <span class="target-text">{{ it.host }}:{{ it.port }}</span>
+                  <span class="badge bg-{% if it.status == 'SUCCESS' %}success{% elif it.status == 'FAILED' %}danger{% else %}secondary{% endif %}">{{ it.status }}</span>
+                </div>
+                <div class="info-row px-2 py-1 text-secondary small">
+                  <i class="bi bi-info-circle me-1"></i>{{ it.rdp_info[:60] if it.rdp_info else 'No info' }}
+                </div>
+                <div class="review-toggle">
+                  <label class="form-check-label m-0">
+                    <input type="checkbox" class="form-check-input review-checkbox me-1"> <strong>Reviewed</strong>
+                  </label>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% if rdp_count == 0 %}
+          <div class="text-center py-5 text-secondary">
+            <i class="bi bi-display fs-1 mb-3"></i>
+            <p>No RDP screenshots. Run <code>cygor enum lockon rdp -f targets.txt</code> to capture RDP screenshots.</p>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- VNC Tab -->
+        <div class="tab-pane fade" id="vnc-panel" role="tabpanel">
+          {% if vnc_noauth > 0 %}
+          <div class="alert alert-danger mb-3">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>{{ vnc_noauth }}</strong> VNC server(s) found with no authentication required!
+          </div>
+          {% endif %}
+          <div class="shots-grid">
+            {% for it in vnc_items %}
+            {% set key = 'vnc_' ~ it.host ~ '_' ~ it.port %}
+            <div class="shot-card" data-service="vnc" data-host="{{ it.host }}" data-status="{% if it.screenshot_failed %}failed{% else %}success{% endif %}" data-auth="{{ it.auth_type }}" data-review="unreviewed" data-key="{{ key }}">
+              <div class="shot-tile bg-dark {% if 'None' in it.auth_type %}border-danger{% endif %}">
+                <div class="screenshot-wrap" data-img="{{ it.screenshot_url or '/static/no-screenshot.png' }}" data-target="{{ it.host }}:{{ it.port }}" data-service="VNC" data-key="{{ key }}" data-screenshot-file="{{ it.screenshot_file }}">
+                  <img src="{{ it.screenshot_url or '/static/no-screenshot.png' }}" alt="{{ it.host }}" class="screenshot-img">
+                  <div class="thumb-fallback{% if not it.screenshot_failed %} d-none{% endif %}"><i class="bi bi-pc-display"></i></div>
+                  {% if 'None' in it.auth_type %}
+                  <div class="alert-badge"><i class="bi bi-unlock-fill"></i> NO AUTH</div>
+                  {% endif %}
+                </div>
+                <div class="url-bar">
+                  <span class="target-text">{{ it.host }}:{{ it.port }}</span>
+                  <span class="badge bg-{% if it.status == 'SUCCESS' %}success{% elif it.status == 'FAILED' %}danger{% elif it.status == 'AUTH_REQUIRED' %}warning{% else %}secondary{% endif %}">{{ it.status }}</span>
+                </div>
+                <div class="info-row px-2 py-1 text-secondary small">
+                  <i class="bi bi-shield me-1"></i>Auth: {{ it.auth_type or 'Unknown' }}
+                </div>
+                <div class="review-toggle">
+                  <label class="form-check-label m-0">
+                    <input type="checkbox" class="form-check-input review-checkbox me-1"> <strong>Reviewed</strong>
+                  </label>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% if vnc_count == 0 %}
+          <div class="text-center py-5 text-secondary">
+            <i class="bi bi-pc-display fs-1 mb-3"></i>
+            <p>No VNC screenshots. Run <code>cygor enum lockon vnc -f targets.txt</code> to capture VNC screenshots.</p>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- X11 Tab -->
+        <div class="tab-pane fade" id="x11-panel" role="tabpanel">
+          {% if x11_open > 0 %}
+          <div class="alert alert-danger mb-3">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>{{ x11_open }}</strong> X11 server(s) with open access! Attackers can view screens, capture keystrokes, and inject input.
+          </div>
+          {% endif %}
+          <div class="shots-grid">
+            {% for it in x11_items %}
+            {% set key = 'x11_' ~ it.host ~ '_' ~ it.port ~ '_' ~ it.display %}
+            <div class="shot-card" data-service="x11" data-host="{{ it.host }}" data-status="{% if it.screenshot_failed %}failed{% else %}success{% endif %}" data-auth="{{ it.auth_type }}" data-review="unreviewed" data-key="{{ key }}">
+              <div class="shot-tile bg-dark {% if it.auth_type == 'open_access' or it.status in ('SUCCESS', 'ACCESS_ALLOWED') %}border-danger{% endif %}">
+                <div class="screenshot-wrap" data-img="{{ it.screenshot_url or '/static/no-screenshot.png' }}" data-target="{{ it.host }}:{{ it.port }} (:{{ it.display }})" data-service="X11" data-key="{{ key }}" data-screenshot-file="{{ it.screenshot_file }}">
+                  <img src="{{ it.screenshot_url or '/static/no-screenshot.png' }}" alt="{{ it.host }}" class="screenshot-img">
+                  <div class="thumb-fallback{% if not it.screenshot_failed %} d-none{% endif %}"><i class="bi bi-window-desktop"></i></div>
+                  {% if it.auth_type == 'open_access' or it.status in ('SUCCESS', 'ACCESS_ALLOWED') %}
+                  <div class="alert-badge"><i class="bi bi-exclamation-triangle-fill"></i> OPEN</div>
+                  {% endif %}
+                </div>
+                <div class="url-bar">
+                  <span class="target-text">{{ it.host }}:{{ it.port }} <small class="text-info">(:{{ it.display }})</small></span>
+                  <span class="badge bg-{% if it.status == 'SUCCESS' %}success{% elif it.status == 'ACCESS_DENIED' %}secondary{% else %}warning{% endif %}">{{ it.status }}</span>
+                </div>
+                <div class="info-row px-2 py-1 text-secondary small">
+                  <i class="bi bi-display me-1"></i>Display :{{ it.display }} | {{ it.x11_info[:40] if it.x11_info else 'No info' }}
+                </div>
+                <div class="review-toggle">
+                  <label class="form-check-label m-0">
+                    <input type="checkbox" class="form-check-input review-checkbox me-1"> <strong>Reviewed</strong>
+                  </label>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% if x11_count == 0 %}
+          <div class="text-center py-5 text-secondary">
+            <i class="bi bi-window-desktop fs-1 mb-3"></i>
+            <p>No X11 screenshots. Run <code>cygor enum lockon x11 -f targets.txt</code> to capture X11 screenshots.</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% else %}
+  <!-- Empty State: No Screenshots -->
+  <!-- Stat Cards (zeroed out) -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card bg-dark h-100">
+        <div class="card-body d-flex align-items-center">
+          <div class="flex-shrink-0">
+            <div class="stat-icon-container bg-primary bg-opacity-10 rounded-3 p-3">
+              <i class="bi bi-images text-primary" style="font-size: 2rem;"></i>
+            </div>
+          </div>
+          <div class="flex-grow-1 ms-4">
+            <div class="text-secondary text-uppercase fw-semibold mb-1" style="font-size: 0.85rem; letter-spacing: 0.5px;">Total Screenshots</div>
+            <div class="fs-3 fw-bold text-white">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card bg-dark h-100">
+        <div class="card-body d-flex align-items-center">
+          <div class="flex-shrink-0">
+            <div class="stat-icon-container bg-info bg-opacity-10 rounded-3 p-3">
+              <i class="bi bi-globe text-info" style="font-size: 2rem;"></i>
+            </div>
+          </div>
+          <div class="flex-grow-1 ms-4">
+            <div class="text-secondary text-uppercase fw-semibold mb-1" style="font-size: 0.85rem; letter-spacing: 0.5px;">Web (HTTP/HTTPS)</div>
+            <div class="fs-3 fw-bold text-white">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card bg-dark h-100">
+        <div class="card-body d-flex align-items-center">
+          <div class="flex-shrink-0">
+            <div class="stat-icon-container bg-success bg-opacity-10 rounded-3 p-3">
+              <i class="bi bi-display text-success" style="font-size: 2rem;"></i>
+            </div>
+          </div>
+          <div class="flex-grow-1 ms-4">
+            <div class="text-secondary text-uppercase fw-semibold mb-1" style="font-size: 0.85rem; letter-spacing: 0.5px;">RDP</div>
+            <div class="fs-3 fw-bold text-white">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card bg-dark h-100">
+        <div class="card-body d-flex align-items-center">
+          <div class="flex-shrink-0">
+            <div class="stat-icon-container bg-warning bg-opacity-10 rounded-3 p-3">
+              <i class="bi bi-pc-display text-warning" style="font-size: 2rem;"></i>
+            </div>
+          </div>
+          <div class="flex-grow-1 ms-4">
+            <div class="text-secondary text-uppercase fw-semibold mb-1" style="font-size: 0.85rem; letter-spacing: 0.5px;">VNC</div>
+            <div class="fs-3 fw-bold text-white">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card bg-dark h-100">
+        <div class="card-body d-flex align-items-center">
+          <div class="flex-shrink-0">
+            <div class="stat-icon-container bg-secondary bg-opacity-10 rounded-3 p-3">
+              <i class="bi bi-window-desktop text-purple" style="font-size: 2rem;"></i>
+            </div>
+          </div>
+          <div class="flex-grow-1 ms-4">
+            <div class="text-secondary text-uppercase fw-semibold mb-1" style="font-size: 0.85rem; letter-spacing: 0.5px;">X11</div>
+            <div class="fs-3 fw-bold text-white">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Empty State Card -->
+  <div class="card bg-dark">
+    <div class="card-body text-center py-5">
+      <div class="empty-state-icon mb-4">
+        <i class="bi bi-camera-slash"></i>
+      </div>
+      <h3 class="text-white fw-bold mb-2">No Screenshots Captured</h3>
+      <p class="text-secondary mb-4" style="max-width: 520px; margin: 0 auto;">
+        Run Lockon to capture web, RDP, VNC, and X11 screenshots across your network. Captured screenshots will appear here in a unified gallery with review tracking.
+      </p>
+
+      <div class="row g-3 justify-content-center mt-2" style="max-width: 900px; margin: 0 auto;">
+        <!-- Web -->
+        <div class="col-md-6 col-lg-3">
+          <div class="empty-cmd-card">
+            <div class="d-flex align-items-center mb-3">
+              <div class="empty-cmd-icon bg-info bg-opacity-10">
+                <i class="bi bi-globe text-info"></i>
+              </div>
+              <div class="ms-3 text-start">
+                <div class="text-white fw-semibold">Web</div>
+                <div class="text-secondary" style="font-size: 0.8rem;">HTTP/HTTPS</div>
+              </div>
+            </div>
+            <code class="empty-cmd-code text-info">cygor enum lockon -f targets.txt</code>
+          </div>
+        </div>
+        <!-- RDP -->
+        <div class="col-md-6 col-lg-3">
+          <div class="empty-cmd-card">
+            <div class="d-flex align-items-center mb-3">
+              <div class="empty-cmd-icon bg-success bg-opacity-10">
+                <i class="bi bi-display text-success"></i>
+              </div>
+              <div class="ms-3 text-start">
+                <div class="text-white fw-semibold">RDP</div>
+                <div class="text-secondary" style="font-size: 0.8rem;">Port 3389</div>
+              </div>
+            </div>
+            <code class="empty-cmd-code text-success">cygor enum lockon rdp -f targets.txt</code>
+          </div>
+        </div>
+        <!-- VNC -->
+        <div class="col-md-6 col-lg-3">
+          <div class="empty-cmd-card">
+            <div class="d-flex align-items-center mb-3">
+              <div class="empty-cmd-icon bg-warning bg-opacity-10">
+                <i class="bi bi-pc-display text-warning"></i>
+              </div>
+              <div class="ms-3 text-start">
+                <div class="text-white fw-semibold">VNC</div>
+                <div class="text-secondary" style="font-size: 0.8rem;">Port 5900</div>
+              </div>
+            </div>
+            <code class="empty-cmd-code text-warning">cygor enum lockon vnc -f targets.txt</code>
+          </div>
+        </div>
+        <!-- X11 -->
+        <div class="col-md-6 col-lg-3">
+          <div class="empty-cmd-card">
+            <div class="d-flex align-items-center mb-3">
+              <div class="empty-cmd-icon bg-secondary bg-opacity-10">
+                <i class="bi bi-window-desktop text-purple"></i>
+              </div>
+              <div class="ms-3 text-start">
+                <div class="text-white fw-semibold">X11</div>
+                <div class="text-secondary" style="font-size: 0.8rem;">Port 6000</div>
+              </div>
+            </div>
+            <code class="empty-cmd-code" style="color: #8b5cf6;">cygor enum lockon x11 -f targets.txt</code>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="screenshotModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content bg-dark">
+      <div class="modal-header border-secondary">
+        <h6 class="modal-title text-white">
+          <span id="modalService" class="badge me-2">Service</span>
+          <span id="modalTarget">Loading...</span>
+        </h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center bg-black p-0">
+        <img id="screenshotFull" src="" alt="Full Screenshot" class="img-fluid">
+      </div>
+      <!-- Screenshot History Timeline -->
+      <div id="historySection" class="border-top border-secondary" style="display:none;">
+        <div class="px-3 py-2 d-flex align-items-center justify-content-between" style="background:#111113;">
+          <h6 class="mb-0 text-white"><i class="bi bi-clock-history me-2"></i>Screenshot History</h6>
+          <span id="historyCount" class="badge bg-secondary">0 versions</span>
+        </div>
+        <div id="historyTimeline" class="d-flex gap-2 p-3 overflow-auto" style="background:#0c0c0e; max-height:200px;"></div>
+      </div>
+      <div class="modal-footer border-secondary d-flex justify-content-between">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="modalReviewCheckbox">
+          <label class="form-check-label text-light" for="modalReviewCheckbox">Reviewed</label>
+        </div>
+        <a id="modalOpenImage" href="#" target="_blank" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-box-arrow-up-right me-1"></i>Open Image
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Stat cards clickable */
+.stat-card {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 1px solid #18181b !important;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: #3b82f6 !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+}
+
+/* Tabs styling */
+.nav-tabs {
+  border-bottom: 1px solid #27272a;
+}
+
+.nav-tabs .nav-link {
+  color: #a1a1aa;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 1rem 1.25rem;
+  transition: all 0.2s ease;
+}
+
+.nav-tabs .nav-link:hover {
+  color: #e4e4e7;
+  border-bottom-color: #3b82f6;
+}
+
+.nav-tabs .nav-link.active {
+  background: transparent;
+  color: #ffffff;
+  border-bottom: 2px solid #3b82f6;
+}
+
+/* Grid layout */
+.shots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 1.5rem;
+}
+
+.shot-card {
+  transition: opacity 0.3s ease;
+}
+
+.shot-card.hidden {
+  display: none !important;
+}
+
+.shot-tile {
+  border: 1px solid #18181b;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.shot-tile:hover {
+  border-color: #27272a;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  transform: translateY(-2px);
+}
+
+.shot-tile.border-danger {
+  border-color: #dc3545 !important;
+  box-shadow: 0 0 15px rgba(220, 53, 69, 0.3);
+}
+
+.screenshot-wrap {
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.screenshot-img {
+  width: 100%;
+  height: 320px;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.screenshot-wrap:hover .screenshot-img {
+  transform: scale(1.05);
+}
+
+/* URL bar below the image */
+.url-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #18181b;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid #27272a;
+}
+
+.url-bar .target-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 0.75rem;
+}
+
+.target-text {
+  color: #60a5fa !important;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.target-text:hover {
+  color: #93c5fd !important;
+  text-decoration: underline;
+}
+
+/* Review toggle row */
+.review-toggle {
+  background: rgba(255,255,255,0.03);
+  border-top: 1px solid #18181b;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+.review-toggle label {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Alert badge for security issues */
+.alert-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #dc3545;
+  color: white;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.info-row {
+  background: rgba(255,255,255,0.02);
+  border-top: 1px solid #18181b;
+}
+
+.thumb-fallback {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #18181b;
+  color: #52525b;
+}
+
+.thumb-fallback i {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Quick filter buttons */
+.quick-filter, .review-filter {
+  transition: all 0.2s ease;
+}
+
+.quick-filter.active, .review-filter.active {
+  background: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+  color: white !important;
+}
+
+/* Text purple for X11 icon */
+.text-purple {
+  color: #8b5cf6 !important;
+}
+
+/* Light theme */
+body.light-theme .nav-tabs {
+  border-bottom-color: #dee2e6;
+}
+
+body.light-theme .nav-tabs .nav-link {
+  color: #6c757d;
+}
+
+body.light-theme .nav-tabs .nav-link.active {
+  color: #212529;
+}
+
+body.light-theme .shot-tile {
+  background: #ffffff !important;
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme .url-bar {
+  background: #f8f9fa !important;
+  border-top-color: #dee2e6 !important;
+}
+
+body.light-theme .target-text {
+  color: #0d6efd !important;
+}
+
+body.light-theme .target-text:hover {
+  color: #0a58ca !important;
+}
+
+body.light-theme .info-row {
+  background: #f8f9fa !important;
+  border-top-color: #dee2e6 !important;
+}
+
+body.light-theme .review-toggle {
+  background: #f8f9fa !important;
+  border-top-color: #dee2e6 !important;
+}
+
+body.light-theme .card.bg-dark {
+  background: #ffffff !important;
+  border: 1px solid #dee2e6 !important;
+}
+
+body.light-theme .card-header.bg-dark {
+  background: #f8f9fa !important;
+  border-bottom-color: #dee2e6 !important;
+}
+
+body.light-theme .card-header h6 {
+  color: #212529 !important;
+}
+
+body.light-theme .form-control.bg-dark {
+  background: #ffffff !important;
+  border-color: #dee2e6 !important;
+  color: #212529 !important;
+}
+
+body.light-theme .form-control.bg-dark::placeholder {
+  color: #6c757d !important;
+}
+
+body.light-theme .status-code-filter,
+body.light-theme .specific-code-filter {
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme .status-code-filter.active,
+body.light-theme .specific-code-filter.active {
+  color: #ffffff !important;
+}
+
+/* ===== Snapshot Dropdown ===== */
+#snapshotSelect {
+  background-color: #18181b;
+  color: #e4e4e7;
+  min-width: 340px;
+}
+#snapshotSelect option {
+  background-color: #18181b;
+  color: #e4e4e7;
+  padding: 6px 8px;
+}
+body.light-theme #snapshotSelect {
+  background-color: #ffffff;
+  border-color: #ced4da;
+  color: #212529;
+}
+body.light-theme #snapshotSelect option {
+  background-color: #ffffff;
+  color: #212529;
+}
+
+/* ===== Screenshot History Timeline ===== */
+.history-thumb {
+  flex-shrink: 0;
+  width: 160px;
+  cursor: pointer;
+  border: 2px solid #27272a;
+  border-radius: 6px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+.history-thumb:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+.history-thumb.active {
+  border-color: #3b82f6;
+}
+.history-thumb img {
+  width: 100%;
+  height: 90px;
+  object-fit: cover;
+  background: #18181b;
+}
+.history-label {
+  background: #18181b;
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  color: #a1a1aa;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.history-label.current {
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+</style>
+
+<script>
+(function() {
+  const STORAGE_PREFIX = 'cygor_screenshot_review_';
+  const modal = document.getElementById('screenshotModal');
+  const modalImg = document.getElementById('screenshotFull');
+  const modalTarget = document.getElementById('modalTarget');
+  const modalService = document.getElementById('modalService');
+  const modalOpen = document.getElementById('modalOpenImage');
+  const modalReviewCheckbox = document.getElementById('modalReviewCheckbox');
+  const filterInput = document.getElementById('screenshotFilter');
+  const quickFilters = document.querySelectorAll('.quick-filter');
+  const reviewFilters = document.querySelectorAll('.review-filter');
+  const statusCodeFilters = document.querySelectorAll('.status-code-filter');
+  const specificCodeFilters = document.querySelectorAll('.specific-code-filter');
+  const statusCodeFilterCard = document.getElementById('statusCodeFilterCard');
+  const statCards = document.querySelectorAll('.stat-card');
+  const reviewedCountEl = document.getElementById('reviewedCount');
+  const totalCountEl = document.getElementById('totalCount');
+
+  let currentFilter = 'all';
+  let currentReviewFilter = 'all';
+  let currentStatusCodeFilter = 'all';
+  let currentSpecificCode = null;
+  let currentModalKey = null;
+
+  // Initialize review states from localStorage
+  function initReviewStates() {
+    document.querySelectorAll('.shot-card').forEach(card => {
+      const key = card.dataset.key;
+      if (key && localStorage.getItem(STORAGE_PREFIX + key) === '1') {
+        card.dataset.review = 'reviewed';
+        const cb = card.querySelector('.review-checkbox');
+        if (cb) cb.checked = true;
+      }
+    });
+    updateReviewCounter();
+  }
+
+  // Update review counter
+  function updateReviewCounter() {
+    const total = document.querySelectorAll('.shot-card').length;
+    const reviewed = document.querySelectorAll('.shot-card[data-review="reviewed"]').length;
+    if (reviewedCountEl) reviewedCountEl.textContent = reviewed;
+    if (totalCountEl) totalCountEl.textContent = total;
+  }
+
+  // Count status codes for web screenshots
+  function updateStatusCodeCounts() {
+    const counts = { '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0, 'unknown': 0 };
+    document.querySelectorAll('.shot-card[data-service="web"]').forEach(card => {
+      const code = parseInt(card.dataset.statusCode) || 0;
+      if (code >= 200 && code < 300) counts['2xx']++;
+      else if (code >= 300 && code < 400) counts['3xx']++;
+      else if (code >= 400 && code < 500) counts['4xx']++;
+      else if (code >= 500 && code < 600) counts['5xx']++;
+      else counts['unknown']++;
+    });
+
+    document.getElementById('count-2xx').textContent = counts['2xx'];
+    document.getElementById('count-3xx').textContent = counts['3xx'];
+    document.getElementById('count-4xx').textContent = counts['4xx'];
+    document.getElementById('count-5xx').textContent = counts['5xx'];
+    document.getElementById('count-unknown').textContent = counts['unknown'];
+  }
+
+  // Open modal
+  function openModal(wrap) {
+    const img = wrap.dataset.img;
+    const target = wrap.dataset.target;
+    const service = wrap.dataset.service;
+    currentModalKey = wrap.dataset.key;
+    const screenshotFile = wrap.dataset.screenshotFile || null;
+
+    modalImg.src = img;
+    modalTarget.textContent = target;
+    modalService.textContent = service;
+    modalService.className = 'badge me-2 bg-' + getServiceColor(service);
+    modalOpen.href = img;
+
+    // Set modal checkbox state
+    const card = wrap.closest('.shot-card');
+    modalReviewCheckbox.checked = card?.dataset.review === 'reviewed';
+
+    // Load screenshot history
+    loadHistory(screenshotFile, img);
+
+    new bootstrap.Modal(modal).show();
+  }
+
+  // Screenshot history loader
+  async function loadHistory(screenshotFile, currentImgUrl) {
+    const section = document.getElementById('historySection');
+    const timeline = document.getElementById('historyTimeline');
+    const countBadge = document.getElementById('historyCount');
+
+    timeline.innerHTML = '';
+    section.style.display = 'none';
+
+    if (!screenshotFile) return;
+
+    try {
+      const resp = await fetch(`/api/lockon/history/${encodeURIComponent(screenshotFile)}`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const history = data.history || [];
+
+      if (history.length === 0) return;
+
+      section.style.display = '';
+      countBadge.textContent = `${history.length + 1} versions`;
+
+      // Render archived versions (oldest first — already sorted by API)
+      history.forEach(h => {
+        const div = document.createElement('div');
+        div.className = 'history-thumb';
+        let ts;
+        if (h.started_at) {
+          const d = new Date(h.started_at.endsWith('Z') ? h.started_at : h.started_at + 'Z');
+          ts = isNaN(d.getTime()) ? h.timestamp : d.toLocaleString();
+        } else {
+          ts = h.timestamp.replace(/_/g, ' ');
+        }
+        div.innerHTML = `<img src="${h.screenshot_url}" alt="Archive" loading="lazy"><div class="history-label">${ts}</div>`;
+        div.addEventListener('click', () => {
+          modalImg.src = h.screenshot_url;
+          modalOpen.href = h.screenshot_url;
+          timeline.querySelectorAll('.history-thumb').forEach(t => t.classList.remove('active'));
+          div.classList.add('active');
+        });
+        timeline.appendChild(div);
+      });
+
+      // "Current" entry at the end
+      const currentDiv = document.createElement('div');
+      currentDiv.className = 'history-thumb active';
+      currentDiv.innerHTML = `<img src="${currentImgUrl}" alt="Current" loading="lazy"><div class="history-label current">Current</div>`;
+      currentDiv.addEventListener('click', () => {
+        modalImg.src = currentImgUrl;
+        modalOpen.href = currentImgUrl;
+        timeline.querySelectorAll('.history-thumb').forEach(t => t.classList.remove('active'));
+        currentDiv.classList.add('active');
+      });
+      timeline.appendChild(currentDiv);
+
+      // Scroll to the end (current version)
+      timeline.scrollLeft = timeline.scrollWidth;
+    } catch (e) {
+      console.warn('Failed to load screenshot history:', e);
+    }
+  }
+
+  // Modal review checkbox handler
+  modalReviewCheckbox?.addEventListener('change', () => {
+    if (!currentModalKey) return;
+    const card = document.querySelector(`.shot-card[data-key="${currentModalKey}"]`);
+    if (!card) return;
+    const cb = card.querySelector('.review-checkbox');
+
+    if (modalReviewCheckbox.checked) {
+      localStorage.setItem(STORAGE_PREFIX + currentModalKey, '1');
+      card.dataset.review = 'reviewed';
+      if (cb) cb.checked = true;
+    } else {
+      localStorage.removeItem(STORAGE_PREFIX + currentModalKey);
+      card.dataset.review = 'unreviewed';
+      if (cb) cb.checked = false;
+    }
+    applyFilters();
+    updateReviewCounter();
+  });
+
+  // Screenshot click handlers
+  document.querySelectorAll('.screenshot-wrap').forEach(wrap => {
+    wrap.addEventListener('click', (e) => {
+      if (e.target.classList.contains('review-checkbox')) return;
+      openModal(wrap);
+    });
+  });
+
+  // Review checkbox handlers
+  document.querySelectorAll('.review-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const card = cb.closest('.shot-card');
+      const key = card?.dataset.key;
+      if (!key) return;
+
+      if (cb.checked) {
+        localStorage.setItem(STORAGE_PREFIX + key, '1');
+        card.dataset.review = 'reviewed';
+      } else {
+        localStorage.removeItem(STORAGE_PREFIX + key);
+        card.dataset.review = 'unreviewed';
+      }
+      applyFilters();
+      updateReviewCounter();
+    });
+  });
+
+  function getServiceColor(service) {
+    switch(service?.toLowerCase()) {
+      case 'web': return 'info';
+      case 'rdp': return 'success';
+      case 'vnc': return 'warning';
+      case 'x11': return 'secondary';
+      default: return 'primary';
+    }
+  }
+
+  // Quick filters
+  quickFilters.forEach(btn => {
+    btn.addEventListener('click', () => {
+      quickFilters.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.dataset.filter;
+      applyFilters();
+    });
+  });
+
+  // Review filters
+  reviewFilters.forEach(btn => {
+    btn.addEventListener('click', () => {
+      reviewFilters.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentReviewFilter = btn.dataset.review;
+      applyFilters();
+    });
+  });
+
+  // Status code range filters (2xx, 3xx, 4xx, 5xx)
+  statusCodeFilters.forEach(btn => {
+    btn.addEventListener('click', () => {
+      statusCodeFilters.forEach(b => b.classList.remove('active'));
+      specificCodeFilters.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentStatusCodeFilter = btn.dataset.status;
+      currentSpecificCode = null;
+      applyFilters();
+    });
+  });
+
+  // Specific code filters (200, 301, 404, etc.)
+  specificCodeFilters.forEach(btn => {
+    btn.addEventListener('click', () => {
+      statusCodeFilters.forEach(b => b.classList.remove('active'));
+      specificCodeFilters.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentStatusCodeFilter = null;
+      currentSpecificCode = btn.dataset.code;
+      applyFilters();
+    });
+  });
+
+  // Stat card clicks to switch tabs and update status code filter visibility
+  statCards.forEach(card => {
+    card.addEventListener('click', () => {
+      const tab = card.dataset.tab;
+      if (tab === 'all') {
+        document.getElementById('all-tab').click();
+      } else {
+        document.getElementById(tab + '-tab')?.click();
+      }
+    });
+  });
+
+  // Tab change handler to show/hide status code filter
+  document.querySelectorAll('#screenshotTabs .nav-link').forEach(tab => {
+    tab.addEventListener('shown.bs.tab', (e) => {
+      const target = e.target.getAttribute('data-bs-target');
+      if (target === '#web-panel') {
+        statusCodeFilterCard.style.display = '';
+      } else {
+        statusCodeFilterCard.style.display = 'none';
+        // Reset status code filter when switching away from web
+        currentStatusCodeFilter = 'all';
+        currentSpecificCode = null;
+        statusCodeFilters.forEach(b => b.classList.remove('active'));
+        specificCodeFilters.forEach(b => b.classList.remove('active'));
+        document.querySelector('.status-code-filter[data-status="all"]').classList.add('active');
+      }
+      applyFilters();
+    });
+  });
+
+  // Search filter
+  filterInput?.addEventListener('input', applyFilters);
+
+  function applyFilters() {
+    const query = (filterInput?.value || '').toLowerCase().trim();
+    const activeTab = document.querySelector('#screenshotTabs .nav-link.active');
+    const isWebTab = activeTab?.getAttribute('data-bs-target') === '#web-panel';
+
+    document.querySelectorAll('.shot-card').forEach(card => {
+      const host = card.dataset.host?.toLowerCase() || '';
+      const status = card.dataset.status || '';
+      const reviewStatus = card.dataset.review || 'unreviewed';
+      const service = card.dataset.service || '';
+      const statusCode = parseInt(card.dataset.statusCode) || 0;
+
+      // Text match
+      const textMatch = !query || host.includes(query) ||
+        card.textContent.toLowerCase().includes(query);
+
+      // Status filter
+      let statusMatch = true;
+      if (currentFilter === 'success') {
+        statusMatch = status === 'success';
+      } else if (currentFilter === 'failed') {
+        statusMatch = status === 'failed';
+      }
+
+      // Review filter
+      let reviewMatch = true;
+      if (currentReviewFilter === 'reviewed') {
+        reviewMatch = reviewStatus === 'reviewed';
+      } else if (currentReviewFilter === 'unreviewed') {
+        reviewMatch = reviewStatus === 'unreviewed';
+      }
+
+      // Status code filter (only for web screenshots on web tab)
+      let statusCodeMatch = true;
+      if (isWebTab && service === 'web') {
+        if (currentSpecificCode) {
+          statusCodeMatch = statusCode === parseInt(currentSpecificCode);
+        } else if (currentStatusCodeFilter && currentStatusCodeFilter !== 'all') {
+          switch (currentStatusCodeFilter) {
+            case '2xx': statusCodeMatch = statusCode >= 200 && statusCode < 300; break;
+            case '3xx': statusCodeMatch = statusCode >= 300 && statusCode < 400; break;
+            case '4xx': statusCodeMatch = statusCode >= 400 && statusCode < 500; break;
+            case '5xx': statusCodeMatch = statusCode >= 500 && statusCode < 600; break;
+            case 'unknown': statusCodeMatch = !statusCode || statusCode < 100 || statusCode >= 600; break;
+          }
+        }
+      }
+
+      if (textMatch && statusMatch && reviewMatch && statusCodeMatch) {
+        card.classList.remove('hidden');
+      } else {
+        card.classList.add('hidden');
+      }
+    });
+  }
+
+  // Mark all visible as reviewed
+  document.getElementById('markAllReviewed')?.addEventListener('click', () => {
+    document.querySelectorAll('.shot-card:not(.hidden)').forEach(card => {
+      const key = card.dataset.key;
+      const cb = card.querySelector('.review-checkbox');
+      if (key) {
+        localStorage.setItem(STORAGE_PREFIX + key, '1');
+        card.dataset.review = 'reviewed';
+        if (cb) cb.checked = true;
+      }
+    });
+    applyFilters();
+    updateReviewCounter();
+  });
+
+  // Mark all visible as unreviewed
+  document.getElementById('markAllUnreviewed')?.addEventListener('click', () => {
+    document.querySelectorAll('.shot-card:not(.hidden)').forEach(card => {
+      const key = card.dataset.key;
+      const cb = card.querySelector('.review-checkbox');
+      if (key) {
+        localStorage.removeItem(STORAGE_PREFIX + key);
+        card.dataset.review = 'unreviewed';
+        if (cb) cb.checked = false;
+      }
+    });
+    applyFilters();
+    updateReviewCounter();
+  });
+
+  // Clear all reviews
+  document.getElementById('clearAllReviews')?.addEventListener('click', () => {
+    showConfirm('Clear Reviews', 'Clear all review states? This cannot be undone.', () => {
+      document.querySelectorAll('.shot-card').forEach(card => {
+        const key = card.dataset.key;
+        const cb = card.querySelector('.review-checkbox');
+        if (key) {
+          localStorage.removeItem(STORAGE_PREFIX + key);
+          card.dataset.review = 'unreviewed';
+          if (cb) cb.checked = false;
+        }
+      });
+      applyFilters();
+      updateReviewCounter();
+    }, 'danger');
+  });
+
+  // Initialize
+  initReviewStates();
+  updateStatusCodeCounts();
+  applyFilters();
+
+  // Hide status code filter on page load (default is All tab)
+  if (statusCodeFilterCard) statusCodeFilterCard.style.display = 'none';
+
+  // ===== Scan Snapshot Switcher =====
+  const snapshotSelect = document.getElementById('snapshotSelect');
+  const archiveBanner = document.getElementById('archiveBanner');
+  const archiveBannerLabel = document.getElementById('archiveBannerLabel');
+
+  // Guard: skip snapshot logic entirely when in empty state (no select element)
+  if (!snapshotSelect) return;
+
+  // Save the original server-rendered gallery HTML for restoring "Current"
+  const allGrid = document.getElementById('allGrid');
+  const originalAllGridHTML = allGrid ? allGrid.innerHTML : '';
+  const tabPanels = {};
+  document.querySelectorAll('#screenshotTabContent .tab-pane').forEach(pane => {
+    tabPanels[pane.id] = pane.innerHTML;
+  });
+
+  // Load available archives into the dropdown
+  (async function loadArchiveDropdown() {
+    try {
+      const resp = await fetch('/api/lockon/archives');
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const archives = data.archives || [];
+      if (archives.length === 0) {
+        snapshotSelect.parentElement.style.display = 'none';
+        return;
+      }
+      archives.forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a.timestamp;
+        let label = a.timestamp.replace(/_/g, ' ');
+        if (a.started_at) {
+          const d = new Date(a.started_at.endsWith('Z') ? a.started_at : a.started_at + 'Z');
+          if (!isNaN(d.getTime())) label = d.toLocaleString();
+        }
+        const shots = a.screenshot_count || 0;
+        opt.textContent = `${label} (${shots} screenshot${shots !== 1 ? 's' : ''})`;
+        snapshotSelect.appendChild(opt);
+      });
+    } catch (e) {
+      console.warn('Failed to load archive list:', e);
+    }
+  })();
+
+  // Handle snapshot change
+  snapshotSelect.addEventListener('change', async function() {
+    const ts = this.value;
+    if (ts === 'current') {
+      // Restore original server-rendered content
+      archiveBanner.style.setProperty('display', 'none', 'important');
+      Object.keys(tabPanels).forEach(id => {
+        const pane = document.getElementById(id);
+        if (pane) pane.innerHTML = tabPanels[id];
+      });
+      // Restore original badge/stat values
+      updateTabBadges(originalBadges.total, originalBadges.web, originalBadges.rdp,
+                      originalBadges.vnc, originalBadges.x11,
+                      originalBadges.webCount, originalBadges.rdpCount,
+                      originalBadges.vncCount, originalBadges.x11Count);
+      // Re-bind click handlers on restored elements
+      rebindGalleryHandlers();
+      initReviewStates();
+      updateStatusCodeCounts();
+      applyFilters();
+      return;
+    }
+
+    // Load archived snapshot
+    try {
+      const resp = await fetch(`/api/lockon/archives/${encodeURIComponent(ts)}`);
+      if (!resp.ok) { showAlert('Failed to load archive', 'danger'); return; }
+      const data = await resp.json();
+      renderArchiveGallery(data, ts);
+    } catch (e) {
+      console.warn('Failed to load archive:', e);
+    }
+  });
+
+  function renderArchiveGallery(data, timestamp) {
+    const items = data.items || [];
+    const meta = data.metadata || {};
+
+    // Show archive banner
+    let label = timestamp.replace(/_/g, ' ');
+    if (meta.started_at) {
+      const d = new Date(meta.started_at.endsWith('Z') ? meta.started_at : meta.started_at + 'Z');
+      if (!isNaN(d.getTime())) label = d.toLocaleString();
+    }
+    archiveBannerLabel.textContent = label;
+    archiveBanner.style.display = '';
+    archiveBanner.style.setProperty('display', 'flex', 'important');
+
+    // Group items by service
+    const groups = { web: [], rdp: [], vnc: [], x11: [] };
+    items.forEach(it => {
+      const svc = it.service || 'web';
+      if (groups[svc]) groups[svc].push(it);
+    });
+
+    // Rebuild "All" panel
+    const allPane = document.getElementById('all-panel');
+    if (allPane) {
+      let html = '<div class="shots-grid" id="allGrid">';
+      items.forEach(it => { html += buildShotCard(it); });
+      html += '</div>';
+      if (items.filter(it => !it.screenshot_failed).length === 0) {
+        html += '<div class="text-center py-5 text-secondary"><i class="bi bi-camera-slash fs-1 mb-3"></i><p>No screenshots in this archived scan.</p></div>';
+      }
+      allPane.innerHTML = html;
+    }
+
+    // Rebuild per-service panels
+    ['web', 'rdp', 'vnc', 'x11'].forEach(svc => {
+      const panelId = svc === 'web' ? 'web-panel' : svc + '-panel';
+      const pane = document.getElementById(panelId);
+      if (!pane) return;
+      const svcItems = groups[svc] || [];
+      let html = '<div class="shots-grid">';
+      svcItems.forEach(it => { html += buildShotCard(it); });
+      html += '</div>';
+      if (svcItems.length === 0) {
+        html += '<div class="text-center py-5 text-secondary"><i class="bi bi-camera-slash fs-1 mb-3"></i><p>No ' + svc.toUpperCase() + ' screenshots in this archived scan.</p></div>';
+      }
+      pane.innerHTML = html;
+    });
+
+    // Update tab badges and stat cards
+    const webSuccess = groups.web.filter(i => !i.screenshot_failed).length;
+    const rdpSuccess = groups.rdp.filter(i => !i.screenshot_failed).length;
+    const vncSuccess = groups.vnc.filter(i => !i.screenshot_failed).length;
+    const x11Success = groups.x11.filter(i => !i.screenshot_failed).length;
+    const totalSuccess = webSuccess + rdpSuccess + vncSuccess + x11Success;
+    updateTabBadges(totalSuccess, webSuccess, rdpSuccess, vncSuccess, x11Success,
+                    groups.web.length, groups.rdp.length, groups.vnc.length, groups.x11.length);
+
+    rebindGalleryHandlers();
+    initReviewStates();
+    updateStatusCodeCounts();
+    applyFilters();
+  }
+
+  // Save original badge/stat values for restoring "Current"
+  const originalBadges = {
+    total: {{ total_screenshots }},
+    web: {{ web_success }}, rdp: {{ rdp_success }},
+    vnc: {{ vnc_success }}, x11: {{ x11_success }},
+    webCount: {{ web_count }}, rdpCount: {{ rdp_count }},
+    vncCount: {{ vnc_count }}, x11Count: {{ x11_count }}
+  };
+
+  function updateTabBadges(total, web, rdp, vnc, x11, webCount, rdpCount, vncCount, x11Count) {
+    const allBadge = document.querySelector('#all-tab .badge');
+    const webBadge = document.querySelector('#web-tab .badge');
+    const rdpBadge = document.querySelector('#rdp-tab .badge');
+    const vncBadge = document.querySelector('#vnc-tab .badge');
+    const x11Badge = document.querySelector('#x11-tab .badge');
+    if (allBadge) allBadge.textContent = total;
+    if (webBadge) webBadge.textContent = web;
+    if (rdpBadge) rdpBadge.textContent = rdp;
+    if (vncBadge) vncBadge.textContent = vnc;
+    if (x11Badge) x11Badge.textContent = x11;
+
+    // Stat cards
+    const statTotal = document.querySelector('.stat-card[data-tab="all"] h3');
+    const statWeb = document.querySelector('.stat-card[data-tab="web"] h3');
+    const statRdp = document.querySelector('.stat-card[data-tab="rdp"] h3');
+    const statVnc = document.querySelector('.stat-card[data-tab="vnc"] h3');
+    const statX11 = document.querySelector('.stat-card[data-tab="x11"] h3');
+    if (statTotal) statTotal.innerHTML = total;
+    if (statWeb) statWeb.innerHTML = `${web} <small class="text-secondary fs-6">/ ${webCount}</small>`;
+    if (statRdp) statRdp.innerHTML = `${rdp} <small class="text-secondary fs-6">/ ${rdpCount}</small>`;
+    if (statVnc) statVnc.innerHTML = `${vnc} <small class="text-secondary fs-6">/ ${vncCount}</small>`;
+    if (statX11) statX11.innerHTML = `${x11} <small class="text-secondary fs-6">/ ${x11Count}</small>`;
+  }
+
+  function buildShotCard(it) {
+    const svc = it.service || 'web';
+    const failed = it.screenshot_failed;
+    const imgSrc = it.screenshot_url || '/static/no-screenshot.png';
+    const sf = it.screenshot_file || '';
+
+    // Build data attributes
+    let dataAttrs = `data-service="${svc}" data-host="${escHtml(it.host || '')}" data-status="${failed ? 'failed' : 'success'}" data-review="unreviewed"`;
+
+    let key = '';
+    let targetText = '';
+    let badgeHtml = '';
+    let infoRow = '';
+
+    if (svc === 'web') {
+      key = 'web_' + (it.url || '').replace(/[:\/]/g, '_');
+      dataAttrs += ` data-key="${escHtml(key)}" data-status-code="${it.status_code || ''}"`;
+      targetText = `<a href="${escHtml(it.url)}" target="_blank" class="target-text">${escHtml(it.url)}</a>`;
+      const sc = it.status_code || 0;
+      let badgeClass = 'secondary';
+      if (sc >= 200 && sc < 300) badgeClass = 'success';
+      else if (sc >= 300 && sc < 400) badgeClass = 'info';
+      else if (sc >= 400) badgeClass = 'warning';
+      badgeHtml = `<span class="badge bg-${badgeClass}">${sc || '?'}</span>`;
+    } else if (svc === 'rdp') {
+      key = 'rdp_' + (it.host || '') + '_' + (it.port || 3389);
+      dataAttrs += ` data-key="${escHtml(key)}"`;
+      targetText = `<span class="target-text">${escHtml(it.host)}:${it.port || 3389}</span>`;
+      badgeHtml = '<span class="badge bg-success">RDP</span>';
+      if (it.rdp_info) infoRow = `<div class="info-row px-2 py-1 text-secondary small"><i class="bi bi-info-circle me-1"></i>${escHtml((it.rdp_info || '').substring(0, 60))}</div>`;
+    } else if (svc === 'vnc') {
+      key = 'vnc_' + (it.host || '') + '_' + (it.port || 5900);
+      dataAttrs += ` data-key="${escHtml(key)}"`;
+      targetText = `<span class="target-text">${escHtml(it.host)}:${it.port || 5900}</span>`;
+      badgeHtml = '<span class="badge bg-warning">VNC</span>';
+      if (it.auth_type) infoRow = `<div class="info-row px-2 py-1 text-secondary small"><i class="bi bi-shield me-1"></i>Auth: ${escHtml(it.auth_type)}</div>`;
+    } else if (svc === 'x11') {
+      key = 'x11_' + (it.host || '') + '_' + (it.port || 6000) + '_' + (it.display || 0);
+      dataAttrs += ` data-key="${escHtml(key)}"`;
+      targetText = `<span class="target-text">${escHtml(it.host)}:${it.port || 6000} <small class="text-info">(:${it.display || 0})</small></span>`;
+      badgeHtml = '<span class="badge bg-secondary">X11</span>';
+      if (it.x11_info) infoRow = `<div class="info-row px-2 py-1 text-secondary small"><i class="bi bi-display me-1"></i>${escHtml((it.x11_info || '').substring(0, 40))}</div>`;
+    }
+
+    // Only show successful screenshots in the "All" grid (match server logic)
+    const showInAll = !failed;
+
+    return `<div class="shot-card" ${dataAttrs}>
+      <div class="shot-tile bg-dark">
+        <div class="screenshot-wrap" data-img="${escHtml(imgSrc)}" data-target="${escHtml(it.url || it.host || '')}" data-service="${escHtml(svc === 'web' ? 'Web' : svc.toUpperCase())}" data-key="${escHtml(key)}" data-screenshot-file="${escHtml(sf)}">
+          <img src="${escHtml(imgSrc)}" alt="${escHtml(it.url || it.host || '')}" class="screenshot-img">
+          ${failed ? '<div class="thumb-fallback"><i class="bi bi-camera-slash"></i></div>' : ''}
+        </div>
+        <div class="url-bar">${targetText}${badgeHtml}</div>
+        ${infoRow}
+        <div class="review-toggle">
+          <label class="form-check-label m-0"><input type="checkbox" class="form-check-input review-checkbox me-1"> <strong>Reviewed</strong></label>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function escHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str || '';
+    return div.innerHTML;
+  }
+
+  function rebindGalleryHandlers() {
+    document.querySelectorAll('.screenshot-wrap').forEach(wrap => {
+      wrap.addEventListener('click', (e) => {
+        if (e.target.classList.contains('review-checkbox')) return;
+        openModal(wrap);
+      });
+    });
+    document.querySelectorAll('.review-checkbox').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const card = cb.closest('.shot-card');
+        const key = card?.dataset.key;
+        if (!key) return;
+        if (cb.checked) {
+          localStorage.setItem(STORAGE_PREFIX + key, '1');
+          card.dataset.review = 'reviewed';
+        } else {
+          localStorage.removeItem(STORAGE_PREFIX + key);
+          card.dataset.review = 'unreviewed';
+        }
+        applyFilters();
+        updateReviewCounter();
+      });
+    });
+  }
+})();
+</script>
+{% endblock %}

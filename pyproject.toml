@@ -1,0 +1,171 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cygor"
+version = "1.0.0"
+description = "Cygor: Modular Asset Discovery Framework - scan, parse, enumerate, and assess"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "tjnull" }]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Information Technology",
+  "License :: OSI Approved :: Apache Software License",
+  "Topic :: Security",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Framework :: FastAPI",
+  "Operating System :: POSIX :: Linux",
+]
+
+dependencies = [
+  # Core
+  "colorama>=0.4.6",
+  "rich>=13.7.0",    # TUI progress bars and tables for fingerprint sync
+  "python-libnmap>=0.7.3",
+  "requests>=2.32.0",
+  "aiohttp>=3.10.0",  # Async HTTP for fingerprint database sync
+  "playwright>=1.50",
+  # Native (pure-Python) screenshot backends for lockon: no external tools or
+  # local display needed -- asyncvnc (VNC), python-xlib (X11), aardwolf (RDP).
+  "asyncvnc>=1.1.0",
+  "python-xlib>=0.31",
+  "aardwolf>=0.2.10",
+  "tabulate>=0.9.0",
+  "paramiko>=4.0.0",
+  'py-xdrlib; python_version >= "3.13"',
+
+  # Web Interface
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.34",
+  "jinja2>=3.1.4",
+  "python-multipart>=0.0.18",
+
+  # Authentication (token-based simple auth + JWT)
+  "python-jose[cryptography]>=3.3.0",  # JWT for simple_auth.py
+  "passlib[bcrypt]>=1.7.4",            # password hashing primitives
+  "bcrypt>=4.2.0",
+  "httpx>=0.28.0",
+  "cryptography>=44.0.0",              # SSH key handling, jumpbox config encryption
+  "ldap3>=2.9.0",                      # LDAP/AD credential testing in CredRecon
+  "pywinrm>=0.4.3",                    # WinRM authentication
+  "gssapi>=1.8.0",                     # Kerberos/GSSAPI for WinRM/SPNEGO
+  "pyOpenSSL>=24.0.0",                 # required for LDAPS in credrecon
+
+  # Database (dual support)
+  "sqlmodel>=0.0.22",
+  "SQLAlchemy[asyncio]>=2.0.36",
+  "psycopg[async,binary]>=3.2.4",   # async + sync support for APScheduler
+  "aiosqlite>=0.20.0",
+
+  # Scheduling
+  "APScheduler>=3.11.0",
+  "psutil>=6.1.0",
+  "pytz>=2024.2",
+
+  # Parsing & IO
+  "beautifulsoup4>=4.12.3",  # HTML parsing for credential sources
+  "lxml>=5.3",
+  "watchfiles>=1.0.0",
+  "PyYAML>=6.0.1",
+  "pandas>=2.2",
+  "openpyxl>=3.1",
+
+  # Report Generation (markdown / DOCX / PDF / PPTX export, charts)
+  "weasyprint>=63.0",       # HTML → PDF
+  "python-docx>=1.1.2",     # DOCX export
+  "python-pptx>=1.0.2",     # PPTX export
+  "Pillow>=11.0.0",         # Image processing for reports
+  "matplotlib>=3.9.0",      # Charts for reports
+
+  # NFS Client (pinned to specific commit - no PyPI release available)
+  # Source: https://github.com/Pennyw0rth/NfsClient - fork with Python 3.x fixes
+  # If this breaks, re-check the repo for newer commits or vendored alternative
+  "pyNfsClient @ git+https://github.com/Pennyw0rth/NfsClient.git@a8fea2c163bf665dc6a8e35bb50e7baf81e2c6ed",
+]
+
+[project.optional-dependencies]
+postgres = [
+  "psycopg[async]>=3.2.1"
+]
+sqlite = [
+  "aiosqlite>=0.19.0"
+]
+dev = [
+  "alembic>=1.14.0",  # optional schema migration support
+  "pytest>=8.3.0",
+  "httpx>=0.27.0"
+]
+mssql = [
+  "aioodbc>=0.4.0",
+  "pyodbc>=4.0.30",
+]
+mysql = [
+  "asyncmy>=0.2.5",
+]
+oracle = [
+  "oracledb>=2.0.0",
+]
+all-databases = [
+  "aioodbc>=0.4.0",
+  "pyodbc>=4.0.30",
+  "asyncmy>=0.2.5",
+  "oracledb>=2.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/tjnull/cygor"
+Repository = "https://github.com/tjnull/cygor"
+Issues = "https://github.com/tjnull/cygor/issues"
+
+[project.scripts]
+cygor = "cygor.cli:main"
+
+# -------------------------------------------------------------------
+# Pytest configuration
+# -------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+# -------------------------------------------------------------------
+# Package discovery rules
+# -------------------------------------------------------------------
+[tool.setuptools.packages.find]
+include = ["cygor", "cygor.*"]
+exclude = ["build", "dist", "*.egg-info"]
+
+# -------------------------------------------------------------------
+# Include templates, static files, and other assets
+# -------------------------------------------------------------------
+[tool.setuptools.package-data]
+"cygor.webapp" = [
+  "templates/*.html",
+  "templates/**/*.html",
+  "static/*",
+  "static/**/*"
+]
+"cygor.wiki" = [
+  "*.md"
+]
+"cygor.credrecon" = [
+  "*.yaml",
+  "*.yml"
+]
+"cygor.credrecon.credentials" = [
+  "builtin/*.yaml",
+  "builtin/*.yml"
+]
+"cygor.credrecon.badkeys" = [
+  "*.yaml",
+  "keys/*.key"
+]

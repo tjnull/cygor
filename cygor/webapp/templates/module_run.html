@@ -1,0 +1,1111 @@
+{% extends "base.html" %}
+{% block content %}
+
+
+<div class="container-fluid py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-10 col-xl-8">
+
+      <!-- Page header -->
+      <div class="cy-page-header">
+        <a href="/tasks" class="cy-btn cy-btn-icon" title="Back to Tasks">
+          <i class="bi bi-arrow-left"></i>
+        </a>
+        <h1><i class="bi bi-gear-fill"></i>Run Enumeration Module</h1>
+        <span class="cy-page-subtitle">Execute a custom module against targets</span>
+      </div>
+
+      <!-- Module Form -->
+      <div class="card bg-dark">
+        <div class="card-body">
+          <form id="moduleForm">
+
+            <!-- Module Selection -->
+            <div class="mb-4">
+              <label for="moduleName" class="form-label fw-bold">
+                <i class="bi bi-plugin me-2"></i>Select Module
+              </label>
+              <select class="form-select bg-dark text-light border-secondary" id="moduleName" required>
+                <option value="">-- Choose a module --</option>
+                {% if request.state.modules %}
+                  {% for mod in request.state.modules %}
+                    <option value="{{ mod.slug }}">{{ mod.name }}</option>
+                  {% endfor %}
+                {% else %}
+                  <option value="lockon">Lockon (Screenshot Capture)</option>
+                  <option value="smbexplorer">SMB Explorer</option>
+                  <option value="nfsexplorer">NFS Explorer</option>
+                {% endif %}
+              </select>
+              <div class="form-text">Choose which enumeration module to run</div>
+            </div>
+
+            <!-- Module Descriptions (Dynamic) -->
+            <div id="moduleDescriptions" class="mb-4">
+              <div class="module-desc" data-module="lockon" style="display:none;">
+                <div class="alert alert-info border-0">
+                  <h6 class="alert-heading">
+                    <i class="bi bi-camera me-2"></i>Lockon - Screenshot Capture
+                  </h6>
+                  <p class="mb-0 small">
+                    Captures screenshots of HTTP/HTTPS, RDP, VNC, and X11 services. Uses Playwright with WebKit (default),
+                    Chromium, or Firefox for web screenshots and protocol-specific tools for remote desktop services.
+                    Select the protocol below and provide targets in the appropriate format
+                    (e.g., <code>http://IP:PORT</code> for web, <code>IP:PORT</code> for RDP/VNC).
+                  </p>
+                </div>
+              </div>
+              <div class="module-desc" data-module="smbexplorer" style="display:none;">
+                <div class="alert alert-info border-0">
+                  <h6 class="alert-heading">
+                    <i class="bi bi-hdd-network me-2"></i>SMB Explorer
+                  </h6>
+                  <p class="mb-0 small">
+                    Enumerates SMB shares, permissions, and accessible files on Windows/Samba hosts.
+                    Identifies weak or misconfigured access. Targets should be IP addresses or hostnames.
+                  </p>
+                </div>
+              </div>
+              <div class="module-desc" data-module="nfsexplorer" style="display:none;">
+                <div class="alert alert-info border-0">
+                  <h6 class="alert-heading">
+                    <i class="bi bi-folder-symlink me-2"></i>NFS Explorer
+                  </h6>
+                  <p class="mb-0 small">
+                    Interacts with NFS exports to analyze access levels, test UID/GID mappings, and uncover
+                    insecure configurations. Targets should be IP addresses with NFS service.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Targets Input -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                <i class="bi bi-file-earmark-text me-2"></i>Targets File
+              </label>
+              <div class="mb-3">
+                <div class="btn-group w-100" role="group">
+                  <input type="radio" class="btn-check" name="targetFileMode" id="targetFileExisting" value="existing" checked>
+                  <label class="btn btn-outline-secondary" for="targetFileExisting">
+                    <i class="bi bi-folder me-2"></i>Existing Hostlist
+                  </label>
+
+                  <input type="radio" class="btn-check" name="targetFileMode" id="targetFileUpload" value="upload">
+                  <label class="btn btn-outline-secondary" for="targetFileUpload">
+                    <i class="bi bi-cloud-upload me-2"></i>Upload File
+                  </label>
+
+                  <input type="radio" class="btn-check" name="targetFileMode" id="targetFileBrowse" value="browse">
+                  <label class="btn btn-outline-secondary" for="targetFileBrowse">
+                    <i class="bi bi-folder2-open me-2"></i>Browse Path
+                  </label>
+                </div>
+              </div>
+
+              <div id="existingFileDiv">
+                <div class="d-flex gap-2 mb-2">
+                  <select class="form-select bg-dark text-light border-secondary flex-grow-1" id="targetsFileSelect">
+                    <option value="">-- Select a parsed hostlist --</option>
+                    {% if available_hostlists %}
+                      <optgroup label="HTTP/HTTPS Services">
+                        {% for key, info in available_hostlists.items() if key in ['http', 'https', 'http-https'] %}
+                          <option value="{{ info.path }}">{{ info.label }}{% if info.count %} ({{ info.count }} hosts){% endif %}</option>
+                        {% endfor %}
+                      </optgroup>
+                      <optgroup label="File Sharing">
+                        {% for key, info in available_hostlists.items() if key in ['smb', 'nfs', 'ftp'] %}
+                          <option value="{{ info.path }}">{{ info.label }}{% if info.count %} ({{ info.count }} hosts){% endif %}</option>
+                        {% endfor %}
+                      </optgroup>
+                      <optgroup label="Remote Access">
+                        {% for key, info in available_hostlists.items() if key in ['ssh', 'rdp', 'vnc'] %}
+                          <option value="{{ info.path }}">{{ info.label }}{% if info.count %} ({{ info.count }} hosts){% endif %}</option>
+                        {% endfor %}
+                      </optgroup>
+                      <optgroup label="Discovery Results">
+                        {% for key, info in available_hostlists.items() if key.startswith('discovery_') %}
+                          <option value="{{ info.path }}">{{ info.label }}{% if info.count %} ({{ info.count }} hosts){% endif %}</option>
+                        {% endfor %}
+                      </optgroup>
+                    {% else %}
+                      <option value="" disabled>No hostlists found in workspace</option>
+                    {% endif %}
+                  </select>
+                  <button type="button" class="btn btn-outline-secondary" id="refreshHostlistsBtn" title="Refresh hostlist">
+                    <i class="bi bi-arrow-clockwise"></i>
+                  </button>
+                </div>
+                <div class="form-text" id="hostlistHelpText">
+                  {% if available_hostlists %}
+                    Available parsed hostlists from your workspace
+                  {% else %}
+                    No parsed hostlists found. Run "cygor parse" to generate them.
+                  {% endif %}
+                </div>
+              </div>
+
+              <div id="uploadFileDiv" style="display:none;">
+                <div id="fileDropZone" class="border border-secondary rounded p-4 text-center" style="border-style: dashed !important; cursor: pointer; background: rgba(255,255,255,0.02);">
+                  <i class="bi bi-cloud-upload fs-1 text-secondary mb-2"></i>
+                  <p class="text-light mb-2">Drag and drop a file here, or click to browse</p>
+                  <p class="text-secondary small mb-0">Accepts .txt, .list, or any text file with targets (one per line)</p>
+                  <input type="file" id="targetsFileInput" accept=".txt,.list" style="display: none;">
+                </div>
+                <div id="fileNameDisplay" class="mt-2" style="display:none;">
+                  <div class="alert alert-info d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-file-earmark-text me-2"></i><span id="selectedFileName"></span></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="clearFileBtn">
+                      <i class="bi bi-x"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div id="browseFileDiv" style="display:none;">
+                <div class="input-group">
+                  <input type="text" class="form-control bg-dark text-light border-secondary"
+                         id="targetsFileBrowse" placeholder="Click browse to select a file" readonly>
+                  <button class="btn btn-outline-secondary" type="button" id="browseFileBtn">
+                    <i class="bi bi-folder2-open me-1"></i>Browse
+                  </button>
+                  <button class="btn btn-outline-secondary" type="button" id="clearBrowseBtn" title="Clear selection">
+                    <i class="bi bi-x"></i>
+                  </button>
+                </div>
+                <div class="form-text">Browse your system to select a targets file</div>
+                <input type="file" id="filePathInput" accept=".txt,.list" style="display: none;">
+              </div>
+            </div>
+
+            <!-- Module Options (Dynamic) -->
+            <div class="mb-4" id="moduleOptionsSection" style="display:none;">
+              <label class="form-label fw-bold fs-5 mb-3">
+                <i class="bi bi-sliders me-2"></i>Module Options
+              </label>
+              <div class="card bg-dark border-secondary">
+                <div class="card-body" id="moduleOptionsContainer">
+                  <!-- Options will be dynamically inserted here -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Advanced Options (Collapsible) -->
+            <div class="mb-4">
+              <a class="text-decoration-none" data-bs-toggle="collapse" href="#advancedOptions">
+                <i class="bi bi-chevron-down me-2"></i>Advanced Options
+              </a>
+              <div class="collapse" id="advancedOptions">
+                <div class="card bg-dark border-secondary mt-3">
+                  <div class="card-body">
+                    <div class="mb-3">
+                      <label for="outputDir" class="form-label">Output Directory</label>
+                      <div class="input-group">
+                        <input type="text" class="form-control bg-dark text-light border-secondary"
+                               id="outputDir" placeholder="Leave empty to use workspace/default" readonly>
+                        <button class="btn btn-outline-secondary" type="button" id="browseOutputDirBtn">
+                          <i class="bi bi-folder2-open me-1"></i>Browse
+                        </button>
+                        <button class="btn btn-outline-secondary" type="button" id="clearOutputDirBtn" title="Clear selection">
+                          <i class="bi bi-x"></i>
+                        </button>
+                      </div>
+                      <div class="form-text">Custom output directory (defaults to results/cygor-enumeration-modules/)</div>
+                      <input type="file" id="outputDirInput" webkitdirectory directory style="display: none;">
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Submit Buttons -->
+            <div class="d-flex justify-content-between align-items-center">
+              <a href="/tasks" class="btn btn-outline-secondary">Cancel</a>
+              <button type="submit" class="btn btn-success px-4">
+                <i class="bi bi-play-circle me-2"></i>Run Module
+              </button>
+            </div>
+
+          </form>
+        </div>
+      </div>
+
+      <!-- Help Card -->
+      <div class="card bg-dark border-secondary mt-4">
+        <div class="card-body">
+          <h5 class="card-title mb-3" style="font-size: 1.25rem; font-weight: 600;">
+            <i class="bi bi-info-circle me-2"></i>Module Requirements
+          </h5>
+          <div class="table-responsive">
+            <table class="table table-dark table-borderless mb-0 module-requirements-table">
+              <thead>
+                <tr class="text-light">
+                  <th style="font-size: 1.05rem; font-weight: 600; padding: 0.75rem 1rem;">Module</th>
+                  <th style="font-size: 1.05rem; font-weight: 600; padding: 0.75rem 1rem;">Target Format</th>
+                  <th style="font-size: 1.05rem; font-weight: 600; padding: 0.75rem 1rem;">Dependencies</th>
+                </tr>
+              </thead>
+              <tbody class="text-light">
+                <tr>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;"><strong>Lockon</strong></td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;">
+                    <code class="target-format-code">http://IP:PORT</code> (web),
+                    <code class="target-format-code">IP:PORT</code> (RDP/VNC/X11)
+                  </td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;">Playwright + WebKit/Chromium/Firefox (web), xfreerdp (RDP), vncsnapshot (VNC)</td>
+                </tr>
+                <tr>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;"><strong>SMB Explorer</strong></td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;"><code class="target-format-code">192.168.1.1</code> or <code class="target-format-code">hostname</code></td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;">smbmap</td>
+                </tr>
+                <tr>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;"><strong>NFS Explorer</strong></td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;"><code class="target-format-code">192.168.1.1</code></td>
+                  <td style="font-size: 1rem; padding: 0.875rem 1rem; vertical-align: middle;">pyNfsClient</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Success Modal -->
+<div class="modal fade" id="cygorSuccessModal" tabindex="-1" aria-labelledby="cygorSuccessModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-success">
+      <div class="modal-header border-success">
+        <h5 class="modal-title text-white" id="cygorSuccessModalLabel">
+          <i class="bi bi-check-circle-fill me-2 text-success"></i>Success
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="cygorSuccessMessage"></p>
+      </div>
+      <div class="modal-footer border-success">
+        <button type="button" class="btn btn-success" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Error Modal -->
+<div class="modal fade" id="cygorErrorModal" tabindex="-1" aria-labelledby="cygorErrorModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-danger">
+      <div class="modal-header border-danger">
+        <h5 class="modal-title text-white" id="cygorErrorModalLabel">
+          <i class="bi bi-exclamation-triangle-fill me-2 text-danger"></i>Error
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="cygorErrorMessage"></p>
+      </div>
+      <div class="modal-footer border-danger">
+        <button type="button" class="btn btn-danger" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Module Requirements Table Styling */
+.module-requirements-table {
+  font-size: 1rem !important;
+}
+
+.module-requirements-table tbody td {
+  font-size: 1rem !important;
+  line-height: 1.6;
+}
+
+.module-requirements-table code.target-format-code {
+  font-size: 1rem !important;
+  font-family: 'Courier New', 'Monaco', 'Consolas', monospace;
+  background: rgba(255, 20, 147, 0.2) !important;
+  color: #ff69b4 !important;
+  padding: 0.4rem 0.6rem !important;
+  border-radius: 0.25rem !important;
+  font-weight: 600 !important;
+  border: 1px solid rgba(255, 20, 147, 0.3) !important;
+}
+
+.module-requirements-table tbody td strong {
+  font-size: 1.05rem !important;
+  font-weight: 600 !important;
+  color: #ffffff !important;
+}
+
+/* Light theme overrides for Module Requirements */
+body.light-theme .module-requirements-table {
+  background: #ffffff !important;
+}
+
+body.light-theme .module-requirements-table thead th {
+  color: #212529 !important;
+  background: #f8f9fa !important;
+}
+
+body.light-theme .module-requirements-table tbody td {
+  color: #212529 !important;
+  background: #ffffff !important;
+}
+
+body.light-theme .module-requirements-table tbody td strong {
+  color: #212529 !important;
+}
+
+body.light-theme .module-requirements-table code.target-format-code {
+  background: rgba(255, 20, 147, 0.15) !important;
+  color: #c71585 !important;
+  border-color: rgba(255, 20, 147, 0.25) !important;
+}
+
+/* Enhanced readability for form text */
+.form-text {
+  color: #adb5bd !important;
+  font-size: 0.875rem !important;
+  font-weight: 400 !important;
+}
+
+/* Enhanced input field styling for browse mode */
+#targetsFileBrowse,
+#outputDir {
+  background-color: #1a1d23 !important;
+  color: #ffffff !important;
+  border-color: #495057 !important;
+  font-family: 'Courier New', monospace !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+/* Spin animation for refresh button */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ===== Light Theme Overrides ===== */
+body.light-theme #moduleOptionsContainer .form-control,
+body.light-theme #moduleOptionsContainer .form-select {
+  background-color: #ffffff !important;
+  color: #212529 !important;
+  border-color: rgba(0,0,0,0.2) !important;
+}
+
+body.light-theme #moduleOptionsContainer .form-control:focus,
+body.light-theme #moduleOptionsContainer .form-select:focus {
+  background-color: #ffffff !important;
+  color: #212529 !important;
+  border-color: #0d6efd !important;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+}
+
+body.light-theme #moduleOptionsContainer .form-control::placeholder {
+  color: #6c757d !important;
+}
+
+body.light-theme #moduleOptionsContainer .form-text {
+  color: #6c757d !important;
+}
+
+body.light-theme #moduleOptionsContainer .form-check-label {
+  color: #212529 !important;
+}
+
+body.light-theme #moduleOptionsSection .card {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,0.15) !important;
+}
+
+body.light-theme #moduleOptionsSection .form-label {
+  color: #212529 !important;
+}
+
+body.light-theme .module-desc .alert {
+  background: #e7f3ff !important;
+  border-color: rgba(13,110,253,0.2) !important;
+  color: #084298 !important;
+}
+
+body.light-theme .module-desc .alert-heading {
+  color: #052c65 !important;
+}
+</style>
+
+<script>
+// Global variables to store uploaded file content, path, and module configs
+let uploadedFileContent = null;
+let selectedFilePath = null;
+let moduleConfigs = {};
+
+// ========== Fetch Module Configurations ==========
+async function loadModuleConfigs() {
+  try {
+    const response = await fetch('/api/module-configs');
+    if (!response.ok) throw new Error('Failed to fetch module configs');
+    moduleConfigs = await response.json();
+
+    // If a module is already selected when configs arrive, render its options
+    const currentModule = document.getElementById('moduleName').value;
+    if (currentModule) {
+      renderModuleOptions(currentModule);
+    }
+  } catch (error) {
+    console.error('Error loading module configs:', error);
+    const optionsContainer = document.getElementById('moduleOptionsContainer');
+    if (optionsContainer) {
+      document.getElementById('moduleOptionsSection').style.display = 'block';
+      optionsContainer.innerHTML = '<div class="alert alert-warning"><i class="bi bi-exclamation-triangle me-2"></i>Failed to load module configurations. Please refresh the page.</div>';
+    }
+  }
+}
+
+// Load module configs on page load
+document.addEventListener('DOMContentLoaded', () => {
+  loadModuleConfigs();
+});
+
+// ========== Refresh Hostlists Functionality ==========
+async function refreshHostlists() {
+  const refreshBtn = document.getElementById('refreshHostlistsBtn');
+  const selectEl = document.getElementById('targetsFileSelect');
+  const helpText = document.getElementById('hostlistHelpText');
+
+  // Show loading state
+  const originalIcon = refreshBtn.innerHTML;
+  refreshBtn.disabled = true;
+  refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
+  refreshBtn.querySelector('i').style.animation = 'spin 1s linear infinite';
+
+  try {
+    const response = await fetch('/api/hostlists');
+    if (!response.ok) throw new Error('Failed to fetch hostlists');
+
+    const hostlists = await response.json();
+
+    // Save current selection
+    const currentValue = selectEl.value;
+
+    // Clear and rebuild dropdown
+    selectEl.innerHTML = '<option value="">-- Select a parsed hostlist --</option>';
+
+    if (Object.keys(hostlists).length > 0) {
+      // HTTP/HTTPS Services
+      const httpGroup = document.createElement('optgroup');
+      httpGroup.label = 'HTTP/HTTPS Services';
+      ['http', 'https', 'http-https'].forEach(key => {
+        if (hostlists[key]) {
+          const opt = document.createElement('option');
+          opt.value = hostlists[key].path;
+          opt.textContent = hostlists[key].label + (hostlists[key].count ? ` (${hostlists[key].count} hosts)` : '');
+          httpGroup.appendChild(opt);
+        }
+      });
+      if (httpGroup.children.length > 0) selectEl.appendChild(httpGroup);
+
+      // File Sharing
+      const fileGroup = document.createElement('optgroup');
+      fileGroup.label = 'File Sharing';
+      ['smb', 'nfs', 'ftp'].forEach(key => {
+        if (hostlists[key]) {
+          const opt = document.createElement('option');
+          opt.value = hostlists[key].path;
+          opt.textContent = hostlists[key].label + (hostlists[key].count ? ` (${hostlists[key].count} hosts)` : '');
+          fileGroup.appendChild(opt);
+        }
+      });
+      if (fileGroup.children.length > 0) selectEl.appendChild(fileGroup);
+
+      // Remote Access
+      const remoteGroup = document.createElement('optgroup');
+      remoteGroup.label = 'Remote Access';
+      ['ssh', 'rdp', 'vnc', 'telnet', 'winrm'].forEach(key => {
+        if (hostlists[key]) {
+          const opt = document.createElement('option');
+          opt.value = hostlists[key].path;
+          opt.textContent = hostlists[key].label + (hostlists[key].count ? ` (${hostlists[key].count} hosts)` : '');
+          remoteGroup.appendChild(opt);
+        }
+      });
+      if (remoteGroup.children.length > 0) selectEl.appendChild(remoteGroup);
+
+      // Databases
+      const dbGroup = document.createElement('optgroup');
+      dbGroup.label = 'Databases';
+      ['mysql', 'postgres', 'mssql', 'mongodb', 'redis'].forEach(key => {
+        if (hostlists[key]) {
+          const opt = document.createElement('option');
+          opt.value = hostlists[key].path;
+          opt.textContent = hostlists[key].label + (hostlists[key].count ? ` (${hostlists[key].count} hosts)` : '');
+          dbGroup.appendChild(opt);
+        }
+      });
+      if (dbGroup.children.length > 0) selectEl.appendChild(dbGroup);
+
+      // Other Services
+      const otherGroup = document.createElement('optgroup');
+      otherGroup.label = 'Other Services';
+      ['dns', 'proxmox'].forEach(key => {
+        if (hostlists[key]) {
+          const opt = document.createElement('option');
+          opt.value = hostlists[key].path;
+          opt.textContent = hostlists[key].label + (hostlists[key].count ? ` (${hostlists[key].count} hosts)` : '');
+          otherGroup.appendChild(opt);
+        }
+      });
+      if (otherGroup.children.length > 0) selectEl.appendChild(otherGroup);
+
+      // Discovery Results
+      const discoveryGroup = document.createElement('optgroup');
+      discoveryGroup.label = 'Discovery Results';
+      Object.keys(hostlists).forEach(key => {
+        if (key.startsWith('discovery_')) {
+          const opt = document.createElement('option');
+          opt.value = hostlists[key].path;
+          opt.textContent = hostlists[key].label + (hostlists[key].count ? ` (${hostlists[key].count} hosts)` : '');
+          discoveryGroup.appendChild(opt);
+        }
+      });
+      if (discoveryGroup.children.length > 0) selectEl.appendChild(discoveryGroup);
+
+      helpText.textContent = `Available parsed hostlists from your workspace (${Object.keys(hostlists).length} found)`;
+      helpText.classList.remove('text-danger');
+
+      // Restore selection if it still exists
+      if (currentValue) {
+        selectEl.value = currentValue;
+      }
+    } else {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.disabled = true;
+      opt.textContent = 'No hostlists found in workspace';
+      selectEl.appendChild(opt);
+      helpText.textContent = 'No parsed hostlists found. Run "cygor parse" to generate them.';
+    }
+
+  } catch (error) {
+    console.error('Error refreshing hostlists:', error);
+    helpText.textContent = 'Error loading hostlists. Please try again.';
+    helpText.classList.add('text-danger');
+    helpText.classList.remove('text-muted');
+  } finally {
+    // Reset button state
+    refreshBtn.disabled = false;
+    refreshBtn.innerHTML = originalIcon;
+  }
+}
+
+// Attach refresh handler
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('refreshHostlistsBtn').addEventListener('click', refreshHostlists);
+
+  // Auto-refresh hostlists when page gains focus (user switches back to tab)
+  window.addEventListener('focus', () => {
+    console.log('Page focused - refreshing hostlists...');
+    refreshHostlists();
+  });
+
+  // Optional: Auto-refresh every 30 seconds if user wants real-time updates
+  // Uncomment the line below to enable periodic auto-refresh
+  // setInterval(refreshHostlists, 30000);
+});
+
+// ========== Dynamic Module Options Rendering ==========
+function renderModuleOptions(moduleName) {
+  const container = document.getElementById('moduleOptionsContainer');
+  const section = document.getElementById('moduleOptionsSection');
+
+  // Clear existing options
+  container.innerHTML = '';
+
+  // Hide section if no module selected
+  if (!moduleName) {
+    section.style.display = 'none';
+    return;
+  }
+
+  // If configs haven't loaded yet, show loading indicator
+  if (!moduleConfigs[moduleName]) {
+    if (Object.keys(moduleConfigs).length === 0) {
+      // Configs still loading
+      section.style.display = 'block';
+      container.innerHTML = '<div class="text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading module options...</div>';
+    } else {
+      // Configs loaded but this module has no options
+      section.style.display = 'none';
+    }
+    return;
+  }
+
+  // Show section
+  section.style.display = 'block';
+
+  const config = moduleConfigs[moduleName];
+
+  // Render each option
+  config.options.forEach(option => {
+    const optionDiv = document.createElement('div');
+    optionDiv.className = 'mb-3';
+    // Tag conditional options with data attributes for show/hide logic
+    if (option.show_when) {
+      optionDiv.dataset.showWhen = JSON.stringify(option.show_when);
+    }
+
+    let inputHTML = '';
+
+    switch (option.type) {
+      case 'text':
+      case 'password':
+        inputHTML = `
+          <label for="opt_${option.name}" class="form-label fw-semibold">${option.label}</label>
+          <input type="${option.type}"
+                 class="form-control bg-dark text-light border-secondary"
+                 id="opt_${option.name}"
+                 name="${option.name}"
+                 placeholder="${option.default || ''}"
+                 ${option.pattern ? `pattern="${option.pattern}"` : ''}
+                 ${option.default ? `value="${option.default}"` : ''}>
+          <div class="form-text">${option.help}</div>
+        `;
+        break;
+
+      case 'number':
+        inputHTML = `
+          <label for="opt_${option.name}" class="form-label fw-semibold">${option.label}</label>
+          <input type="number"
+                 class="form-control bg-dark text-light border-secondary"
+                 id="opt_${option.name}"
+                 name="${option.name}"
+                 ${option.min !== undefined ? `min="${option.min}"` : ''}
+                 ${option.max !== undefined ? `max="${option.max}"` : ''}
+                 ${option.step !== undefined ? `step="${option.step}"` : ''}
+                 placeholder="${option.default || ''}">
+          <div class="form-text">${option.help}</div>
+        `;
+        break;
+
+      case 'checkbox':
+        inputHTML = `
+          <div class="form-check form-switch">
+            <input class="form-check-input"
+                   type="checkbox"
+                   id="opt_${option.name}"
+                   name="${option.name}"
+                   ${option.default ? 'checked' : ''}>
+            <label class="form-check-label fw-semibold" for="opt_${option.name}">
+              ${option.label}
+            </label>
+          </div>
+          <div class="form-text">${option.help}</div>
+        `;
+        break;
+
+      case 'select':
+        const choices = option.choices.map(choice =>
+          `<option value="${choice.value}" ${choice.value === option.default ? 'selected' : ''}>
+            ${choice.label}
+          </option>`
+        ).join('');
+
+        inputHTML = `
+          <label for="opt_${option.name}" class="form-label fw-semibold">${option.label}</label>
+          <select class="form-select bg-dark text-light border-secondary"
+                  id="opt_${option.name}"
+                  name="${option.name}">
+            ${choices}
+          </select>
+          <div class="form-text">${option.help}</div>
+        `;
+        break;
+    }
+
+    optionDiv.innerHTML = inputHTML;
+    container.appendChild(optionDiv);
+  });
+
+  // Apply conditional visibility and attach change listeners
+  applyShowWhenVisibility(container);
+}
+
+/**
+ * Show/hide options based on show_when rules.
+ * Each option with data-show-when='{"field": ["val1","val2"]}' is only
+ * visible when the controlling field's current value is in the list.
+ */
+function applyShowWhenVisibility(container) {
+  const conditionalDivs = container.querySelectorAll('[data-show-when]');
+  if (conditionalDivs.length === 0) return;
+
+  // Collect all controlling field names
+  const controllingFields = new Set();
+  conditionalDivs.forEach(div => {
+    const rules = JSON.parse(div.dataset.showWhen);
+    Object.keys(rules).forEach(field => controllingFields.add(field));
+  });
+
+  // Toggle visibility based on current values
+  function updateVisibility() {
+    conditionalDivs.forEach(div => {
+      const rules = JSON.parse(div.dataset.showWhen);
+      let visible = true;
+      for (const [field, allowedValues] of Object.entries(rules)) {
+        const el = document.getElementById(`opt_${field}`);
+        const currentVal = el ? el.value : '';
+        if (!allowedValues.includes(currentVal)) {
+          visible = false;
+          break;
+        }
+      }
+      div.style.display = visible ? '' : 'none';
+    });
+  }
+
+  // Attach change listeners on controlling fields
+  controllingFields.forEach(field => {
+    const el = document.getElementById(`opt_${field}`);
+    if (el) {
+      el.addEventListener('change', updateVisibility);
+    }
+  });
+
+  // Initial visibility pass
+  updateVisibility();
+}
+
+// Show module description and render options based on selection
+document.getElementById('moduleName').addEventListener('change', (e) => {
+  const moduleName = e.target.value;
+
+  // Update description display
+  let descMatched = false;
+  document.querySelectorAll('.module-desc').forEach(desc => {
+    const matches = desc.dataset.module === moduleName;
+    desc.style.display = matches ? 'block' : 'none';
+    if (matches) descMatched = true;
+  });
+
+  // For plugins (which have no hardcoded description block), inject one
+  // from the config so the user sees what the plugin claims to do.
+  let pluginDesc = document.getElementById('pluginRuntimeDesc');
+  if (!descMatched && moduleName && moduleConfigs[moduleName] && moduleConfigs[moduleName].description) {
+    if (!pluginDesc) {
+      pluginDesc = document.createElement('div');
+      pluginDesc.id = 'pluginRuntimeDesc';
+      pluginDesc.className = 'alert alert-info border-0';
+      document.getElementById('moduleDescriptions').appendChild(pluginDesc);
+    }
+    const cfg = moduleConfigs[moduleName];
+    pluginDesc.innerHTML = `
+      <h6 class="alert-heading"><i class="bi bi-puzzle me-2"></i>${cfg.name} <span class="badge bg-info ms-2">plugin</span></h6>
+      <p class="mb-0 small">${cfg.description}</p>
+    `;
+    pluginDesc.style.display = 'block';
+  } else if (pluginDesc) {
+    pluginDesc.style.display = 'none';
+  }
+
+  // Render module options
+  renderModuleOptions(moduleName);
+});
+
+// Toggle between existing, upload, and browse file input
+document.querySelectorAll('[name="targetFileMode"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    document.getElementById('existingFileDiv').style.display =
+      e.target.value === 'existing' ? 'block' : 'none';
+    document.getElementById('uploadFileDiv').style.display =
+      e.target.value === 'upload' ? 'block' : 'none';
+    document.getElementById('browseFileDiv').style.display =
+      e.target.value === 'browse' ? 'block' : 'none';
+  });
+});
+
+// ========== File Upload Functionality ==========
+const fileDropZone = document.getElementById('fileDropZone');
+const fileInput = document.getElementById('targetsFileInput');
+const fileNameDisplay = document.getElementById('fileNameDisplay');
+const selectedFileName = document.getElementById('selectedFileName');
+const clearFileBtn = document.getElementById('clearFileBtn');
+
+// Click to browse
+fileDropZone.addEventListener('click', () => {
+  fileInput.click();
+});
+
+// File input change
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files.length > 0) {
+    handleFileUpload(e.target.files[0]);
+  }
+});
+
+// Drag and drop handlers
+fileDropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  fileDropZone.style.background = 'rgba(13, 110, 253, 0.1)';
+  fileDropZone.style.borderColor = '#0d6efd';
+});
+
+fileDropZone.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  fileDropZone.style.background = 'rgba(255,255,255,0.02)';
+  fileDropZone.style.borderColor = '';
+});
+
+fileDropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  fileDropZone.style.background = 'rgba(255,255,255,0.02)';
+  fileDropZone.style.borderColor = '';
+
+  if (e.dataTransfer.files.length > 0) {
+    handleFileUpload(e.dataTransfer.files[0]);
+  }
+});
+
+// Handle file upload
+function handleFileUpload(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    uploadedFileContent = e.target.result;
+    selectedFileName.textContent = file.name;
+    fileNameDisplay.style.display = 'block';
+    fileDropZone.style.display = 'none';
+  };
+  reader.readAsText(file);
+}
+
+// Clear file selection
+clearFileBtn.addEventListener('click', () => {
+  uploadedFileContent = null;
+  fileInput.value = '';
+  fileNameDisplay.style.display = 'none';
+  fileDropZone.style.display = 'block';
+});
+
+// ========== File Browse Functionality ==========
+const browseFileBtn = document.getElementById('browseFileBtn');
+const filePathInput = document.getElementById('filePathInput');
+const targetsFileBrowse = document.getElementById('targetsFileBrowse');
+const clearBrowseBtn = document.getElementById('clearBrowseBtn');
+let browsedFileContent = null;
+
+browseFileBtn.addEventListener('click', () => {
+  filePathInput.click();
+});
+
+filePathInput.addEventListener('change', (e) => {
+  if (e.target.files.length > 0) {
+    const file = e.target.files[0];
+    selectedFilePath = file.name;
+    targetsFileBrowse.value = file.name;
+
+    // Read the file content
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      browsedFileContent = evt.target.result;
+    };
+    reader.readAsText(file);
+  }
+});
+
+clearBrowseBtn.addEventListener('click', () => {
+  selectedFilePath = null;
+  browsedFileContent = null;
+  filePathInput.value = '';
+  targetsFileBrowse.value = '';
+});
+
+// ========== Output Directory Browser Functionality ==========
+const browseOutputDirBtn = document.getElementById('browseOutputDirBtn');
+const outputDirInput = document.getElementById('outputDirInput');
+const outputDirField = document.getElementById('outputDir');
+const clearOutputDirBtn = document.getElementById('clearOutputDirBtn');
+
+browseOutputDirBtn.addEventListener('click', () => {
+  outputDirInput.click();
+});
+
+outputDirInput.addEventListener('change', (e) => {
+  if (e.target.files.length > 0) {
+    // Get the directory path from the first file
+    const file = e.target.files[0];
+    const path = file.webkitRelativePath || file.path || '';
+    // Extract directory path (remove filename)
+    const dirPath = path.substring(0, path.lastIndexOf('/'));
+    outputDirField.value = dirPath || file.name;
+  }
+});
+
+clearOutputDirBtn.addEventListener('click', () => {
+  outputDirInput.value = '';
+  outputDirField.value = '';
+});
+
+// ========== Form Submission ==========
+document.getElementById('moduleForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const moduleName = document.getElementById('moduleName').value;
+  if (!moduleName) {
+    showAlert('Please select a module', 'warning');
+    return;
+  }
+
+  const targetFileMode = document.querySelector('[name="targetFileMode"]:checked').value;
+  let targetsFile;
+
+  if (targetFileMode === 'existing') {
+    targetsFile = document.getElementById('targetsFileSelect').value;
+    if (!targetsFile) {
+      showAlert('Please select a targets file', 'warning');
+      return;
+    }
+  } else if (targetFileMode === 'upload') {
+    // For uploaded files, we need to save the content to a temp file
+    if (!uploadedFileContent) {
+      showAlert('Please upload a targets file', 'warning');
+      return;
+    }
+
+    // Create a temporary file with the uploaded content
+    // We'll send the content in the request and let the backend handle it
+    targetsFile = 'uploaded-targets.txt'; // Placeholder, backend will handle
+  } else if (targetFileMode === 'browse') {
+    if (!selectedFilePath || !browsedFileContent) {
+      showAlert('Please select a targets file', 'warning');
+      return;
+    }
+    targetsFile = 'browsed-targets.txt'; // Placeholder, backend will handle
+  }
+
+  // Collect module-specific options
+  const moduleOptions = {};
+  const optionsContainer = document.getElementById('moduleOptionsContainer');
+
+  if (optionsContainer && moduleConfigs[moduleName]) {
+    const config = moduleConfigs[moduleName];
+
+    config.options.forEach(option => {
+      const input = document.getElementById(`opt_${option.name}`);
+      if (!input) return;
+
+      // Skip options that are hidden by show_when rules
+      const wrapper = input.closest('[data-show-when]');
+      if (wrapper && wrapper.style.display === 'none') return;
+
+      let value;
+
+      if (option.type === 'checkbox') {
+        value = input.checked;
+      } else if (option.type === 'number') {
+        // Only include if value is provided
+        if (input.value !== '') {
+          value = parseFloat(input.value);
+        }
+      } else if (option.type === 'text' || option.type === 'password' || option.type === 'select') {
+        // Only include if value is provided and different from default
+        if (input.value !== '' && input.value !== option.default) {
+          value = input.value;
+        }
+      }
+
+      // Only add to options if value is meaningful
+      if (value !== undefined && value !== null && value !== '') {
+        moduleOptions[option.name] = value;
+      }
+    });
+  }
+
+  const moduleData = {
+    module_name: moduleName,
+    targets_file: targetsFile,
+    output_dir: document.getElementById('outputDir').value.trim() || null,
+    module_options: moduleOptions
+  };
+
+  // If file was uploaded or browsed, include the content
+  if (targetFileMode === 'upload' && uploadedFileContent) {
+    moduleData.uploaded_content = uploadedFileContent;
+  } else if (targetFileMode === 'browse' && browsedFileContent) {
+    moduleData.uploaded_content = browsedFileContent;
+  }
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Starting...';
+
+  try {
+    const response = await fetch('/api/modules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(moduleData)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to create module task');
+    }
+
+    const result = await response.json();
+
+    // Get module name for display
+    const moduleSelect = document.getElementById('moduleName');
+    const moduleName = moduleSelect.options[moduleSelect.selectedIndex].text;
+
+    // Show success modal
+    const successMessage = `Module task created successfully!<br><br><strong>Module:</strong> ${moduleName}<br><strong>Task ID:</strong> ${result.task_id}<br><br>The task is now running...`;
+    showAlert(successMessage, 'success', true);
+
+    // Redirect to task detail page after a short delay
+    setTimeout(() => {
+      window.location.href = `/tasks/${result.task_id}`;
+    }, 2000);
+
+  } catch (error) {
+    showAlert('Error starting module: ' + error.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+});
+
+// Custom Alert Function - Replace browser alerts with styled modals
+function showAlert(message, type = 'info', isHTML = false) {
+  let modalId, messageId, modal;
+
+  if (type === 'success') {
+    modalId = 'cygorSuccessModal';
+    messageId = 'cygorSuccessMessage';
+  } else if (type === 'error') {
+    modalId = 'cygorErrorModal';
+    messageId = 'cygorErrorMessage';
+  }
+
+  const messageElement = document.getElementById(messageId);
+  if (messageElement) {
+    if (isHTML) {
+      messageElement.innerHTML = message;
+    } else {
+      messageElement.textContent = message;
+    }
+    modal = new bootstrap.Modal(document.getElementById(modalId));
+    modal.show();
+  } else {
+    console.error('Modal element not found:', messageId);
+    console.warn('showAlert fallback — modal not found for:', message);
+  }
+}
+</script>
+
+{% endblock %}

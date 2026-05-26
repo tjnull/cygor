@@ -1,0 +1,1549 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+/* Task Detail page — enterprise-grade compact layout
+   Mirrors the cygor-btn / status-badge / terminal-window vocabulary used by
+   credrecon_scan_detail.html, but the top strip is condensed so the live
+   console is above the fold. */
+
+.td-page {
+  display: flex;
+  flex-direction: column;
+  /* Lock to viewport so the console area gets a bounded flex parent and its
+     own overflow-y: auto can take effect. With ``min-height``, the page kept
+     growing past the viewport and the body scrolled instead of the console. */
+  height: calc(100vh - 70px);  /* leave room for top nav */
+  padding: 1rem 1.25rem 1.5rem;
+  overflow: hidden;
+}
+
+.td-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.85rem;
+  background: linear-gradient(180deg, rgba(13, 110, 253, 0.04), transparent);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  margin-bottom: 0.85rem;
+  /* As a child of .td-page (flex column), lock our height so a growing console
+     can't shrink the badge strip down to nothing. */
+  flex: 0 0 auto;
+}
+.td-header h1 {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #e4e4e7;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.td-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #d4d4d8;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+.td-back-btn:hover { background: rgba(255, 255, 255, 0.05); color: #fff; border-color: rgba(255,255,255,0.2); }
+
+.td-pill {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.6rem;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-variant-numeric: tabular-nums;
+}
+.td-pill-status-pending   { background: rgba(202, 138, 4, 0.18); color: #fde68a; border: 1px solid rgba(202, 138, 4, 0.4); }
+.td-pill-status-running   { background: rgba(30, 64, 175, 0.22); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.5); }
+.td-pill-status-completed { background: rgba(22, 101, 52, 0.22); color: #86efac; border: 1px solid rgba(22, 163, 74, 0.45); }
+.td-pill-status-failed    { background: rgba(153, 27, 27, 0.22); color: #fca5a5; border: 1px solid rgba(220, 38, 38, 0.45); }
+.td-pill-status-cancelled { background: rgba(75, 85, 99, 0.22); color: #d4d4d8; border: 1px solid rgba(107, 114, 128, 0.45); }
+.td-pill-status-unknown,
+.td-pill-status-not-found { background: rgba(75, 85, 99, 0.22); color: #d4d4d8; border: 1px solid rgba(107, 114, 128, 0.45); }
+@keyframes td-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+.td-pill-status-running::before {
+  content: "●";
+  color: #60a5fa;
+  animation: td-pulse 1.4s ease-in-out infinite;
+  font-size: 0.7rem;
+  margin-right: 0.1rem;
+}
+
+.td-pill-type {
+  background: rgba(255, 255, 255, 0.05);
+  color: #d4d4d8;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.td-pill-id code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: #67e8f9;
+  background: rgba(103, 232, 249, 0.06);
+  padding: 0.2rem 0.45rem;
+  border-radius: 3px;
+  border: 1px solid rgba(103, 232, 249, 0.18);
+}
+.td-pill-duration {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #d4d4d8;
+}
+.td-pill-running-timer {
+  background: rgba(202, 138, 4, 0.18);
+  color: #fde68a;
+  border: 1px solid rgba(202, 138, 4, 0.4);
+}
+.td-pill-running-timer .label {
+  font-size: 0.6rem;
+  opacity: 0.8;
+  margin-right: 0.25rem;
+}
+
+/* Source badge: how the task was triggered (Manual or Scheduled). Muted to
+   match the rest of the .td-pill family — the previous Bootstrap
+   ``badge bg-success`` was a vivid block that fought the header for attention. */
+.td-pill-source-manual {
+  background: rgba(22, 101, 52, 0.18);
+  color: #86efac;
+  border: 1px solid rgba(22, 163, 74, 0.35);
+}
+.td-pill-source-scheduled {
+  background: rgba(30, 64, 175, 0.18);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+.td-pill-source-manual i,
+.td-pill-source-scheduled i { font-size: 0.78rem; opacity: 0.85; }
+
+.td-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+.td-actions .cygor-btn {
+  font-size: 0.78rem;
+  padding: 0.35rem 0.7rem;
+}
+.td-actions .cygor-btn i { font-size: 0.85rem; }
+
+.td-banner {
+  margin-bottom: 0.85rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  flex: 0 0 auto;  /* fixed-size sibling under .td-page's flex column */
+}
+
+.td-cmd-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 0.45rem 0.7rem;
+  margin-bottom: 0.85rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+.td-cmd-bar .prompt {
+  color: #60a5fa;
+  flex-shrink: 0;
+  user-select: none;
+  font-weight: 700;
+}
+.td-cmd-bar #taskCommand {
+  flex: 1 1 auto;
+  color: #e4e4e7;
+  white-space: nowrap;
+  overflow-x: auto;
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  font-size: 0.82rem !important;
+  line-height: 1.4 !important;
+  display: block !important;
+  word-break: normal !important;
+}
+.td-cmd-bar #taskCommand.expanded {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.td-cmd-bar .icon-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #9ca3af;
+  border-radius: 3px;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+.td-cmd-bar .icon-btn:hover { background: rgba(255,255,255,0.05); color: #fff; border-color: rgba(255,255,255,0.2); }
+
+/* Sub-header: parsed task details (targets, scan_type, ports, timing). Sits
+   under the main header strip so the user gets immediate context without
+   expanding the Task Information card. */
+.td-subheader {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.4rem;
+  padding: 0.55rem 0.85rem;
+  margin-bottom: 0.6rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: #a1a1aa;
+  flex: 0 0 auto;  /* don't let the page-level flex shrink this row */
+}
+.td-subheader .td-sub-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+.td-subheader .td-sub-item i { color: #6b7280; font-size: 0.95rem; }
+.td-subheader .td-sub-item .lbl { color: #6b7280; }
+.td-subheader .td-sub-item strong {
+  color: #e4e4e7;
+  font-weight: 500;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+}
+.td-subheader .td-sub-arrow { color: #6b7280; padding: 0 0.15rem; }
+
+/* Console grows to fill the rest of the page */
+.td-console {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;  /* allow flex child to shrink so overflow-y on the inner pre actually scrolls */
+  margin-bottom: 0;
+}
+/* Header bar above the terminal — labels the area and houses console actions */
+.td-console-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0.85rem;
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #9ca3af;
+  flex: 0 0 auto;
+}
+.td-console-header .label { display: inline-flex; align-items: center; gap: 0.45rem; }
+.td-console-header .label i { color: #67e8f9; font-size: 0.95rem; }
+.td-console-header .console-meta {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #6b7280;
+  font-size: 0.72rem;
+  margin-left: 0.6rem;
+  font-variant-numeric: tabular-nums;
+}
+.td-console-header .actions { display: inline-flex; gap: 0.35rem; }
+.td-console-header .actions button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #9ca3af;
+  border-radius: 3px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.td-console-header .actions button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.td-console .terminal-window {
+  flex: 1 1 auto;
+  min-height: 0;  /* same reason — flex child must be allowed to shrink */
+  display: flex;
+  flex-direction: column;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-top: none;  /* console-header above provides the top edge */
+}
+.td-console .terminal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.td-console .terminal-output {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  /* Override the 650px cap from cygor-components.css so the console fills
+     the available viewport height instead of leaving dead space below. */
+  max-height: none;
+}
+
+/* Collapsed-by-default Task Information card */
+.td-info-card {
+  background: #0d0d0d;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 6px;
+  overflow: hidden;
+  /* Critical: as a child of .td-page (flex column with overflow:hidden), default
+     flex-shrink: 1 lets the page-flex algorithm steal pixels from this card to
+     give the growing console more room — the click-target shrank to nothing.
+     Lock to natural height so the toggle header stays clickable. */
+  flex: 0 0 auto;
+}
+.td-info-card .card-header {
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0.6rem 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+.td-info-card .card-header:hover { background: rgba(255, 255, 255, 0.04); }
+.td-info-card h4 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9ca3af;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.td-info-card .card-body { padding: 1rem 1.25rem; }
+/* Command row sits at the top of the info card body, full width above
+   the metadata grid. Margin-bottom separates it from the cells below. */
+.td-info-cmd-row { margin-bottom: 0.85rem; }
+.td-info-cmd-row .td-cmd-bar { margin-bottom: 0; }
+.td-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.6rem 1.25rem;
+}
+.td-info-cell {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  padding: 0.55rem 0.75rem;
+}
+.td-info-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7280;
+  margin-bottom: 0.2rem;
+}
+.td-info-value {
+  font-size: 0.88rem;
+  color: #e4e4e7;
+  font-family: 'JetBrains Mono', monospace;
+  word-break: break-all;
+}
+.td-info-value.text-light { color: #e4e4e7 !important; }
+.td-info-value code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+#taskInfoChevron.expanded { transform: rotate(180deg); }
+
+/* Source badge sizing now lives in the .td-pill family — the legacy
+   #taskSourceBadge override was forcing a Bootstrap-badge look. */
+</style>
+
+<div class="td-page">
+  <!-- Compact header strip: back, title, status, type, id, duration, source, actions -->
+  <div class="td-header">
+    <a href="/tasks" id="backBtn" class="td-back-btn" title="Back to Tasks">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <h1>
+      <i class="bi bi-list-task"></i>Task
+    </h1>
+
+    <!-- Status pill (always visible — no need to expand the info card to see it) -->
+    <span id="taskStatus" class="td-pill td-pill-status-unknown">—</span>
+
+    <!-- Type badge — kept as <span id="taskType"> for JS compatibility, restyled -->
+    <span id="taskType" class="td-pill td-pill-type">—</span>
+
+    <!-- Short task id -->
+    <span class="td-pill td-pill-id"><code id="taskId">—</code></span>
+
+    <!-- Duration always visible (live-ticking via existing JS) -->
+    <span class="td-pill td-pill-duration" title="Duration">
+      <i class="bi bi-clock-history"></i>
+      <span id="taskDuration">—</span>
+    </span>
+
+    <!-- Source (Manual / Scheduled) -->
+    <span id="taskSourceBadge" class="td-pill" style="display: none;"></span>
+
+    <!-- Action buttons -->
+    <div class="td-actions">
+      <button id="refreshBtn" class="cygor-btn" onclick="refreshTask()" title="Refresh">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+      </button>
+      <button id="cancelBtn" class="cygor-btn cygor-btn-warn" onclick="cancelTask()" style="display:none;">
+        <i class="bi bi-stop-circle-fill"></i> Cancel
+      </button>
+      <button id="restartBtn" class="cygor-btn cygor-btn-info" onclick="restartTask()" style="display:none;">
+        <i class="bi bi-arrow-repeat"></i> Restart
+      </button>
+      <button id="editBtn" class="cygor-btn cygor-btn-primary" onclick="showEditModal()" style="display:none;">
+        <i class="bi bi-pencil-square"></i> Edit
+      </button>
+      <button id="deleteBtn" class="cygor-btn cygor-btn-danger" onclick="deleteTask()" style="display:none;">
+        <i class="bi bi-trash-fill"></i> Delete
+      </button>
+    </div>
+  </div>
+
+  <!-- Parsed task details — gives the user "what was this?" context without
+       expanding the Task Information card. Populated by populateTaskSubheader()
+       from task.command + timestamps; hidden until a task is loaded. -->
+  <div class="td-subheader" id="taskSubheader" style="display:none;">
+    <div class="td-sub-item" id="taskSubTargetsBlock" style="display:none;">
+      <i class="bi bi-bullseye"></i>
+      <span class="lbl">Targets:</span>
+      <strong id="taskSubTargets"></strong>
+    </div>
+    <div class="td-sub-item" id="taskSubScanTypeBlock" style="display:none;">
+      <i class="bi bi-gear"></i>
+      <span class="lbl">Scan:</span>
+      <strong id="taskSubScanType"></strong>
+    </div>
+    <div class="td-sub-item" id="taskSubPortsBlock" style="display:none;">
+      <i class="bi bi-hash"></i>
+      <span class="lbl">Ports:</span>
+      <strong id="taskSubPorts"></strong>
+    </div>
+    <div class="td-sub-item" id="taskSubProcessesBlock" style="display:none;">
+      <i class="bi bi-cpu"></i>
+      <span class="lbl">Parallel:</span>
+      <strong id="taskSubProcesses"></strong>
+    </div>
+    <div class="td-sub-item" id="taskSubTimingBlock" style="display:none;">
+      <i class="bi bi-clock"></i>
+      <span id="taskSubStarted">—</span>
+      <span class="td-sub-arrow">→</span>
+      <span id="taskSubCompleted">—</span>
+    </div>
+  </div>
+
+  <!-- Banners (Success / Sync) — slimmer than the original, same JS hooks -->
+  <div class="alert alert-success d-flex align-items-center td-banner d-none" id="successBanner">
+    <i class="bi bi-check-circle-fill me-2"></i>
+    <div class="flex-grow-1">
+      <strong class="me-2">Scan complete.</strong>
+      <span id="successBannerMessage" class="small text-muted">Results synced.</span>
+    </div>
+    <a href="/tasks/module/new" class="btn btn-sm btn-outline-success">
+      <i class="bi bi-play-circle me-1"></i>Run Module
+    </a>
+  </div>
+  <div class="alert alert-info d-flex align-items-center td-banner d-none" id="syncBanner">
+    <div class="spinner-border spinner-border-sm text-info me-2" role="status"></div>
+    <div class="flex-grow-1">
+      <strong class="me-2">Syncing database…</strong>
+      <span class="small text-muted">Ingesting scan results.</span>
+    </div>
+  </div>
+
+<!-- Task Information (collapsed by default — full detail one click away,
+       sits above the console so the metadata grid is in the user's visual
+       hierarchy before the live output. The Command lives inside this card
+       on its own full-width row above the metadata grid.) -->
+  <div class="td-info-card mb-3">
+    <div class="card-header" onclick="toggleTaskInfo()" id="taskInfoHeader">
+      <div class="d-flex justify-content-between align-items-center">
+        <h4>
+          <i class="bi bi-info-circle"></i>Task Information
+        </h4>
+        <i class="bi bi-chevron-down" id="taskInfoChevron" style="font-size: 0.85rem; transition: transform 0.25s; color: #6b7280;"></i>
+      </div>
+    </div>
+    <div class="collapse" id="taskInfoCollapse">
+      <div class="card-body">
+        <!-- Command — full-width row above the metadata grid -->
+        <div class="td-info-cmd-row">
+          <div class="td-info-label mb-1">Command</div>
+          <div class="td-cmd-bar">
+            <span class="prompt">$</span>
+            <code id="taskCommand">—</code>
+            <button class="icon-btn" type="button" onclick="(function(e){const c=document.getElementById('taskCommand');c.classList.toggle('expanded');e.target.closest('button').querySelector('i').className=c.classList.contains('expanded')?'bi bi-chevron-up':'bi bi-chevron-down';})(event)" title="Wrap / unwrap">
+              <i class="bi bi-chevron-down"></i>
+            </button>
+            <button class="icon-btn" type="button" onclick="copyCommand(event)" title="Copy command">
+              <i class="bi bi-clipboard"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="td-info-grid">
+          <div class="td-info-cell">
+            <div class="td-info-label">Created</div>
+            <div class="td-info-value text-light" id="taskCreated">—</div>
+          </div>
+          <div class="td-info-cell">
+            <div class="td-info-label">Started</div>
+            <div class="td-info-value text-light" id="taskStarted">—</div>
+          </div>
+          <div class="td-info-cell">
+            <div class="td-info-label">Completed</div>
+            <div class="td-info-value text-light" id="taskCompleted">—</div>
+          </div>
+          <div class="td-info-cell">
+            <div class="td-info-label">Exit Code</div>
+            <div class="td-info-value" id="taskExitCode">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live output console — fills remaining viewport. Header bar sits above
+       the terminal-window so the area is unambiguously labeled and houses
+       per-console actions (Clear / Copy / line counter). -->
+  <div class="td-console">
+    <div class="td-console-header">
+      <span class="label">
+        <i class="bi bi-terminal"></i>Console Output
+        <span class="console-meta" id="consoleLineCount"></span>
+      </span>
+      <div class="actions">
+        <button id="consoleClearBtn" type="button" title="Clear visible buffer (does not stop the task)">Clear</button>
+        <button id="consoleCopyBtn" type="button" title="Copy all visible output">Copy</button>
+      </div>
+    </div>
+    <div class="terminal-window">
+      <div class="terminal-body">
+        <pre id="outputContent" class="terminal-output active">Loading...</pre>
+        <pre id="errorsContent" class="terminal-output terminal-errors" style="display:none;"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden badge elements for JS compatibility (output / error counters) -->
+  <span id="outputBadge" style="display:none;">0</span>
+  <span id="errorsBadge" style="display:none;">0</span>
+  <span id="terminalTitle" style="display:none;"></span>
+</div>
+
+<!-- Custom Alert Modals -->
+<div class="modal fade" id="cygorAlertModal" tabindex="-1" aria-labelledby="cygorAlertModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-secondary">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title text-white" id="cygorAlertModalLabel">
+          <i class="bi bi-info-circle-fill me-2"></i>Notification
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="cygorAlertMessage"></p>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="cygorErrorModal" tabindex="-1" aria-labelledby="cygorErrorModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-danger">
+      <div class="modal-header border-danger">
+        <h5 class="modal-title text-white" id="cygorErrorModalLabel">
+          <i class="bi bi-exclamation-triangle-fill me-2 text-danger"></i>Error
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="cygorErrorMessage"></p>
+      </div>
+      <div class="modal-footer border-danger">
+        <button type="button" class="btn btn-danger" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Task Confirmation Modal -->
+<div class="modal fade" id="deleteTaskModal" tabindex="-1" aria-labelledby="deleteTaskModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-danger">
+      <div class="modal-header border-danger">
+        <h5 class="modal-title text-white" id="deleteTaskModalLabel">
+          <i class="bi bi-trash-fill me-2"></i>Delete Task
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-2">Delete this task? This cannot be undone.</p>
+        <div class="alert alert-danger" role="alert">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>
+          <strong>Warning:</strong> This action is permanent and cannot be reversed.
+        </div>
+      </div>
+      <div class="modal-footer border-danger">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteTaskBtn">
+          <i class="bi bi-trash-fill me-1"></i>Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Cancel Task Confirmation Modal -->
+<div class="modal fade" id="cancelTaskModal" tabindex="-1" aria-labelledby="cancelTaskModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-warning">
+      <div class="modal-header border-warning">
+        <h5 class="modal-title text-white" id="cancelTaskModalLabel">
+          <i class="bi bi-stop-circle-fill me-2"></i>Cancel Task
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0">Cancel this task?</p>
+      </div>
+      <div class="modal-footer border-warning">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+        <button type="button" class="btn btn-warning" id="confirmCancelTaskBtn">
+          <i class="bi bi-stop-circle-fill me-1"></i>Yes, Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Restart Task Confirmation Modal -->
+<div class="modal fade" id="restartTaskModal" tabindex="-1" aria-labelledby="restartTaskModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-info">
+      <div class="modal-header border-info">
+        <h5 class="modal-title text-white" id="restartTaskModalLabel">
+          <i class="bi bi-arrow-repeat me-2"></i>Restart Task
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0">Restart this task with the same parameters?</p>
+      </div>
+      <div class="modal-footer border-info">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-info" id="confirmRestartTaskBtn">
+          <i class="bi bi-arrow-repeat me-1"></i>Restart
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Task Modal -->
+<div class="modal fade" id="editTaskModal" tabindex="-1" aria-labelledby="editTaskModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content bg-dark border border-primary">
+      <div class="modal-header border-primary">
+        <h5 class="modal-title text-white" id="editTaskModalLabel">
+          <i class="bi bi-pencil-square me-2"></i>Edit Task
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <div class="alert alert-info border-info">
+          <i class="bi bi-info-circle me-2"></i>
+          <strong>Note:</strong> Only pending tasks can be edited. Running, completed, or failed tasks cannot be modified.
+        </div>
+
+        <div class="mb-3">
+          <label for="editCommand" class="form-label text-light">Command</label>
+          <textarea class="form-control bg-dark text-light border-secondary" id="editCommand" rows="4" placeholder="cygor scan -f targets.txt"></textarea>
+          <div class="form-text text-muted">Edit the command to be executed. Use space-separated arguments.</div>
+        </div>
+
+        <div class="mb-3">
+          <label for="editOutputDir" class="form-label text-light">Output Directory</label>
+          <input type="text" class="form-control bg-dark text-light border-secondary" id="editOutputDir" placeholder="results">
+          <div class="form-text text-muted">Specify where the task output should be saved.</div>
+        </div>
+      </div>
+      <div class="modal-footer border-primary">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="confirmEditTaskBtn">
+          <i class="bi bi-save me-1"></i>Save Changes
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* =========================================================
+   Task Detail Styling (Enhanced Readability & Terminal Look)
+   ========================================================= */
+
+/* Task info layout */
+.task-info-list dt {
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: #adb5bd;
+  padding: 1rem 0;
+  letter-spacing: 0.3px;
+}
+.task-info-list dd {
+  padding: 1rem 0;
+  margin-bottom: 0;
+}
+.task-info-list dt:not(:first-child),
+.task-info-list dd:not(:nth-child(2)) {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* =========================================================
+   Terminal Window — Black Theme
+   ========================================================= */
+.terminal-window {
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #222;
+  background: #000;
+}
+.terminal-body {
+  position: relative;
+}
+</style>
+
+
+<script src="/static/js/ansi_up.js"></script>
+<script>
+const taskId = window.location.pathname.split('/').pop();
+let refreshInterval = null;
+let startTime = null;
+let timerInterval = null;
+let taskInfoCollapsed = false;
+
+// ANSI color renderer (with fallback if CDN fails to load)
+let ansi;
+if (typeof AnsiUp !== 'undefined') {
+  ansi = new AnsiUp();
+  ansi.use_classes = true;
+} else {
+  console.warn('ansi_up library not loaded, ANSI colors disabled');
+  ansi = { ansi_to_html: function(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }};
+}
+
+
+// Custom Alert Function - Replace browser alerts with styled modals
+function showAlert(message, type = 'info') {
+  let modalId, messageId, modal;
+  
+  if (type === 'error') {
+    modalId = 'cygorErrorModal';
+    messageId = 'cygorErrorMessage';
+  } else {
+    modalId = 'cygorAlertModal';
+    messageId = 'cygorAlertMessage';
+  }
+  
+  const messageElement = document.getElementById(messageId);
+  if (messageElement) {
+    messageElement.textContent = message;
+    modal = new bootstrap.Modal(document.getElementById(modalId));
+    modal.show();
+  } else {
+    // Fallback — log to console if modal not found
+    console.warn('showAlert fallback — modal not found for:', message);
+  }
+}
+
+// Toggle task info collapse
+function toggleTaskInfo() {
+  const collapse = document.getElementById('taskInfoCollapse');
+  const chevron = document.getElementById('taskInfoChevron');
+  const bsCollapse = new bootstrap.Collapse(collapse, { toggle: false });
+
+  if (collapse.classList.contains('show')) {
+    bsCollapse.hide();
+    chevron.style.transform = 'rotate(-90deg)';
+    taskInfoCollapsed = true;
+  } else {
+    bsCollapse.show();
+    chevron.style.transform = 'rotate(0deg)';
+    taskInfoCollapsed = false;
+  }
+}
+
+async function fetchTaskDetails() {
+  try {
+    const response = await fetch(`/api/tasks/${taskId}`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        document.body.innerHTML = '<div class="container mt-5"><div class="alert alert-danger">Task not found</div></div>';
+        return;
+      }
+      throw new Error('Failed to fetch task');
+    }
+
+    const task = await response.json();
+
+    // Store for edit modal
+    currentTask = task;
+
+    // Reset buffers if starting a new or rerun scan
+    if ((task.status === 'pending' || task.status === 'running') && outputBuffer.length === 0) {
+      outputBuffer = [];
+      errorBuffer = [];
+      lastTotalOutput = 0;
+      lastTotalErrors = 0;
+      document.getElementById("outputContent").textContent = "Loading...";
+      document.getElementById("errorsContent").textContent = "";
+    }
+
+    updateTaskInfo(task);
+
+    // --- [UPDATED: incremental fetch using server-side absolute counter] ---
+    // Use ``lastTotalOutput`` / ``lastTotalErrors`` (absolute monotonic
+    // counters that survive deque rotation), not array length, so the
+    // polling continues to see new lines on long-running scans even after
+    // the server's bounded buffer drops the oldest entries.
+    const outResp = await fetch(
+      `/api/tasks/${taskId}/output?since=${lastTotalOutput}&errors_since=${lastTotalErrors}`
+    );
+    if (outResp.ok) {
+      const outputData = await outResp.json();
+      updateOutput(outputData);
+    }
+
+  } catch (error) {
+    console.error('Error fetching task:', error);
+  }
+}
+
+function updateTaskInfo(task) {
+  // Basic info
+  document.getElementById('taskId').textContent = task.task_id.substring(0, 12);
+  document.getElementById('taskType').textContent = task.task_type;
+  document.getElementById('taskCommand').textContent = task.command;
+  document.getElementById('terminalTitle').textContent = task.command || 'cygor \u2014 task output';
+  document.getElementById('taskCreated').textContent = formatTime(task.created_at);
+  document.getElementById('taskStarted').textContent = formatTime(task.started_at);
+  document.getElementById('taskCompleted').textContent = formatTime(task.completed_at);
+
+  // Update back button and source badge based on whether this is a scheduled task
+  const backBtn = document.getElementById('backBtn');
+  const sourceBadge = document.getElementById('taskSourceBadge');
+  const isScheduled = task.task_id && task.task_id.startsWith('sched-');
+
+  if (task.schedule_id || isScheduled) {
+    backBtn.href = task.schedule_id ? `/schedules/${task.schedule_id}` : '/tasks';
+    backBtn.title = task.schedule_name ? `Back to schedule: ${task.schedule_name}` : 'Back to Task Manager';
+    sourceBadge.innerHTML = '<i class="bi bi-calendar-check"></i>Scheduled';
+    sourceBadge.className = 'td-pill td-pill-source-scheduled';
+    sourceBadge.style.display = 'inline-flex';
+  } else {
+    backBtn.href = '/tasks';
+    backBtn.title = 'Back to Task Manager';
+    sourceBadge.innerHTML = '<i class="bi bi-play-circle"></i>Manual';
+    sourceBadge.className = 'td-pill td-pill-source-manual';
+    sourceBadge.style.display = 'inline-flex';
+  }
+
+  // Status pill — restyle the existing #taskStatus element in place rather
+  // than nesting a status-badge span inside it, so the td-pill styling from
+  // the redesigned header strip applies.
+  const statusEl = document.getElementById('taskStatus');
+  const safeStatus = (task.status || 'unknown').toLowerCase();
+  statusEl.textContent = safeStatus;
+  statusEl.className = `td-pill td-pill-status-${safeStatus}`;
+
+  // Parsed task summary (sub-header strip)
+  populateTaskSubheader(task);
+
+  // Duration
+  document.getElementById('taskDuration').textContent = calculateDuration(task);
+
+  // Exit code
+  const exitCodeEl = document.getElementById('taskExitCode');
+  if (task.exit_code !== null && task.exit_code !== undefined) {
+    const exitClass = task.exit_code === 0 ? 'text-success' : 'text-danger';
+    exitCodeEl.innerHTML = `<span class="${exitClass}">${task.exit_code}</span>`;
+  } else {
+    exitCodeEl.textContent = '-';
+  }
+
+  // Action buttons
+  document.getElementById('cancelBtn').style.display = task.status === 'running' ? 'inline-block' : 'none';
+  // Historic tasks reconstructed from disk without a sidecar carry only a
+  // stub command and cannot be re-run — hide the Restart button entirely
+  // for those instead of letting the user kick off a no-op task.
+  const canRestart = ['completed', 'failed', 'cancelled'].includes(task.status) && task.restartable !== false;
+  document.getElementById('restartBtn').style.display = canRestart ? 'inline-block' : 'none';
+  document.getElementById('editBtn').style.display = task.status === 'pending' ? 'inline-block' : 'none';
+  document.getElementById('deleteBtn').style.display = task.status !== 'running' ? 'inline-block' : 'none';
+
+  // Show success banner for completed scan tasks with exit code 0
+  const successBanner = document.getElementById('successBanner');
+  if (task.status === 'completed' && task.task_type === 'scan' && task.exit_code === 0) {
+    successBanner.classList.remove('d-none');
+
+    // Auto-collapse task info when scan completes (only once)
+    if (!taskInfoCollapsed && !window.taskCompleted) {
+      window.taskCompleted = true;
+      const collapse = document.getElementById('taskInfoCollapse');
+      const chevron = document.getElementById('taskInfoChevron');
+      if (collapse.classList.contains('show')) {
+        const bsCollapse = new bootstrap.Collapse(collapse, { toggle: false });
+        bsCollapse.hide();
+        chevron.style.transform = 'rotate(-90deg)';
+        taskInfoCollapsed = true;
+      }
+    }
+
+    // Auto-sync database if this is the first time we're seeing this completed status
+    if (!window.taskSynced) {
+      window.taskSynced = true;
+      autoSyncDatabase(task);
+    }
+  } else {
+    successBanner.classList.add('d-none');
+  }
+
+  // Running timer (inline in header)
+  if (task.status === 'running') {
+    // The duration pill is refreshed each poll (2s) by calculateDuration();
+    // no separate inline timer to spin up here anymore.
+  } else {
+    startTime = null;
+  }
+
+  // Auto-refresh logic
+  if (task.status === 'running' || task.status === 'pending') {
+    if (!refreshInterval) {
+      refreshInterval = setInterval(fetchTaskDetails, 2000);
+    }
+  } else {
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+      refreshInterval = null;
+    }
+  }
+}
+
+// --- [FIXED incremental output — uses absolute server counters] ---
+// ``lastTotalOutput`` / ``lastTotalErrors`` track the absolute number of
+// lines the server reports having ever produced (``total_output_lines``).
+// Comparing against these instead of ``buffer.length`` survives the case
+// where the server's bounded ring buffer rotates old entries out — on a
+// long parallel nmap scan with -p- across 20+ hosts, length-based logic
+// stops detecting new lines once the buffer fills.
+let outputBuffer = [];
+let errorBuffer = [];
+let lastTotalOutput = 0;
+let lastTotalErrors = 0;
+
+function updateOutput(data) {
+  const newOutput = data.output || [];
+  const newErrors = data.errors || [];
+  const totalOut  = (typeof data.total_output_lines === 'number') ? data.total_output_lines : (newOutput.length + lastTotalOutput);
+  const totalErr  = (typeof data.total_error_lines  === 'number') ? data.total_error_lines  : (newErrors.length + lastTotalErrors);
+  const droppedOut = data.dropped_output_lines || 0;
+  const droppedErr = data.dropped_error_lines  || 0;
+  const outputEl = document.getElementById("outputContent");
+  const errEl    = document.getElementById("errorsContent");
+
+  // First poll OR the server has dropped lines beyond what we've buffered
+  // → reset and render the whole tail with a notice.
+  const needsReset = lastTotalOutput === 0 || droppedOut > lastTotalOutput;
+  if (needsReset && newOutput.length) {
+    outputBuffer = newOutput.slice();
+    if (droppedOut > 0) {
+      outputBuffer.unshift(`[+ ${droppedOut} earlier line${droppedOut === 1 ? '' : 's'} rotated out of the in-memory buffer]`);
+    }
+    lastTotalOutput = totalOut;
+    outputEl.innerHTML = ansi.ansi_to_html(outputBuffer.join("\n"));
+    outputEl.scrollTop = outputEl.scrollHeight;
+  } else if (totalOut > lastTotalOutput) {
+    // Normal incremental case — append the new tail.
+    outputBuffer.push(...newOutput);
+    lastTotalOutput = totalOut;
+    outputEl.innerHTML = ansi.ansi_to_html(outputBuffer.join("\n"));
+    outputEl.scrollTop = outputEl.scrollHeight;
+  } else if (totalOut === 0 && outputBuffer.length === 0) {
+    outputEl.textContent = "Waiting for output...";
+  }
+
+  // Same logic for stderr
+  const needsErrReset = lastTotalErrors === 0 || droppedErr > lastTotalErrors;
+  if (needsErrReset && newErrors.length) {
+    errorBuffer = newErrors.slice();
+    if (droppedErr > 0) {
+      errorBuffer.unshift(`[+ ${droppedErr} earlier error line${droppedErr === 1 ? '' : 's'} rotated out]`);
+    }
+    lastTotalErrors = totalErr;
+    errEl.innerHTML = ansi.ansi_to_html(errorBuffer.join("\n"));
+    errEl.scrollTop = errEl.scrollHeight;
+  } else if (totalErr > lastTotalErrors) {
+    errorBuffer.push(...newErrors);
+    lastTotalErrors = totalErr;
+    errEl.innerHTML = ansi.ansi_to_html(errorBuffer.join("\n"));
+    errEl.scrollTop = errEl.scrollHeight;
+  }
+
+  // Badges show the absolute totals, not the local buffer length, so the
+  // user can see actual scan progress (e.g. "47281") even when the
+  // in-memory buffer is capped.
+  document.getElementById("outputBadge").textContent = totalOut;
+  document.getElementById("errorsBadge").textContent = totalErr;
+
+  // Console header line counter — visible meta next to "Console Output"
+  const meta = document.getElementById("consoleLineCount");
+  if (meta) {
+    const errSuffix = totalErr > 0 ? ` · ${totalErr} stderr` : '';
+    meta.textContent = `${totalOut} line${totalOut === 1 ? '' : 's'}${errSuffix}`;
+  }
+
+  if (errorBuffer.length === 0 && totalErr === 0) {
+    errEl.textContent = "";
+  }
+}
+
+
+
+/* formatTime now in cygor-datetime.js */
+
+// Parse the joined command string the API returns into a flag→value map and
+// populate the sub-header strip with targets, scan_type, ports, etc. Treats
+// list-valued flags (--ips, --exclusions, --discover) as "consume tokens
+// until the next ``-`` flag". Hides individual cells whose flag wasn't found
+// so non-scan task types (parse, enrich, module) don't show empty rows.
+function populateTaskSubheader(task) {
+  const sub = document.getElementById('taskSubheader');
+  if (!sub) return;
+
+  const listFlags = new Set(['--ips', '--exclusions', '--discover']);
+  const parts = (task.command || '').split(/\s+/).filter(Boolean);
+  const args = {};
+  let i = 0;
+  while (i < parts.length) {
+    const tok = parts[i];
+    if (tok.startsWith('-')) {
+      if (listFlags.has(tok)) {
+        const vals = [];
+        let j = i + 1;
+        while (j < parts.length && !parts[j].startsWith('-')) {
+          vals.push(parts[j]);
+          j++;
+        }
+        args[tok] = vals;
+        i = j;
+        continue;
+      }
+      const next = parts[i + 1];
+      if (next !== undefined && !next.startsWith('-')) {
+        args[tok] = next;
+        i += 2;
+      } else {
+        args[tok] = true;  // boolean flag
+        i += 1;
+      }
+    } else {
+      i += 1;
+    }
+  }
+
+  let anyVisible = false;
+  const setBlock = (id, blockId, value) => {
+    const block = document.getElementById(blockId);
+    const el = document.getElementById(id);
+    if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
+      if (block) block.style.display = 'none';
+      return;
+    }
+    if (el) el.textContent = Array.isArray(value) ? value.join(', ') : String(value);
+    if (block) block.style.display = 'inline-flex';
+    anyVisible = true;
+  };
+
+  // Targets: --ips list or -f file
+  let targets = args['--ips'];
+  if (!targets && args['-f']) targets = [args['-f']];
+  if (Array.isArray(targets) && targets.length > 3) {
+    setBlock('taskSubTargets', 'taskSubTargetsBlock', targets.slice(0, 3).join(', ') + ` (+${targets.length - 3} more)`);
+  } else {
+    setBlock('taskSubTargets', 'taskSubTargetsBlock', targets);
+  }
+
+  setBlock('taskSubScanType', 'taskSubScanTypeBlock', args['--scan-type']);
+  setBlock('taskSubPorts',    'taskSubPortsBlock',    args['--ports']);
+  setBlock('taskSubProcesses','taskSubProcessesBlock', args['--processes']);
+
+  // Timing — always show if we have either start or end
+  if (task.started_at || task.completed_at) {
+    document.getElementById('taskSubStarted').textContent   = task.started_at   ? formatTime(task.started_at)   : '—';
+    document.getElementById('taskSubCompleted').textContent = task.completed_at ? formatTime(task.completed_at) : '(running)';
+    document.getElementById('taskSubTimingBlock').style.display = 'inline-flex';
+    anyVisible = true;
+  } else {
+    document.getElementById('taskSubTimingBlock').style.display = 'none';
+  }
+
+  sub.style.display = anyVisible ? 'flex' : 'none';
+}
+
+// Console header buttons — Clear empties the visible buffer (does not stop
+// the task; new lines from the server still flow in via the next poll),
+// Copy puts the rendered text on the clipboard.
+document.addEventListener('DOMContentLoaded', () => {
+  const clearBtn = document.getElementById('consoleClearBtn');
+  const copyBtn  = document.getElementById('consoleCopyBtn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      const out = document.getElementById('outputContent');
+      const err = document.getElementById('errorsContent');
+      outputBuffer = [];
+      errorBuffer = [];
+      if (out) out.textContent = '';
+      if (err) err.textContent = '';
+    });
+  }
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async () => {
+      const out = document.getElementById('outputContent');
+      const text = out ? out.innerText : '';
+      try {
+        await navigator.clipboard.writeText(text);
+        copyBtn.textContent = 'Copied';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1200);
+      } catch (e) {
+        copyBtn.textContent = 'Failed';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+      }
+    });
+  }
+});
+
+function calculateDuration(task) {
+  if (!task.started_at) return '-';
+
+  try {
+    // Parse timestamps as UTC by appending 'Z' if not present
+    let startIso = task.started_at;
+    if (!startIso.endsWith('Z') && !startIso.includes('+') && !startIso.includes('-', 10)) {
+      startIso = startIso + 'Z';
+    }
+    const start = new Date(startIso);
+
+    let end;
+    if (task.completed_at) {
+      let endIso = task.completed_at;
+      if (!endIso.endsWith('Z') && !endIso.includes('+') && !endIso.includes('-', 10)) {
+        endIso = endIso + 'Z';
+      }
+      end = new Date(endIso);
+    } else {
+      end = new Date();
+    }
+
+    // Validate dates
+    if (isNaN(start.getTime())) {
+      console.error('Invalid start date:', task.started_at);
+      return '-';
+    }
+    if (isNaN(end.getTime())) {
+      console.error('Invalid end date:', task.completed_at);
+      return '-';
+    }
+
+    let diff = end - start;
+
+    // Handle negative durations (clock skew or future timestamps)
+    if (diff < 0) {
+      console.warn('Negative duration detected:', diff, 'ms. Start:', startIso, 'End:', end);
+      diff = 0;
+    }
+
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000);
+
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+  } catch (e) {
+    console.error('Error calculating duration:', e, task);
+    return '-';
+  }
+}
+
+/* startTimer/stopTimer now use window.cygorTimer — see cygor-terminal.js */
+function startTimer() { window.cygorTimer.start(startTime); }
+function stopTimer() { window.cygorTimer.stop(); }
+
+async function autoSyncDatabase(task) {
+  console.log(`[*] Auto-syncing database after task ${task.task_id} completion...`);
+
+  const syncBanner = document.getElementById('syncBanner');
+  const successBanner = document.getElementById('successBanner');
+  const successMessage = document.getElementById('successBannerMessage');
+
+  try {
+    // Hide success banner and show sync banner
+    successBanner.classList.add('d-none');
+    syncBanner.classList.remove('d-none');
+
+    // Build sync request body
+    let syncBody = {};
+
+    // For on-demand scans, extract the specific scan directory to sync (much faster!)
+    if (task.is_ondemand && task.output_dir) {
+      // Extract relative path from output_dir (e.g., "ondemand-scans/2025-01-06_12-34-56")
+      const match = task.output_dir.match(/ondemand-scans\/[^\/]+$/);
+      if (match) {
+        syncBody.scan_dir = match[0];
+        console.log(`[*] Fast sync: targeting specific directory ${syncBody.scan_dir}`);
+      }
+    }
+
+    // Call sync endpoint
+    const response = await fetch('/api/sync-database', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(syncBody)
+    });
+
+    const result = await response.json();
+
+    // Hide sync banner and show success banner
+    syncBanner.classList.add('d-none');
+    successBanner.classList.remove('d-none');
+
+    if (response.ok && result.status === 'success') {
+      console.log(`[✓] Auto-sync complete: ${result.hosts_added} hosts added, ${result.ports_added} ports added`);
+
+      // Update success banner with sync results
+      if (result.hosts_added > 0 || result.ports_added > 0) {
+        successMessage.innerHTML = `Your scan has finished successfully and <strong>${result.hosts_added} new host(s)</strong> and <strong>${result.ports_added} new port(s)</strong> have been added to the database.`;
+      } else {
+        successMessage.innerHTML = 'Your scan has finished successfully. The results have been synced to the database.';
+      }
+
+      // Broadcast sync completion to other tabs/pages (e.g., dashboard)
+      try {
+        localStorage.setItem('cygor_last_sync', JSON.stringify({
+          timestamp: Date.now(),
+          hosts_added: result.hosts_added,
+          ports_added: result.ports_added,
+          hosts_after: result.hosts_after,
+          ports_after: result.ports_after
+        }));
+        // Remove immediately to trigger storage event in other tabs
+        localStorage.removeItem('cygor_last_sync');
+      } catch (e) {
+        console.warn('Failed to broadcast sync event:', e);
+      }
+    } else {
+      console.error('[!] Auto-sync failed:', result.error || 'Unknown error');
+      successMessage.innerHTML = 'Your scan completed, but auto-sync failed. Please use the "Sync Database" button in the sidebar to manually sync results.';
+    }
+  } catch (error) {
+    console.error('[!] Auto-sync error:', error);
+    syncBanner.classList.add('d-none');
+    successBanner.classList.remove('d-none');
+    successMessage.innerHTML = 'Your scan completed, but auto-sync encountered an error. Please use the "Sync Database" button in the sidebar.';
+  }
+}
+
+async function cancelTask() {
+  // Show confirmation modal
+  const modal = new bootstrap.Modal(document.getElementById('cancelTaskModal'));
+  modal.show();
+  
+  // Handle confirm button
+  const confirmBtn = document.getElementById('confirmCancelTaskBtn');
+  const newHandler = async function() {
+    confirmBtn.removeEventListener('click', newHandler);
+    modal.hide();
+    
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/cancel`, { method: 'POST' });
+      if (!response.ok) throw new Error('Failed to cancel task');
+      await fetchTaskDetails();
+    } catch (error) {
+      showAlert('Error cancelling task: ' + error.message, 'error');
+    }
+  };
+  confirmBtn.addEventListener('click', newHandler);
+}
+
+async function deleteTask() {
+  // Show confirmation modal
+  const modal = new bootstrap.Modal(document.getElementById('deleteTaskModal'));
+  modal.show();
+  
+  // Handle confirm button
+  const confirmBtn = document.getElementById('confirmDeleteTaskBtn');
+  const newHandler = async function() {
+    confirmBtn.removeEventListener('click', newHandler);
+    modal.hide();
+    
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Failed to delete task');
+      window.location.href = '/tasks';
+    } catch (error) {
+      showAlert('Error deleting task: ' + error.message, 'error');
+    }
+  };
+  confirmBtn.addEventListener('click', newHandler);
+}
+
+function restartTask() {
+  // Show confirmation modal
+  const modal = new bootstrap.Modal(document.getElementById('restartTaskModal'));
+  modal.show();
+
+  // Handle confirm button
+  const confirmBtn = document.getElementById('confirmRestartTaskBtn');
+  const newHandler = async function() {
+    confirmBtn.removeEventListener('click', newHandler);
+    modal.hide();
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/restart`, { method: 'POST' });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to restart task');
+      }
+
+      const result = await response.json();
+      showAlert(`Task restarted successfully! Redirecting to new task...`, 'success');
+
+      // Redirect to the new task after a brief delay
+      setTimeout(() => {
+        window.location.href = `/tasks/${result.new_task_id}`;
+      }, 1500);
+    } catch (error) {
+      showAlert('Error restarting task: ' + error.message, 'error');
+    }
+  };
+  confirmBtn.addEventListener('click', newHandler);
+}
+
+let currentTask = null; // Store current task for editing
+
+function showEditModal() {
+  if (!currentTask) {
+    showAlert('Task data not loaded', 'error');
+    return;
+  }
+
+  // Populate the edit form with current values
+  document.getElementById('editCommand').value = currentTask.command;
+  document.getElementById('editOutputDir').value = currentTask.output_dir;
+
+  // Show confirmation modal
+  const modal = new bootstrap.Modal(document.getElementById('editTaskModal'));
+  modal.show();
+
+  // Handle confirm button
+  const confirmBtn = document.getElementById('confirmEditTaskBtn');
+  const newHandler = async function() {
+    confirmBtn.removeEventListener('click', newHandler);
+
+    const commandText = document.getElementById('editCommand').value.trim();
+    const outputDir = document.getElementById('editOutputDir').value.trim();
+
+    if (!commandText) {
+      showAlert('Command cannot be empty', 'error');
+      return;
+    }
+
+    // Parse command string into array
+    const command = commandText.match(/(?:[^\s"]+|"[^"]*")+/g).map(arg => arg.replace(/^"|"$/g, ''));
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command, output_dir: outputDir })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to edit task');
+      }
+
+      modal.hide();
+      await fetchTaskDetails();
+      showAlert('Task updated successfully!', 'success');
+    } catch (error) {
+      showAlert('Error updating task: ' + error.message, 'error');
+    }
+  };
+  confirmBtn.addEventListener('click', newHandler);
+}
+
+function refreshTask() {
+  fetchTaskDetails();
+}
+
+async function copyCommand(event) {
+  try {
+    const text = document.getElementById('taskCommand').textContent;
+    await copyText(text);
+
+    // Show success feedback with icon change
+    const btn = event.target.closest('button');
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+    btn.classList.remove('btn-outline-secondary');
+    btn.classList.add('btn-success');
+
+    setTimeout(() => {
+      btn.innerHTML = originalHTML;
+      btn.classList.remove('btn-success');
+      btn.classList.add('btn-outline-secondary');
+    }, 2000);
+  } catch (err) {
+    console.error('Failed to copy command:', err);
+    showAlert('Failed to copy command to clipboard: ' + err.message, 'danger');
+  }
+}
+
+// Reusable modal functions
+function showSuccessModal(title, message, onClose = null) {
+  const modalHtml = `
+    <div class="modal fade" id="cygorSuccessModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark border border-success">
+          <div class="modal-header border-success">
+            <h5 class="modal-title text-white">
+              <i class="bi bi-check-circle-fill me-2 text-success"></i>${title}
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body text-light">
+            <p class="mb-0">${message}</p>
+          </div>
+          <div class="modal-footer border-success">
+            <button type="button" class="btn btn-success" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Remove existing modal if any
+  const existingModal = document.getElementById('cygorSuccessModal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+
+  // Add modal to page
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+  // Show modal
+  const modal = new bootstrap.Modal(document.getElementById('cygorSuccessModal'));
+  modal.show();
+
+  // Handle onClose callback
+  if (onClose) {
+    document.getElementById('cygorSuccessModal').addEventListener('hidden.bs.modal', onClose, { once: true });
+  }
+}
+
+function showErrorModal(title, message) {
+  const modalHtml = `
+    <div class="modal fade" id="cygorErrorModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark border border-danger">
+          <div class="modal-header border-danger">
+            <h5 class="modal-title text-white">
+              <i class="bi bi-exclamation-triangle-fill me-2 text-danger"></i>${title}
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body text-light">
+            <p class="mb-0">${message}</p>
+          </div>
+          <div class="modal-footer border-danger">
+            <button type="button" class="btn btn-danger" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Remove existing modal if any
+  const existingModal = document.getElementById('cygorErrorModal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+
+  // Add modal to page
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+  // Show modal
+  const modal = new bootstrap.Modal(document.getElementById('cygorErrorModal'));
+  modal.show();
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', fetchTaskDetails);
+
+// Auto-refresh when page gains focus
+window.addEventListener('focus', () => {
+  console.log('Task detail focused - refreshing...');
+  fetchTaskDetails();
+});
+
+// Cleanup
+window.addEventListener('beforeunload', () => {
+  if (refreshInterval) clearInterval(refreshInterval);
+  stopTimer();
+});
+</script>
+
+{% endblock %}

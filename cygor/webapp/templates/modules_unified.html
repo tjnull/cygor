@@ -1,0 +1,768 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="cy-page-header">
+    <h1><i class="bi bi-grid-3x3-gap-fill"></i>{{ module.name }}</h1>
+    <span class="cy-page-subtitle">
+      {% if module.description %}{{ module.description }}{% endif %}
+      {% if module.version %}<span class="cy-badge ms-2">v{{ module.version }}</span>{% endif %}
+      {% if module.author %}<span class="ms-2">by {{ module.author }}</span>{% endif %}
+    </span>
+    {% if metadata and metadata.completed_at %}
+    <div class="cy-page-actions">
+      <span class="cy-badge"><i class="bi bi-clock"></i>{{ metadata.completed_at }}</span>
+    </div>
+    {% endif %}
+  </div>
+
+  {# Stats Dashboard #}
+  {% set total_count = results|length if results else 0 %}
+  {% if schema.view == "gallery" %}
+    {% set success_count = results|selectattr("status", "defined")|selectattr("status", "equalto", "SUCCESS")|list|length %}
+    {% set failed_count = results|selectattr("status", "defined")|selectattr("status", "equalto", "FAILED")|list|length %}
+  {% endif %}
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card bg-dark h-100">
+        <div class="card-body text-center">
+          <i class="bi bi-collection fs-1 text-info mb-2"></i>
+          <h3 class="text-white fw-bold mb-1">{{ total_count }}</h3>
+          <p class="text-secondary mb-0 fw-semibold">Total Results</p>
+        </div>
+      </div>
+    </div>
+    {% if schema.view == "gallery" %}
+      <div class="col-md-3">
+        <div class="card bg-dark h-100">
+          <div class="card-body text-center">
+            <i class="bi bi-check-circle fs-1 text-success mb-2"></i>
+            <h3 class="text-white fw-bold mb-1">{{ success_count }}</h3>
+            <p class="text-secondary mb-0 fw-semibold">Success</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card bg-dark h-100">
+          <div class="card-body text-center">
+            <i class="bi bi-x-circle fs-1 text-danger mb-2"></i>
+            <h3 class="text-white fw-bold mb-1">{{ failed_count }}</h3>
+            <p class="text-secondary mb-0 fw-semibold">Failed</p>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+    {% if metadata and metadata.target_count %}
+      <div class="col-md-3">
+        <div class="card bg-dark h-100">
+          <div class="card-body text-center">
+            <i class="bi bi-bullseye fs-1 text-warning mb-2"></i>
+            <h3 class="text-white fw-bold mb-1">{{ metadata.target_count }}</h3>
+            <p class="text-secondary mb-0 fw-semibold">Targets Scanned</p>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  {# Protocol/Category Filter (for grouped results) #}
+  {% if schema.group_by and results %}
+    {% set groups = results|groupby(schema.group_by) %}
+    <div class="card bg-dark mb-4">
+      <div class="card-header bg-dark border-secondary d-flex justify-content-between align-items-center">
+        <h5 class="text-white fw-bold mb-0">
+          <i class="bi bi-funnel me-2 text-primary"></i>Filter by {{ schema.group_by|title }}
+        </h5>
+        <button id="clearFilters" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-x-circle me-1"></i>Clear Filters
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-6 col-sm-4 col-md-2">
+            <div class="card bg-dark h-100 group-filter active" data-filter="all">
+              <div class="card-body text-center py-2">
+                <h6 class="text-info fw-bold mb-0">All</h6>
+              </div>
+            </div>
+          </div>
+          {% for group_name, group_items in groups %}
+            <div class="col-6 col-sm-4 col-md-2">
+              <div class="card bg-dark h-100 group-filter" data-filter="{{ group_name }}">
+                <div class="card-body text-center py-2">
+                  <h6 class="text-white fw-bold mb-1">{{ group_items|list|length }}</h6>
+                  <p class="text-secondary mb-0 small text-uppercase">{{ group_name }}</p>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {# Search Bar #}
+  <div class="card bg-dark mb-4">
+    <div class="card-body">
+      <label for="resultFilter" class="form-label text-white fw-semibold mb-3">
+        <i class="bi bi-search me-2"></i>Search & Filter
+      </label>
+      <div class="input-group">
+        <span class="input-group-text bg-dark border-secondary text-secondary">
+          <i class="bi bi-search"></i>
+        </span>
+        <input id="resultFilter" class="form-control bg-dark border-secondary text-light" type="text" placeholder="Search results..." />
+      </div>
+    </div>
+  </div>
+
+  {# Results Display #}
+  {% if not results or results|length == 0 %}
+    <div class="alert alert-warning">
+      <i class="bi bi-info-circle me-2"></i>No results to display yet. Run the module to generate data.
+    </div>
+  {% else %}
+    {# Gallery View #}
+    {% if schema.view == "gallery" %}
+      <div class="card bg-dark mb-4">
+        <div class="card-header bg-dark border-secondary d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <h5 class="text-white fw-bold mb-0">
+            <i class="bi bi-grid-3x3 me-2 text-primary"></i>Screenshots
+          </h5>
+          <div class="btn-group flex-wrap">
+            <button id="showAllReviews" class="btn btn-sm btn-outline-secondary active" data-review="all">All</button>
+            <button id="showReviewed" class="btn btn-sm btn-outline-success" data-review="reviewed">Reviewed</button>
+            <button id="showUnreviewed" class="btn btn-sm btn-outline-warning" data-review="unreviewed">Unreviewed</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <div id="reviewCounter" class="text-secondary small">
+              <i class="bi bi-info-circle me-1"></i>Reviewed: 0 / {{ results|length }}
+            </div>
+            <div class="btn-group flex-wrap">
+              <button id="markAllReviewed" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-check2-all me-1"></i>Mark Visible Reviewed
+              </button>
+              <button id="markAllUnreviewed" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-x-square me-1"></i>Mark Visible Unreviewed
+              </button>
+            </div>
+          </div>
+          <div id="resultsGrid" class="shots-grid">
+            {% for item in results %}
+              {% set item_key = module.slug ~ "_" ~ (item.host or item.ip or loop.index) ~ "_" ~ (item.port or "") %}
+              <div class="shot-card"
+                   data-review="unreviewed"
+                   data-status="{{ item.status or '' }}"
+                   data-group="{{ item[schema.group_by] if schema.group_by else '' }}"
+                   data-searchtext="{{ item.values()|join(' ')|lower }}">
+                <div class="shot-tile bg-dark shadow-sm">
+                  <div class="screenshot-wrap"
+                       data-img="{{ item.screenshot_url or item[schema.thumbnail_key] or '/static/no-screenshot.png' }}"
+                       data-key="{{ item_key }}"
+                       {% for cap_key in schema.caption_keys %}
+                       data-{{ cap_key }}="{{ item[cap_key] or '' }}"
+                       {% endfor %}>
+                    <img src="{{ item.screenshot_url or item[schema.thumbnail_key] or '/static/no-screenshot.png' }}"
+                         alt="{{ item.host or item.ip or 'Screenshot' }}"
+                         class="screenshot-img"
+                         onerror="this.style.display='none';this.nextElementSibling.classList.remove('d-none');">
+                    <div class="thumb-fallback d-none">
+                      <i class="bi bi-image"></i>
+                      <span>No screenshot</span>
+                    </div>
+                    <div class="screenshot-footer d-flex justify-content-between align-items-center">
+                      <span class="target-text">
+                        {% for cap_key in schema.caption_keys[:2] %}
+                          {{ item[cap_key] }}{% if not loop.last %}:{% endif %}
+                        {% endfor %}
+                      </span>
+                      {% if item.status %}
+                        <span class="badge status-badge
+                          {% if item.status == 'SUCCESS' %}bg-success
+                          {% elif item.status == 'FAILED' %}bg-danger
+                          {% elif item.status == 'PORT_CLOSED' %}bg-warning
+                          {% else %}bg-secondary{% endif %}">
+                          {{ item.status }}
+                        </span>
+                      {% endif %}
+                      {% if item.protocol %}
+                        <span class="badge bg-info text-uppercase">{{ item.protocol }}</span>
+                      {% endif %}
+                    </div>
+                  </div>
+                  {# Extra info row #}
+                  {% if item.url or item.info %}
+                    <div class="info-row px-2 py-1 text-secondary small text-truncate">
+                      <i class="bi bi-link-45deg me-1"></i>{{ item.url or item.info or '' }}
+                    </div>
+                  {% endif %}
+                  <div class="review-toggle px-2 py-1">
+                    <label class="form-check-label m-0">
+                      <input type="checkbox" class="form-check-input review-checkbox me-1"> <strong>Reviewed</strong>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+          <small class="text-secondary d-block mt-3">
+            <i class="bi bi-collection me-1"></i>{{ results|length }} result(s)
+          </small>
+        </div>
+      </div>
+
+    {# Table View #}
+    {% elif schema.view == "table" %}
+      <div class="card bg-dark mb-4">
+        <div class="card-header bg-dark border-secondary">
+          <h5 class="text-white fw-bold mb-0">
+            <i class="bi bi-table me-2 text-primary"></i>Results
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table id="resultsTable" class="table table-sm table-hover align-middle">
+              <thead>
+                <tr>
+                  {% if schema.columns and schema.columns|length > 0 %}
+                    {% for col in schema.columns %}
+                      {% if not col.hidden %}
+                        <th class="text-secondary sortable" data-key="{{ col.key }}">
+                          {{ col.label }}
+                          <i class="bi bi-arrow-down-up ms-1 opacity-50"></i>
+                        </th>
+                      {% endif %}
+                    {% endfor %}
+                  {% else %}
+                    {% for key in results[0].keys() %}
+                      <th class="text-secondary">{{ key|replace("_", " ")|title }}</th>
+                    {% endfor %}
+                  {% endif %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in results %}
+                  <tr data-searchtext="{{ row.values()|join(' ')|lower }}">
+                    {% if schema.columns and schema.columns|length > 0 %}
+                      {% for col in schema.columns %}
+                        {% if not col.hidden %}
+                          <td>
+                            {% set val = row[col.key] %}
+                            {% if col.type == "ip" %}
+                              <a href="/hosts?q={{ val }}" class="text-info">{{ val }}</a>
+                            {% elif col.type == "url" %}
+                              <a href="{{ val }}" target="_blank" rel="noopener" class="text-info">
+                                {{ val|truncate(50) }}
+                                <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                              </a>
+                            {% elif col.type == "badge" %}
+                              <span class="badge
+                                {% if val in ['SUCCESS', 'Open', 'Yes', 'Read Write'] %}bg-success
+                                {% elif val in ['FAILED', 'Closed', 'No', 'No Access'] %}bg-danger
+                                {% elif val in ['Read Only'] %}bg-warning
+                                {% else %}bg-secondary{% endif %}">
+                                {{ val }}
+                              </span>
+                            {% elif col.type == "code" %}
+                              <code class="text-light">{{ val }}</code>
+                            {% elif col.type == "screenshot" %}
+                              {% if val %}
+                                <button type="button" class="btn btn-sm btn-outline-info py-0 px-2 cy-shot-btn"
+                                        data-shot="{{ val }}"
+                                        data-shot-title="{{ row.path or row.url or row.target or 'Screenshot' }}">
+                                  <i class="bi bi-image me-1"></i>View
+                                </button>
+                              {% else %}
+                                <span class="text-muted">-</span>
+                              {% endif %}
+                            {% else %}
+                              {{ val if val is not none else '-' }}
+                            {% endif %}
+                          </td>
+                        {% endif %}
+                      {% endfor %}
+                    {% else %}
+                      {% for val in row.values() %}
+                        <td>{{ val if val is not none else '-' }}</td>
+                      {% endfor %}
+                    {% endif %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <small class="text-secondary d-block mt-3">
+            <i class="bi bi-table me-1"></i>{{ results|length }} row(s)
+          </small>
+        </div>
+      </div>
+
+    {# Mixed View (Table + Gallery) #}
+    {% elif schema.view == "mixed" %}
+      {# TODO: Implement mixed view #}
+      <div class="alert alert-info">Mixed view coming soon. Showing table view.</div>
+      {# Fall back to table for now #}
+    {% endif %}
+  {% endif %}
+</div>
+
+{# Screenshot Modal #}
+{% if schema.view == "gallery" %}
+<div class="modal fade" id="screenshotModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content bg-dark">
+      <div class="modal-header border-secondary">
+        <h6 class="modal-title text-white">
+          <i class="bi bi-image me-2"></i><span id="screenshotTitleText">Loading...</span>
+        </h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center bg-black">
+        <img id="screenshotFull" src="" alt="Full Screenshot" class="img-fluid rounded">
+      </div>
+      <div class="modal-footer border-secondary d-flex justify-content-between">
+        <div class="form-check text-start">
+          <input class="form-check-input" type="checkbox" id="modalReviewCheckbox">
+          <label class="form-check-label text-light" for="modalReviewCheckbox">Reviewed</label>
+        </div>
+        <a id="modalOpenImage" href="#" target="_blank" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-box-arrow-up-right me-1"></i>Open Image
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Screenshot popup for table 'screenshot' columns (e.g. webenum 'Shot') -->
+<div class="modal fade" id="cyShotModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content bg-dark border-secondary">
+      <div class="modal-header border-secondary">
+        <h6 class="modal-title text-white"><i class="bi bi-image me-2"></i><span id="cyShotTitle">Screenshot</span></h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <!-- Scroll the body (not shrink the image): long full-page captures stay
+           readable at full width and the user scrolls down through them. -->
+      <div class="modal-body text-center bg-black p-2" style="max-height:82vh; overflow:auto;">
+        <img id="cyShotImg" src="" alt="Screenshot" class="img-fluid rounded">
+      </div>
+      <div class="modal-footer border-secondary py-1">
+        <a id="cyShotOpen" href="#" target="_blank" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-box-arrow-up-right me-1"></i>Open full image
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Group filter cards */
+.group-filter {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  opacity: 0.85;
+  border: 1px solid #18181b !important;
+}
+
+.group-filter:hover {
+  opacity: 1;
+  transform: scale(1.03);
+  border-color: #27272a !important;
+}
+
+.group-filter.active {
+  border: 2px solid #3b82f6 !important;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+  transform: scale(1.05);
+  opacity: 1;
+}
+
+/* Grid layout for gallery */
+.shots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  grid-auto-flow: dense;
+  gap: 1.25rem;
+}
+
+.shot-card {
+  display: block;
+  opacity: 1;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.shot-card.fading-out {
+  opacity: 0;
+  transform: scale(0.97);
+}
+
+.shot-card.hidden { display: none !important; }
+
+.screenshot-wrap {
+  position: relative;
+  width: 100%;
+  background: #000000;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.4s ease, box-shadow 0.4s ease;
+  border-radius: 6px 6px 0 0;
+}
+
+.screenshot-wrap:hover {
+  transform: scale(1.02);
+  box-shadow: 0 0.75rem 1.5rem rgba(0,0,0,0.5);
+}
+
+.screenshot-img {
+  width: 100%;
+  height: 240px;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s ease;
+}
+
+.screenshot-wrap:hover .screenshot-img {
+  transform: scale(1.08);
+}
+
+.screenshot-footer {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: rgba(0,0,0,0.85);
+  padding: 0.6rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.info-row {
+  background: rgba(255,255,255,0.02);
+  border-top: 1px solid #18181b;
+}
+
+.review-toggle {
+  background: rgba(255,255,255,0.03);
+  border-top: 1px solid #18181b;
+  font-size: 0.9rem;
+  padding: 0.75rem;
+  border-radius: 0 0 6px 6px;
+}
+
+.shot-tile {
+  border: 1px solid #18181b;
+  border-radius: 6px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.shot-tile:hover {
+  border-color: #27272a;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.target-text {
+  color: #60a5fa !important;
+  font-weight: 500;
+}
+
+.thumb-fallback {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #18181b;
+  color: #71717a;
+  height: 240px;
+}
+
+.thumb-fallback i {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Table sorting */
+.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sortable:hover {
+  background: rgba(255,255,255,0.05);
+}
+
+/* Light theme adjustments */
+body.light-theme .card.bg-dark {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,0.1) !important;
+}
+
+body.light-theme .shot-tile {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,0.1) !important;
+}
+
+body.light-theme .target-text {
+  color: #0d6efd !important;
+}
+</style>
+
+<script>
+(function() {
+  const moduleSlug = '{{ module.slug }}';
+  const viewType = '{{ schema.view }}';
+
+  // Common elements
+  const filterInput = document.getElementById('resultFilter');
+  const clearBtn = document.getElementById('clearFilters');
+  const groupFilters = document.querySelectorAll('.group-filter');
+
+  let activeGroup = 'all';
+  let reviewMode = 'all';
+
+  // Search filter
+  function applyFilters() {
+    const q = (filterInput?.value || '').trim().toLowerCase();
+
+    if (viewType === 'gallery') {
+      const grid = document.getElementById('resultsGrid');
+      if (!grid) return;
+
+      grid.querySelectorAll('.shot-card').forEach(card => {
+        const searchText = card.dataset.searchtext || '';
+        const group = card.dataset.group || '';
+        const reviewAttr = card.dataset.review || 'unreviewed';
+
+        const textPass = !q || searchText.includes(q);
+        const groupPass = activeGroup === 'all' || group === activeGroup;
+
+        let reviewPass = true;
+        if (reviewMode === 'reviewed') reviewPass = (reviewAttr === 'reviewed');
+        if (reviewMode === 'unreviewed') reviewPass = (reviewAttr === 'unreviewed');
+
+        const shouldShow = textPass && groupPass && reviewPass;
+
+        if (shouldShow) {
+          card.classList.remove('hidden', 'fading-out');
+        } else {
+          if (!card.classList.contains('hidden')) {
+            card.classList.add('fading-out');
+            setTimeout(() => card.classList.add('hidden'), 400);
+          }
+        }
+      });
+
+      updateReviewCounter();
+    } else if (viewType === 'table') {
+      const table = document.getElementById('resultsTable');
+      if (!table) return;
+
+      table.querySelectorAll('tbody tr').forEach(row => {
+        const searchText = row.dataset.searchtext || '';
+        const textPass = !q || searchText.includes(q);
+        row.style.display = textPass ? '' : 'none';
+      });
+    }
+  }
+
+  // Group filter click
+  groupFilters.forEach(card => {
+    card.addEventListener('click', () => {
+      groupFilters.forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      activeGroup = card.dataset.filter || 'all';
+      applyFilters();
+    });
+  });
+
+  // Clear filters
+  clearBtn?.addEventListener('click', () => {
+    if (filterInput) filterInput.value = '';
+    activeGroup = 'all';
+    reviewMode = 'all';
+    groupFilters.forEach(c => c.classList.remove('active'));
+    document.querySelector('.group-filter[data-filter="all"]')?.classList.add('active');
+    document.querySelectorAll('[data-review]').forEach(b => b.classList.remove('active'));
+    document.getElementById('showAllReviews')?.classList.add('active');
+    applyFilters();
+  });
+
+  filterInput?.addEventListener('input', applyFilters);
+
+  // Gallery-specific functionality
+  if (viewType === 'gallery') {
+    const grid = document.getElementById('resultsGrid');
+    const modal = document.getElementById('screenshotModal');
+    const modalImg = document.getElementById('screenshotFull');
+    const modalTitle = document.getElementById('screenshotTitleText');
+    const modalOpen = document.getElementById('modalOpenImage');
+    const modalReviewCheckbox = document.getElementById('modalReviewCheckbox');
+    const reviewCounter = document.getElementById('reviewCounter');
+    const reviewBtns = document.querySelectorAll('[data-review]');
+    const markAllReviewedBtn = document.getElementById('markAllReviewed');
+    const markAllUnreviewedBtn = document.getElementById('markAllUnreviewed');
+
+    let currentModalKey = null;
+
+    function updateReviewCounter() {
+      if (!grid || !reviewCounter) return;
+      const total = grid.querySelectorAll('.shot-card').length;
+      const reviewed = grid.querySelectorAll('.shot-card[data-review="reviewed"]').length;
+      reviewCounter.textContent = `Reviewed: ${reviewed} / ${total}`;
+    }
+
+    function openModalFor(tile) {
+      const imgUrl = tile.dataset.img;
+      currentModalKey = tile.dataset.key;
+
+      // Build title from caption keys
+      const captionParts = [];
+      for (const attr of tile.getAttributeNames()) {
+        if (attr.startsWith('data-') && !['data-img', 'data-key'].includes(attr)) {
+          const val = tile.getAttribute(attr);
+          if (val) captionParts.push(val);
+        }
+      }
+
+      modalImg.src = imgUrl;
+      modalTitle.textContent = captionParts.slice(0, 3).join(':') || 'Screenshot';
+      modalOpen.href = imgUrl;
+
+      const saved = localStorage.getItem(moduleSlug + '_review_' + currentModalKey);
+      modalReviewCheckbox.checked = (saved === '1');
+
+      new bootstrap.Modal(modal).show();
+    }
+
+    // Modal review toggle
+    modalReviewCheckbox?.addEventListener('change', () => {
+      if (!currentModalKey) return;
+      const card = grid.querySelector(`.screenshot-wrap[data-key="${currentModalKey}"]`)?.closest('.shot-card');
+      if (!card) return;
+      const cb = card.querySelector('.review-checkbox');
+
+      if (modalReviewCheckbox.checked) {
+        localStorage.setItem(moduleSlug + '_review_' + currentModalKey, '1');
+        card.dataset.review = 'reviewed';
+        if (cb) cb.checked = true;
+      } else {
+        localStorage.setItem(moduleSlug + '_review_' + currentModalKey, '0');
+        card.dataset.review = 'unreviewed';
+        if (cb) cb.checked = false;
+      }
+      applyFilters();
+    });
+
+    // Initialize screenshot tiles
+    grid?.querySelectorAll('.screenshot-wrap').forEach(tile => {
+      tile.addEventListener('click', e => {
+        if (e.target.classList.contains('review-checkbox')) return;
+        openModalFor(tile);
+      });
+    });
+
+    // Initialize review checkboxes
+    grid?.querySelectorAll('.review-checkbox').forEach(cb => {
+      const card = cb.closest('.shot-card');
+      const key = card.querySelector('.screenshot-wrap')?.dataset.key;
+      const saved = localStorage.getItem(moduleSlug + '_review_' + key);
+      if (saved === '1') { cb.checked = true; card.dataset.review = 'reviewed'; }
+
+      cb.addEventListener('change', () => {
+        if (cb.checked) {
+          localStorage.setItem(moduleSlug + '_review_' + key, '1');
+          card.dataset.review = 'reviewed';
+        } else {
+          localStorage.setItem(moduleSlug + '_review_' + key, '0');
+          card.dataset.review = 'unreviewed';
+        }
+        applyFilters();
+      });
+    });
+
+    // Review mode buttons
+    reviewBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        reviewBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        reviewMode = btn.dataset.review || 'all';
+        applyFilters();
+      });
+    });
+
+    // Mark all reviewed/unreviewed
+    markAllReviewedBtn?.addEventListener('click', () => {
+      grid?.querySelectorAll('.shot-card:not(.hidden)').forEach(card => {
+        const cb = card.querySelector('.review-checkbox');
+        const key = card.querySelector('.screenshot-wrap')?.dataset.key;
+        if (cb && key) {
+          cb.checked = true;
+          card.dataset.review = 'reviewed';
+          localStorage.setItem(moduleSlug + '_review_' + key, '1');
+        }
+      });
+      applyFilters();
+    });
+
+    markAllUnreviewedBtn?.addEventListener('click', () => {
+      grid?.querySelectorAll('.shot-card:not(.hidden)').forEach(card => {
+        const cb = card.querySelector('.review-checkbox');
+        const key = card.querySelector('.screenshot-wrap')?.dataset.key;
+        if (cb && key) {
+          cb.checked = false;
+          card.dataset.review = 'unreviewed';
+          localStorage.setItem(moduleSlug + '_review_' + key, '0');
+        }
+      });
+      applyFilters();
+    });
+
+    updateReviewCounter();
+  }
+
+  // Table sorting
+  if (viewType === 'table') {
+    document.querySelectorAll('.sortable').forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.key;
+        const table = document.getElementById('resultsTable');
+        const tbody = table?.querySelector('tbody');
+        if (!tbody) return;
+
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const colIndex = Array.from(th.parentElement.children).indexOf(th);
+        const isAsc = th.classList.contains('sort-asc');
+
+        rows.sort((a, b) => {
+          const aVal = a.children[colIndex]?.textContent?.trim() || '';
+          const bVal = b.children[colIndex]?.textContent?.trim() || '';
+          return isAsc ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+        });
+
+        document.querySelectorAll('.sortable').forEach(s => s.classList.remove('sort-asc', 'sort-desc'));
+        th.classList.add(isAsc ? 'sort-desc' : 'sort-asc');
+
+        rows.forEach(row => tbody.appendChild(row));
+      });
+    });
+  }
+
+  // Screenshot popup: 'View' buttons in a table 'screenshot' column open the image in a modal.
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.cy-shot-btn');
+    if (!btn) return;
+    const url = btn.getAttribute('data-shot');
+    const title = btn.getAttribute('data-shot-title') || 'Screenshot';
+    document.getElementById('cyShotImg').src = url;
+    document.getElementById('cyShotTitle').textContent = title;
+    document.getElementById('cyShotOpen').href = url;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('cyShotModal')).show();
+  });
+
+  // Initial filter
+  applyFilters();
+})();
+</script>
+{% endblock %}

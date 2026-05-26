@@ -1,0 +1,2296 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <!-- Page header -->
+  <div class="cy-page-header">
+    <a href="/schedules" class="cy-btn cy-btn-icon" title="Back to Schedules">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <h1 id="scheduleName"><i class="bi bi-calendar3"></i>Loading…</h1>
+    <span class="cy-page-subtitle" id="scheduleDescription"></span>
+    <div class="cy-page-actions">
+      <button class="cy-btn" onclick="editSchedule()"><i class="bi bi-pencil-square"></i>Edit</button>
+      <button class="cy-btn cy-btn-primary" onclick="triggerNow()" id="btnTrigger"><i class="bi bi-play-circle-fill"></i>Run Now</button>
+      <button class="cy-btn" onclick="pauseSchedule()" id="btnPause" style="display:none;"><i class="bi bi-pause-fill"></i>Pause</button>
+      <button class="cy-btn" onclick="resumeSchedule()" id="btnResume" style="display:none;"><i class="bi bi-play-fill"></i>Resume</button>
+      <button class="cy-btn" onclick="clearStuck()" id="btnClearStuck" style="display:none;"><i class="bi bi-arrow-repeat"></i>Clear Stuck</button>
+      <button class="cy-btn cy-btn-danger" onclick="deleteSchedule()"><i class="bi bi-trash-fill"></i>Delete</button>
+      <button class="cy-btn" onclick="rescheduleTask()" id="btnReschedule"><i class="bi bi-calendar-plus"></i>Reschedule</button>
+      <button class="cy-btn" onclick="reactivateTask()" id="btnReactivate" style="display:none;"><i class="bi bi-arrow-counterclockwise"></i>Reactivate</button>
+      <button class="cy-btn cy-btn-icon" onclick="manualRefresh()" id="btnRefresh" title="Refresh">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Consolidated Info Panel -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card bg-dark border-0">
+        <div class="card-body p-4">
+          <!-- Top Row: Status, Type, Schedule, Next/Last Run -->
+          <div class="d-flex flex-wrap gap-4 align-items-start" id="infoPanel">
+            <div class="text-center py-3 w-100">
+              <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+            </div>
+          </div>
+
+          <!-- Expandable Details -->
+          <div class="mt-4 pt-3 border-top border-secondary">
+            <div class="d-flex gap-2 mb-3">
+              <button class="cygor-btn" type="button" data-bs-toggle="collapse" data-bs-target="#detailsCollapse">
+                <i class="bi bi-gear"></i> Configuration Details
+              </button>
+            </div>
+            <div class="collapse" id="detailsCollapse">
+              <div class="row g-4 mt-1">
+                <div class="col-md-4" id="scheduleConfig"></div>
+                <div class="col-md-4" id="taskConfig"></div>
+                <div class="col-md-4" id="advancedSettings"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Execution History -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card bg-dark border-0">
+        <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center py-3">
+          <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Execution History</h5>
+          <div id="statsContainer" class="d-flex gap-3"></div>
+        </div>
+        <div class="card-body pt-2">
+          <div id="historyContainer">
+            <div class="text-center py-3">
+              <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Trigger Confirmation Modal -->
+<div class="modal fade" id="triggerScheduleModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border-primary">
+      <div class="modal-header border-0">
+        <h5 class="modal-title text-primary"><i class="bi bi-lightning-fill me-2"></i>Run Task Now</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Run this scheduled task immediately?</p>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="confirmTriggerSchedule()">
+          <i class="bi bi-lightning-fill me-1"></i>Run Now
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Clear Stuck Modal -->
+<div class="modal fade" id="clearStuckModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border-warning">
+      <div class="modal-header border-0">
+        <h5 class="modal-title text-warning"><i class="bi bi-arrow-repeat me-2"></i>Clear Stuck Task</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Clear the stuck task tracking for this schedule?</p>
+        <ul class="text-secondary small">
+          <li>Clear "running" state so new tasks can start</li>
+          <li>Mark stuck history entries as "failed"</li>
+          <li>Allow schedule to run on next scheduled time</li>
+        </ul>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-warning" onclick="confirmClearStuck()">
+          <i class="bi bi-arrow-repeat me-1"></i>Clear Stuck
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Pause Modal -->
+<div class="modal fade" id="pauseScheduleModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border-warning">
+      <div class="modal-header border-0">
+        <h5 class="modal-title text-warning"><i class="bi bi-pause-fill me-2"></i>Pause Schedule</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Pause this schedule? It will not run until resumed.</p>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-warning" onclick="confirmPauseSchedule()">
+          <i class="bi bi-pause-fill me-1"></i>Pause
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Resume Modal -->
+<div class="modal fade" id="resumeScheduleModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border-success">
+      <div class="modal-header border-0">
+        <h5 class="modal-title text-success"><i class="bi bi-play-fill me-2"></i>Resume Schedule</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Resume this schedule? It will start running according to its configuration.</p>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" onclick="confirmResumeSchedule()">
+          <i class="bi bi-play-fill me-1"></i>Resume
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Modal -->
+<div class="modal fade" id="deleteScheduleModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border-danger">
+      <div class="modal-header border-0">
+        <h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Delete Schedule</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Delete this schedule permanently?</p>
+        <p class="text-danger small"><strong>This action cannot be undone.</strong></p>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" onclick="confirmDeleteSchedule()">
+          <i class="bi bi-trash me-1"></i>Delete
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Reactivate Modal -->
+<div class="modal fade" id="reactivateModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border-success">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title"><i class="bi bi-arrow-counterclockwise me-2"></i>Reactivate Schedule</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>This schedule was auto-deactivated. Choose how to reactivate it:</p>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" id="resetRunCount" checked>
+          <label class="form-check-label" for="resetRunCount">Reset run count to 0</label>
+        </div>
+        <div class="mb-3">
+          <label for="newEndDate" class="form-label">New End Date (optional)</label>
+          <input type="datetime-local" class="form-control" id="newEndDate">
+        </div>
+        <div class="mb-3">
+          <label for="newMaxRuns" class="form-label">New Max Runs (empty = unlimited)</label>
+          <input type="number" class="form-control" id="newMaxRuns" min="1" placeholder="Unlimited">
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="cygor-btn" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="cygor-btn cygor-btn-success" onclick="confirmReactivate()">Reactivate</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Reschedule Modal -->
+<div class="modal fade" id="rescheduleModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border-info">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title"><i class="bi bi-calendar-plus me-2"></i>Reschedule</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Quick-change schedule parameters without editing the full configuration:</p>
+        <div class="mb-3">
+          <label for="reschedEndDate" class="form-label">End Date</label>
+          <input type="datetime-local" class="form-control" id="reschedEndDate">
+          <div class="form-text">Extend or change the schedule's end date</div>
+        </div>
+        <div class="mb-3">
+          <label for="reschedMaxRuns" class="form-label">Max Runs (empty = unlimited)</label>
+          <input type="number" class="form-control" id="reschedMaxRuns" min="1" placeholder="Unlimited">
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="cygor-btn" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="cygor-btn cygor-btn-info" onclick="confirmReschedule()">Reschedule</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Schedule Modal -->
+<div class="modal fade" id="editScheduleModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width: 1400px;">
+    <div class="modal-content bg-dark border-info">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title text-info"><i class="bi bi-pencil-square me-2"></i>Edit Schedule</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="max-height: 75vh; overflow-y: auto;">
+        <form id="editScheduleForm">
+          <div class="row g-4">
+            <!-- Sidebar Navigation -->
+            <div class="col-lg-3">
+              <nav class="edit-scan-nav">
+                <button type="button" class="edit-scan-nav-item active" data-edit-tab="edit-basic">
+                  <i class="bi bi-info-circle"></i>
+                  <span>Basic Info</span>
+                </button>
+                <button type="button" class="edit-scan-nav-item" data-edit-tab="edit-schedule">
+                  <i class="bi bi-calendar-check"></i>
+                  <span>Schedule</span>
+                </button>
+                <button type="button" class="edit-scan-nav-item" data-edit-tab="edit-task">
+                  <i class="bi bi-gear"></i>
+                  <span>Task Options</span>
+                </button>
+                <button type="button" class="edit-scan-nav-item" data-edit-tab="edit-advanced">
+                  <i class="bi bi-sliders"></i>
+                  <span>Advanced</span>
+                </button>
+              </nav>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="col-lg-9">
+              <!-- Basic Information Tab -->
+              <div class="edit-scan-tab active" id="edit-tab-edit-basic">
+                <div class="card bg-dark border-secondary">
+                  <div class="card-header border-secondary">
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-info-circle me-2 text-info"></i>Basic Information</h5>
+                  </div>
+                  <div class="card-body">
+                    <p class="text-secondary mb-4">Provide a name and description for this scheduled task.</p>
+                    <div class="mb-4">
+                      <label for="editName" class="form-label">Schedule Name <span class="text-danger">*</span></label>
+                      <input type="text" class="form-control form-control-lg bg-black text-light border-secondary" id="editName" required placeholder="e.g., Daily Production Scan">
+                      <div class="form-text">A unique, descriptive name for this schedule</div>
+                    </div>
+                    <div class="mb-4">
+                      <label for="editDescription" class="form-label">Description</label>
+                      <textarea class="form-control bg-black text-light border-secondary" id="editDescription" rows="3" placeholder="Optional description of what this schedule does..."></textarea>
+                      <div class="form-text">Help your team understand the purpose of this scheduled task</div>
+                    </div>
+                    <div>
+                      <label class="form-label">Task Type</label>
+                      <div class="p-3 bg-black rounded border border-secondary">
+                        <span id="editTaskTypeBadge" class="badge bg-primary fs-6"></span>
+                        <small class="text-light opacity-75 ms-2">(Task type cannot be changed after creation)</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Schedule Configuration Tab -->
+              <div class="edit-scan-tab" id="edit-tab-edit-schedule">
+                <div class="card bg-dark border-secondary">
+                  <div class="card-header border-secondary">
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-calendar-check me-2 text-info"></i>Schedule Configuration</h5>
+                  </div>
+                  <div class="card-body">
+                    <p class="text-secondary mb-4">Configure when and how often this task should run.</p>
+                    <div class="row g-3 mb-4">
+                      <div class="col-md-4">
+                        <label for="editScheduleType" class="form-label">Schedule Type</label>
+                        <select class="form-select bg-black text-light border-secondary" id="editScheduleType" onchange="toggleEditScheduleConfig()">
+                          <option value="interval">Interval</option>
+                          <option value="cron">Cron</option>
+                          <option value="date">One-time</option>
+                        </select>
+                      </div>
+                      <div class="col-md-4">
+                        <label for="editTimezone" class="form-label">Timezone</label>
+                        <select class="form-select bg-black text-light border-secondary" id="editTimezone">
+                          <option value="UTC">UTC</option>
+                          <!-- Americas -->
+                          <option value="America/New_York">America/New_York (EST/EDT)</option>
+                          <option value="America/Chicago">America/Chicago (CST/CDT)</option>
+                          <option value="America/Denver">America/Denver (MST/MDT)</option>
+                          <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
+                          <option value="America/Anchorage">America/Anchorage (AKST)</option>
+                          <option value="America/Phoenix">America/Phoenix (MST)</option>
+                          <option value="America/Toronto">America/Toronto (EST/EDT)</option>
+                          <option value="America/Vancouver">America/Vancouver (PST/PDT)</option>
+                          <option value="America/Mexico_City">America/Mexico_City (CST)</option>
+                          <option value="America/Sao_Paulo">America/Sao_Paulo (BRT)</option>
+                          <!-- Europe -->
+                          <option value="Europe/London">Europe/London (GMT/BST)</option>
+                          <option value="Europe/Paris">Europe/Paris (CET/CEST)</option>
+                          <option value="Europe/Berlin">Europe/Berlin (CET/CEST)</option>
+                          <option value="Europe/Amsterdam">Europe/Amsterdam (CET/CEST)</option>
+                          <option value="Europe/Madrid">Europe/Madrid (CET/CEST)</option>
+                          <option value="Europe/Rome">Europe/Rome (CET/CEST)</option>
+                          <option value="Europe/Moscow">Europe/Moscow (MSK)</option>
+                          <!-- Asia -->
+                          <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+                          <option value="Asia/Seoul">Asia/Seoul (KST)</option>
+                          <option value="Asia/Shanghai">Asia/Shanghai (CST)</option>
+                          <option value="Asia/Hong_Kong">Asia/Hong_Kong (HKT)</option>
+                          <option value="Asia/Singapore">Asia/Singapore (SGT)</option>
+                          <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+                          <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+                          <!-- Australia/Pacific -->
+                          <option value="Australia/Sydney">Australia/Sydney (AEST/AEDT)</option>
+                          <option value="Australia/Melbourne">Australia/Melbourne (AEST/AEDT)</option>
+                          <option value="Australia/Perth">Australia/Perth (AWST)</option>
+                          <option value="Pacific/Auckland">Pacific/Auckland (NZST/NZDT)</option>
+                          <option value="Pacific/Honolulu">Pacific/Honolulu (HST)</option>
+                        </select>
+                      </div>
+                      <div class="col-md-4">
+                        <label for="editMaxRuns" class="form-label">Max Runs (0 = unlimited)</label>
+                        <input type="number" class="form-control bg-black text-light border-secondary" id="editMaxRuns" min="0" value="0">
+                      </div>
+                    </div>
+
+                    <!-- Interval Config -->
+                    <div id="editIntervalConfig" class="p-3 bg-black rounded border border-secondary">
+                      <h6 class="text-info mb-3"><i class="bi bi-stopwatch me-1"></i>Interval Settings</h6>
+                      <div class="row g-3">
+                        <div class="col-md-3">
+                          <label class="form-label">Days</label>
+                          <input type="number" class="form-control bg-dark text-light border-secondary" id="editIntervalDays" min="0" value="0">
+                        </div>
+                        <div class="col-md-3">
+                          <label class="form-label">Hours</label>
+                          <input type="number" class="form-control bg-dark text-light border-secondary" id="editIntervalHours" min="0" value="0">
+                        </div>
+                        <div class="col-md-3">
+                          <label class="form-label">Minutes</label>
+                          <input type="number" class="form-control bg-dark text-light border-secondary" id="editIntervalMinutes" min="0" value="0">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                          <small class="text-light opacity-75">Run every X days/hours/minutes</small>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Start / End Date (for Interval and Cron) -->
+                    <div id="editDateRangeConfig" class="p-3 bg-black rounded border border-secondary mt-3">
+                      <h6 class="text-info mb-3"><i class="bi bi-calendar-range me-1"></i>Date Range (Optional)</h6>
+                      <div class="row g-3">
+                        <div class="col-md-6">
+                          <label class="form-label">Start Date/Time</label>
+                          <input type="datetime-local" class="form-control bg-dark text-light border-secondary" id="editStartDate">
+                          <small class="text-muted">When the first run should occur. Leave empty to start immediately.</small>
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label">End Date/Time</label>
+                          <input type="datetime-local" class="form-control bg-dark text-light border-secondary" id="editEndDate">
+                          <small class="text-muted">When the schedule should stop running. Leave empty for no end date.</small>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Cron Config -->
+                    <div id="editCronConfig" class="p-3 bg-black rounded border border-secondary mt-3" style="display: none;">
+                      <h6 class="text-info mb-3"><i class="bi bi-clock me-1"></i>Cron Settings</h6>
+                      <div class="row g-3">
+                        <div class="col-md-3">
+                          <label class="form-label">Minute</label>
+                          <input type="text" class="form-control bg-dark text-light border-secondary" id="editCronMinute" placeholder="0-59 or *">
+                        </div>
+                        <div class="col-md-3">
+                          <label class="form-label">Hour</label>
+                          <input type="text" class="form-control bg-dark text-light border-secondary" id="editCronHour" placeholder="0-23 or *">
+                        </div>
+                        <div class="col-md-3">
+                          <label class="form-label">Day of Month</label>
+                          <input type="text" class="form-control bg-dark text-light border-secondary" id="editCronDay" placeholder="1-31 or *">
+                        </div>
+                        <div class="col-md-3">
+                          <label class="form-label">Day of Week</label>
+                          <select class="form-select bg-dark text-light border-secondary" id="editCronDayOfWeek">
+                            <option value="*">Every Day</option>
+                            <option value="mon">Monday</option>
+                            <option value="tue">Tuesday</option>
+                            <option value="wed">Wednesday</option>
+                            <option value="thu">Thursday</option>
+                            <option value="fri">Friday</option>
+                            <option value="sat">Saturday</option>
+                            <option value="sun">Sunday</option>
+                            <option value="mon-fri">Weekdays</option>
+                            <option value="sat,sun">Weekends</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="mt-2">
+                        <small class="text-light opacity-75">Cron expression: <code id="cronPreview" class="text-warning">* * * * *</code></small>
+                      </div>
+                    </div>
+
+                    <!-- Date Config -->
+                    <div id="editDateConfig" class="p-3 bg-black rounded border border-secondary mt-3" style="display: none;">
+                      <h6 class="text-info mb-3"><i class="bi bi-calendar-event me-1"></i>One-time Run</h6>
+                      <div class="row g-3">
+                        <div class="col-md-6">
+                          <label class="form-label">Run Date/Time</label>
+                          <input type="datetime-local" class="form-control bg-dark text-light border-secondary" id="editRunDate">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Task Options Tab -->
+              <div class="edit-scan-tab" id="edit-tab-edit-task">
+                <div class="card bg-dark border-secondary">
+                  <div class="card-header border-secondary">
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-gear me-2 text-info"></i>Task Configuration</h5>
+                  </div>
+                  <div class="card-body">
+                    <p class="text-secondary mb-4">Configure parameters for this task.</p>
+                    <div id="editTaskConfigBody"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Advanced Settings Tab -->
+              <div class="edit-scan-tab" id="edit-tab-edit-advanced">
+                <div class="card bg-dark border-secondary">
+                  <div class="card-header border-secondary">
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-sliders me-2 text-info"></i>Advanced Options</h5>
+                  </div>
+                  <div class="card-body">
+                    <p class="text-secondary mb-4">Fine-tune execution behavior and resource limits.</p>
+
+                    <!-- Concurrent Execution -->
+                    <div class="p-3 bg-black rounded border border-secondary mb-4">
+                      <h6 class="text-info mb-3"><i class="bi bi-layers me-1"></i>Concurrent Execution</h6>
+                      <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="editAllowConcurrent">
+                        <label class="form-check-label" for="editAllowConcurrent">Allow Concurrent Runs</label>
+                      </div>
+                      <div>
+                        <label class="form-label">Max Concurrent Runs</label>
+                        <input type="number" class="form-control bg-dark text-light border-secondary" id="editMaxConcurrent" min="1" value="1" style="max-width: 200px;">
+                        <small class="text-light opacity-75">Maximum parallel executions allowed</small>
+                      </div>
+                    </div>
+
+                    <!-- Resource Limits -->
+                    <div class="p-3 bg-black rounded border border-secondary">
+                      <h6 class="text-info mb-3"><i class="bi bi-cpu me-1"></i>Resource Monitoring</h6>
+                      <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="editCheckResources">
+                        <label class="form-check-label" for="editCheckResources">Check System Resources Before Running</label>
+                      </div>
+                      <div class="row g-4 mt-1">
+                        <div class="col-md-6">
+                          <label class="form-label">Max CPU Usage: <strong id="editCpuValue">80</strong>%</label>
+                          <input type="range" class="form-range" id="editMaxCpu" min="10" max="100" value="80" oninput="document.getElementById('editCpuValue').textContent = this.value">
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label">Max Memory Usage: <strong id="editMemoryValue">80</strong>%</label>
+                          <input type="range" class="form-range" id="editMaxMemory" min="10" max="100" value="80" oninput="document.getElementById('editMemoryValue').textContent = this.value">
+                        </div>
+                      </div>
+                      <small class="text-light opacity-75">Queue the task if CPU or memory usage exceeds the configured thresholds</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="cygor-btn" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="cygor-btn cygor-btn-info" onclick="saveScheduleChanges()">
+          <i class="bi bi-check-lg me-1"></i>Save Changes
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Server File Browser Modal for Edit Form -->
+<div class="modal fade" id="editFileBrowserModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title"><i class="bi bi-folder2-open text-info me-2"></i>Browse Server Files</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex align-items-center mb-3">
+          <button class="btn btn-sm btn-outline-secondary me-2" id="editSfbUpBtn" onclick="editSfbGoUp()"><i class="bi bi-arrow-up"></i></button>
+          <input type="text" class="form-control bg-black text-light border-secondary flex-grow-1" id="editSfbCurrentPath" value="/" readonly>
+        </div>
+        <div id="editSfbFileList" style="max-height:400px; overflow-y:auto;" class="border border-secondary rounded">
+          <div class="text-center p-3 text-light opacity-50">Loading...</div>
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="editSfbSelectBtn" onclick="editSfbConfirmSelection()" disabled>Select File</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Edit modal sidebar nav */
+.edit-scan-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  position: sticky;
+  top: 0;
+}
+.edit-scan-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: #adb5bd;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.edit-scan-nav-item:hover {
+  background: rgba(13, 110, 253, 0.1);
+  border-color: rgba(13, 110, 253, 0.3);
+  color: #fff;
+}
+.edit-scan-nav-item.active {
+  background: rgba(13, 110, 253, 0.15);
+  border-color: #0d6efd;
+  color: #fff;
+}
+.edit-scan-nav-item i {
+  font-size: 1.1rem;
+  width: 20px;
+  text-align: center;
+}
+.edit-scan-tab { display: none; }
+.edit-scan-tab.active { display: block; }
+
+/* Light theme edit modal sidebar */
+body.light-theme .edit-scan-nav-item { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.08); color: #57606a; }
+body.light-theme .edit-scan-nav-item:hover { background: rgba(13,110,253,0.06); border-color: rgba(13,110,253,0.2); color: #24292f; }
+body.light-theme .edit-scan-nav-item.active { background: rgba(13,110,253,0.1); border-color: #0d6efd; color: #0d6efd; }
+
+/* Clean card styling */
+.card {
+  background: #0a0a0a !important;
+  border-radius: 8px;
+}
+
+/* Info panel - horizontal layout */
+.info-block {
+  min-width: 140px;
+  padding-right: 2rem;
+  border-right: 1px solid rgba(255,255,255,0.1);
+}
+.info-block:last-child {
+  border-right: none;
+}
+.info-label {
+  color: #9ca3ab;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.35rem;
+}
+.info-value {
+  color: #e2e8f0;
+  font-weight: 500;
+  font-size: 1.1rem;
+}
+
+/* Config section in dropdown */
+.config-section {
+  font-size: 1rem;
+}
+.config-section strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  font-size: 1.1rem;
+}
+.detail-item {
+  padding: 0.3rem 0;
+  font-size: 1rem;
+}
+.detail-item .text-muted {
+  margin-right: 0.35rem;
+}
+
+/* Inline stats */
+.stat-inline {
+  padding: 0.35rem 0.75rem;
+  background: rgba(255,255,255,0.05);
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+/* History table */
+.history-table {
+  font-size: 1rem;
+}
+.history-table th {
+  background: rgba(255,255,255,0.03);
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #adb5bd;
+  padding: 0.75rem !important;
+  border-bottom: 1px solid rgba(255,255,255,0.1) !important;
+}
+.history-table td {
+  vertical-align: middle;
+  padding: 0.75rem !important;
+  font-size: 1rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05) !important;
+}
+.history-table tr:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+/* Animations */
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spin-animation { animation: spin 1s linear infinite; }
+
+/* Server File Browser styles for edit modal */
+.edit-sfb-item {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  transition: background 0.15s;
+}
+.edit-sfb-item:hover {
+  background: rgba(13,110,253,0.1);
+}
+.edit-sfb-item.selected {
+  background: rgba(13,110,253,0.2);
+  border-left: 3px solid #0d6efd;
+}
+.edit-sfb-icon {
+  width: 24px;
+  text-align: center;
+  margin-right: 0.5rem;
+  font-size: 1rem;
+}
+.edit-sfb-icon.dir { color: #ffc107; }
+.edit-sfb-icon.file { color: #adb5bd; }
+.edit-sfb-icon.parent { color: #0dcaf0; }
+.edit-sfb-name {
+  flex-grow: 1;
+  font-size: 0.9rem;
+}
+.edit-sfb-size {
+  color: #6c757d;
+  font-size: 0.8rem;
+  margin-left: 0.5rem;
+}
+
+</style>
+
+<script>
+const scheduleId = {{ schedule_id }};
+let schedule = null;
+let history = [];
+let pagination = { total_count: 0, total_pages: 1, current_page: 1, page_size: 50 };
+let currentPage = 1;
+const pageSize = 50;
+let userTimezone = typeof getCygorTimezone === 'function' ? getCygorTimezone() : Intl.DateTimeFormat().resolvedOptions().timeZone;
+let autoRefreshInterval = null;
+let isRefreshing = false;
+
+document.addEventListener('DOMContentLoaded', function() {
+  loadSchedule();
+  loadHistory(1);
+  startAutoRefresh();
+
+  // Edit modal sidebar tab switching
+  document.querySelectorAll('.edit-scan-nav-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.edit-scan-nav-item').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tabId = btn.dataset.editTab;
+      document.querySelectorAll('.edit-scan-tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('edit-tab-' + tabId).classList.add('active');
+    });
+  });
+});
+
+function startAutoRefresh() {
+  if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+  autoRefreshInterval = setInterval(async () => {
+    if (!isRefreshing) {
+      isRefreshing = true;
+      await loadSchedule();
+      await loadHistory(currentPage);
+      isRefreshing = false;
+    }
+  }, 30000);
+}
+
+async function manualRefresh() {
+  const btn = document.getElementById('btnRefresh');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-arrow-repeat spin-animation"></i>';
+
+  try {
+    await loadSchedule();
+    await loadHistory(currentPage);
+    showToast('Refreshed', 'success');
+  } catch (e) {
+    showToast('Refresh failed', 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Refresh';
+  }
+}
+
+async function loadSchedule() {
+  try {
+    const response = await fetch(`/api/schedules/${scheduleId}`);
+    schedule = await response.json();
+    renderSchedule();
+  } catch (error) {
+    console.error('Error loading schedule:', error);
+  }
+}
+
+async function loadHistory(page = 1) {
+  try {
+    currentPage = page;
+    const response = await fetch(`/api/schedules/${scheduleId}/history?page=${page}&limit=${pageSize}`);
+    const data = await response.json();
+    history = data.history || [];
+    pagination = data.pagination || { total_count: history.length, total_pages: 1, current_page: 1, page_size: pageSize };
+    renderHistory();
+    renderStatistics();
+  } catch (error) {
+    console.error('Error loading history:', error);
+  }
+}
+
+function renderSchedule() {
+  document.getElementById('scheduleName').textContent = schedule.name;
+  document.getElementById('scheduleDescription').textContent = schedule.description || '';
+
+  // Update buttons
+  document.getElementById('btnPause').style.display = schedule.is_paused ? 'none' : 'inline-flex';
+  document.getElementById('btnResume').style.display = schedule.is_paused ? 'inline-flex' : 'none';
+
+  const hasSkipped = history.some(h => h.status === 'skipped');
+  document.getElementById('btnClearStuck').style.display =
+    (schedule.last_run_status === 'running' || hasSkipped) ? 'inline-flex' : 'none';
+
+  // Show reactivate button if task is inactive
+  document.getElementById('btnReactivate').style.display = schedule.is_active ? 'none' : '';
+
+  renderInfoPanel();
+  renderScheduleConfig();
+  renderTaskConfig();
+  renderAdvancedSettings();
+}
+
+function renderInfoPanel() {
+  const statusBadge = getStatusBadge(schedule);
+  const taskTypeBadge = getTaskTypeBadge(schedule.task_type);
+
+  // Build schedule details string
+  const cfg = schedule.schedule_config;
+  let scheduleDetails = '';
+  if (schedule.schedule_type === 'interval') {
+    const parts = [];
+    if (cfg.weeks) parts.push(`${cfg.weeks}w`);
+    if (cfg.days) parts.push(`${cfg.days}d`);
+    if (cfg.hours) parts.push(`${cfg.hours}h`);
+    if (cfg.minutes) parts.push(`${cfg.minutes}m`);
+    scheduleDetails = `Every ${parts.join(' ')}`;
+  } else if (schedule.schedule_type === 'cron') {
+    scheduleDetails = `<code class="text-warning small">${cfg.minute || '*'} ${cfg.hour || '*'} ${cfg.day || '*'} * ${cfg.day_of_week || '*'}</code>`;
+  } else if (schedule.schedule_type === 'date') {
+    scheduleDetails = formatDateTime(cfg.run_date);
+  }
+
+  document.getElementById('infoPanel').innerHTML = `
+    <!-- Status -->
+    <div class="info-block">
+      <div class="info-label">Status</div>
+      <div>${statusBadge}</div>
+    </div>
+
+    <!-- Task Type -->
+    <div class="info-block">
+      <div class="info-label">Task Type</div>
+      <div>${taskTypeBadge}</div>
+    </div>
+
+    <!-- Schedule -->
+    <div class="info-block">
+      <div class="info-label">Schedule</div>
+      <div>
+        <span class="badge bg-secondary me-1">${schedule.schedule_type.toUpperCase()}</span>
+        <span class="text-light">${scheduleDetails}</span>
+      </div>
+      <small class="text-muted d-block mt-1"><i class="bi bi-clock-history me-1"></i>${schedule.timezone}</small>
+    </div>
+
+    <!-- Next Run -->
+    <div class="info-block">
+      <div class="info-label">Next Run</div>
+      <div class="info-value">${schedule.next_run ? formatDateTime(schedule.next_run, schedule.timezone) : '-'}</div>
+      ${schedule.next_run ? `<small class="text-info">${getRelativeTime(schedule.next_run)}</small>` : ''}
+      ${schedule.next_run && schedule.timezone !== userTimezone ? `<small class="text-muted d-block">Your time: ${formatDateTime(schedule.next_run)}</small>` : ''}
+    </div>
+
+    <!-- Last Run -->
+    <div class="info-block">
+      <div class="info-label">Last Run</div>
+      <div class="d-flex align-items-center gap-2">
+        <span class="info-value">${schedule.last_run ? formatDateTime(schedule.last_run, schedule.timezone) : 'Never'}</span>
+        ${schedule.last_run_status ? getLastRunBadge(schedule.last_run_status) : ''}
+      </div>
+    </div>
+
+    <!-- Runs -->
+    <div class="info-block">
+      <div class="info-label">Runs</div>
+      <div class="info-value">${schedule.run_count}${schedule.max_runs ? ` / ${schedule.max_runs}` : ''}</div>
+    </div>
+  `;
+}
+
+function renderScheduleConfig() {
+  let html = `<div class="config-section"><strong class="text-success"><i class="bi bi-calendar-check me-1"></i>Schedule</strong>`;
+  html += `<div class="detail-item"><span class="text-muted">Type:</span> ${schedule.schedule_type}</div>`;
+  html += `<div class="detail-item"><span class="text-muted">Timezone:</span> ${schedule.timezone}</div>`;
+  if (schedule.start_date) html += `<div class="detail-item"><span class="text-muted">Start:</span> ${formatDateTime(schedule.start_date, schedule.timezone)}</div>`;
+  if (schedule.end_date) html += `<div class="detail-item"><span class="text-muted">End:</span> ${formatDateTime(schedule.end_date, schedule.timezone)}</div>`;
+  html += '</div>';
+  document.getElementById('scheduleConfig').innerHTML = html;
+}
+
+function renderTaskConfig() {
+  const config = schedule.config;
+  let html = `<div class="config-section"><strong class="text-warning"><i class="bi bi-gear me-1"></i>Task Config</strong>`;
+
+  // Targets
+  if (config.targets) {
+    const targetCount = Array.isArray(config.targets) ? config.targets.length : 1;
+    html += `<div class="detail-item"><span class="text-muted">Targets:</span> ${targetCount} target${targetCount !== 1 ? 's' : ''}</div>`;
+  }
+
+  if (schedule.task_type === 'port_scan') {
+    html += `<div class="detail-item"><span class="text-muted">Scan:</span> ${config.scan_type || 'top-ports'}</div>`;
+    if (config.ports) html += `<div class="detail-item"><span class="text-muted">Ports:</span> <code>${config.ports}</code></div>`;
+  } else if (schedule.task_type === 'credrecon') {
+    if (config.protocols && config.protocols.length > 1) {
+      html += `<div class="detail-item"><span class="text-muted">Protocols:</span> ${config.protocols.map(p => p.toUpperCase()).join(', ')}</div>`;
+    } else if (config.protocol) {
+      html += `<div class="detail-item"><span class="text-muted">Protocol:</span> ${config.protocol.toUpperCase()}</div>`;
+    }
+    if (config.threads) html += `<div class="detail-item"><span class="text-muted">Threads:</span> ${config.threads}</div>`;
+    if (config.attack_mode) html += `<div class="detail-item"><span class="text-muted">Mode:</span> <span class="badge bg-warning text-dark">${config.attack_mode}</span></div>`;
+  } else if (schedule.task_type === 'module_scan') {
+    html += `<div class="detail-item"><span class="text-muted">Module:</span> ${config.module_name || '-'}</div>`;
+  }
+
+  html += `<details class="mt-2" style="font-size: 0.75rem;"><summary class="text-muted" style="cursor: pointer;">Raw JSON</summary>
+    <pre class="bg-black text-light p-2 mt-1 rounded mb-0" style="max-height: 150px; overflow: auto;"><code>${JSON.stringify(config, null, 2)}</code></pre></details>`;
+  html += '</div>';
+
+  document.getElementById('taskConfig').innerHTML = html;
+}
+
+function renderAdvancedSettings() {
+  let html = `<div class="config-section"><strong class="text-secondary"><i class="bi bi-sliders me-1"></i>Advanced</strong>`;
+  html += `<div class="detail-item"><span class="text-muted">Concurrent:</span> ${schedule.allow_concurrent ? `<span class="badge bg-success">Yes</span> (max ${schedule.max_concurrent_runs})` : '<span class="badge bg-secondary">No</span>'}</div>`;
+  html += `<div class="detail-item"><span class="text-muted">Resources:</span> ${schedule.check_resources ? `<span class="badge bg-success">Yes</span> (${schedule.max_cpu_percent}% CPU)` : '<span class="badge bg-secondary">No</span>'}</div>`;
+  html += `<div class="detail-item"><span class="text-muted">Created:</span> ${schedule.created_at ? formatDateTime(schedule.created_at) : '-'}</div>`;
+  html += '<div class="detail-item"><span class="text-muted">Max Retries:</span> ' + (schedule.max_retries || 0) + '</div>';
+  html += '<div class="detail-item"><span class="text-muted">Retry Delay:</span> ' + (schedule.retry_delay_seconds ? Math.round(schedule.retry_delay_seconds / 60) + 'm' : '-') + (schedule.retry_backoff ? ' (backoff)' : '') + '</div>';
+  if (schedule.stall_timeout_seconds) {
+    html += '<div class="detail-item"><span class="text-muted">Stall Timeout:</span> ' + Math.round(schedule.stall_timeout_seconds / 60) + 'm</div>';
+  }
+  html += '</div>';
+  document.getElementById('advancedSettings').innerHTML = html;
+}
+
+function renderStatistics() {
+  const successCount = history.filter(h => h.status === 'success' || h.status === 'completed').length;
+  const failedCount = history.filter(h => h.status === 'failed').length;
+  const runningCount = history.filter(h => h.status === 'running').length;
+
+  document.getElementById('statsContainer').innerHTML = `
+    <span class="stat-inline"><span class="text-success fw-bold">${successCount}</span> <span class="text-muted small">ok</span></span>
+    <span class="stat-inline"><span class="text-danger fw-bold">${failedCount}</span> <span class="text-muted small">fail</span></span>
+    ${runningCount > 0 ? `<span class="stat-inline"><span class="text-primary fw-bold">${runningCount}</span> <span class="text-muted small">run</span></span>` : ''}
+    <span class="stat-inline"><span class="text-light fw-bold">${pagination.total_count}</span> <span class="text-muted small">total</span></span>
+  `;
+}
+
+function renderHistory() {
+  const container = document.getElementById('historyContainer');
+
+  if (history.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-4">
+        <i class="bi bi-clock-history text-secondary" style="font-size: 2rem;"></i>
+        <p class="text-secondary mt-2 mb-0">No execution history yet</p>
+      </div>
+    `;
+    return;
+  }
+
+  let html = `
+    <div class="table-responsive">
+      <table class="table table-dark history-table mb-0">
+        <thead>
+          <tr>
+            <th>Scheduled</th>
+            <th>Started</th>
+            <th>Duration</th>
+            <th>Status</th>
+            <th>Retry</th>
+            <th>Message</th>
+            <th>Task</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+
+  const displayTz = schedule ? schedule.timezone : undefined;
+  history.forEach(h => {
+    html += `
+      <tr>
+        <td>
+          <div>${formatDateTime(h.scheduled_time, displayTz)}</div>
+          <small class="text-info">${getRelativeTime(h.scheduled_time)}</small>
+        </td>
+        <td>${h.started_at ? `<div>${formatDateTime(h.started_at, displayTz)}</div><small class="text-info">${getRelativeTime(h.started_at)}</small>` : '<span class="text-secondary">-</span>'}</td>
+        <td>${h.duration_seconds ? formatDuration(h.duration_seconds) : '-'}</td>
+        <td>${getStatusBadgeSmall(h.status)}</td>
+        <td>${h.retry_attempt > 0 ? '<span class="badge bg-purple">Retry ' + h.retry_attempt + '/' + (schedule.max_retries || '?') + '</span>' : '<span class="text-secondary">-</span>'}</td>
+        <td style="max-width: 200px;" class="text-truncate">${h.message || h.error || '<span class="text-secondary">-</span>'}</td>
+        <td>${h.task_id ? `<button class="cygor-btn cygor-btn-primary cygor-btn-sm" onclick="viewTask('${h.task_id}')">${h.task_id.substring(0, 8)}...</button>` : '-'}</td>
+      </tr>
+    `;
+  });
+
+  html += '</tbody></table></div>';
+
+  if (pagination.total_pages > 1) {
+    html += `
+      <div class="d-flex justify-content-between align-items-center mt-3">
+        <small class="text-secondary">Page ${pagination.current_page} of ${pagination.total_pages} (${pagination.total_count} total)</small>
+        <div>
+          <button class="cygor-icon-btn cygor-btn-sm me-1" onclick="goToPage(1)" ${!pagination.has_prev ? 'disabled' : ''}><i class="bi bi-chevron-double-left"></i></button>
+          <button class="cygor-icon-btn cygor-btn-sm me-1" onclick="goToPage(${pagination.current_page - 1})" ${!pagination.has_prev ? 'disabled' : ''}><i class="bi bi-chevron-left"></i></button>
+          <button class="cygor-icon-btn cygor-btn-sm me-1" onclick="goToPage(${pagination.current_page + 1})" ${!pagination.has_next ? 'disabled' : ''}><i class="bi bi-chevron-right"></i></button>
+          <button class="cygor-icon-btn cygor-btn-sm" onclick="goToPage(${pagination.total_pages})" ${!pagination.has_next ? 'disabled' : ''}><i class="bi bi-chevron-double-right"></i></button>
+        </div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+}
+
+function goToPage(page) {
+  if (page >= 1 && page <= pagination.total_pages) loadHistory(page);
+}
+
+/* formatDateTime, getRelativeTime, formatDuration now in global cygor-datetime.js */
+
+function getStatusBadge(s) {
+  if (!s.is_active) return '<span class="badge bg-secondary">Inactive</span>';
+  if (s.is_paused) return '<span class="badge bg-warning text-dark">Paused</span>';
+  return '<span class="badge bg-success">Active</span>';
+}
+
+function getStatusBadgeSmall(status) {
+  const map = {
+    'success': '<span class="badge bg-success">Success</span>',
+    'completed': '<span class="badge bg-success">Completed</span>',
+    'failed': '<span class="badge bg-danger">Failed</span>',
+    'running': '<span class="badge bg-primary">Running</span>',
+    'queued': '<span class="badge bg-info">Queued</span>',
+    'skipped': '<span class="badge bg-warning text-dark">Skipped</span>',
+    'retrying': '<span class="badge bg-purple">Retrying</span>'
+  };
+  return map[status] || `<span class="badge bg-secondary">${status}</span>`;
+}
+
+function getTaskTypeBadge(type) {
+  const map = {
+    'port_scan': '<span class="badge bg-primary">Port Scan</span>',
+    'module_scan': '<span class="badge bg-info">Module Scan</span>',
+    'credrecon': '<span class="badge bg-warning text-dark">Cred Recon</span>',
+    'enrich': '<span class="badge bg-info">Enrich</span>'
+  };
+  return map[type] || `<span class="badge bg-secondary">${type}</span>`;
+}
+
+function getLastRunBadge(status) {
+  const map = {
+    'success': '<span class="badge bg-success badge-sm">Success</span>',
+    'failed': '<span class="badge bg-danger badge-sm">Failed</span>',
+    'running': '<span class="badge bg-primary badge-sm">Running</span>'
+  };
+  return map[status] || `<span class="badge bg-secondary badge-sm">${status}</span>`;
+}
+
+// Modal actions
+function triggerNow() { new bootstrap.Modal(document.getElementById('triggerScheduleModal')).show(); }
+function clearStuck() { new bootstrap.Modal(document.getElementById('clearStuckModal')).show(); }
+function pauseSchedule() { new bootstrap.Modal(document.getElementById('pauseScheduleModal')).show(); }
+function resumeSchedule() { new bootstrap.Modal(document.getElementById('resumeScheduleModal')).show(); }
+function deleteSchedule() { new bootstrap.Modal(document.getElementById('deleteScheduleModal')).show(); }
+function reactivateTask() { new bootstrap.Modal(document.getElementById('reactivateModal')).show(); }
+function rescheduleTask() { new bootstrap.Modal(document.getElementById('rescheduleModal')).show(); }
+
+async function confirmTriggerSchedule() {
+  bootstrap.Modal.getInstance(document.getElementById('triggerScheduleModal')).hide();
+  const btn = document.getElementById('btnTrigger');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+  try {
+    const response = await fetch(`/api/schedules/${scheduleId}/trigger`, { method: 'POST' });
+    const data = await response.json();
+    if (response.ok) {
+      showToast('Task triggered! Redirecting...', 'success');
+      setTimeout(() => {
+        // Route to appropriate page based on task type
+        const taskType = data.task_type;
+        if (taskType === 'credrecon') {
+          window.location.href = '/credrecon/scans/' + data.task_id;
+        } else {
+          window.location.href = '/tasks/' + data.task_id;
+        }
+      }, 1500);
+    } else throw new Error(data.detail);
+  } catch (e) {
+    showToast('Error: ' + e.message, 'danger');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-play-circle-fill me-1"></i>Run Now';
+  }
+}
+
+async function confirmClearStuck() {
+  bootstrap.Modal.getInstance(document.getElementById('clearStuckModal')).hide();
+  try {
+    const response = await fetch(`/api/schedules/${scheduleId}/clear-stuck`, { method: 'POST' });
+    if (response.ok) {
+      showToast('Stuck state cleared', 'success');
+      loadSchedule(); loadHistory(1);
+    } else throw new Error('Failed');
+  } catch (e) { showToast('Error: ' + e.message, 'danger'); }
+}
+
+async function confirmPauseSchedule() {
+  bootstrap.Modal.getInstance(document.getElementById('pauseScheduleModal')).hide();
+  try {
+    const response = await fetch(`/api/schedules/${scheduleId}/pause`, { method: 'POST' });
+    if (response.ok) { showToast('Schedule paused', 'success'); loadSchedule(); }
+    else throw new Error('Failed');
+  } catch (e) { showToast('Error: ' + e.message, 'danger'); }
+}
+
+async function confirmResumeSchedule() {
+  bootstrap.Modal.getInstance(document.getElementById('resumeScheduleModal')).hide();
+  try {
+    const response = await fetch(`/api/schedules/${scheduleId}/resume`, { method: 'POST' });
+    if (response.ok) { showToast('Schedule resumed', 'success'); loadSchedule(); }
+    else throw new Error('Failed');
+  } catch (e) { showToast('Error: ' + e.message, 'danger'); }
+}
+
+async function confirmReactivate() {
+  bootstrap.Modal.getInstance(document.getElementById('reactivateModal')).hide();
+  try {
+    const body = {
+      reset_run_count: document.getElementById('resetRunCount').checked,
+    };
+    const endDate = document.getElementById('newEndDate').value;
+    if (endDate) body.end_date = endDate;
+    const maxRuns = document.getElementById('newMaxRuns').value;
+    body.max_runs = maxRuns ? parseInt(maxRuns) : null;
+
+    const response = await fetch('/api/schedules/' + scheduleId + '/reactivate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (response.ok) {
+      showToast('Schedule reactivated!', 'success');
+      loadSchedule(); loadHistory(1);
+    } else {
+      const data = await response.json();
+      throw new Error(data.detail);
+    }
+  } catch (e) { showToast('Error: ' + e.message, 'danger'); }
+}
+
+async function confirmReschedule() {
+  bootstrap.Modal.getInstance(document.getElementById('rescheduleModal')).hide();
+  try {
+    const body = {};
+    const endDate = document.getElementById('reschedEndDate').value;
+    if (endDate) body.end_date = endDate;
+    const maxRuns = document.getElementById('reschedMaxRuns').value;
+    if (maxRuns) body.max_runs = parseInt(maxRuns);
+
+    const response = await fetch('/api/schedules/' + scheduleId + '/reschedule', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (response.ok) {
+      showToast('Schedule updated!', 'success');
+      loadSchedule(); loadHistory(1);
+    } else {
+      const data = await response.json();
+      throw new Error(data.detail);
+    }
+  } catch (e) { showToast('Error: ' + e.message, 'danger'); }
+}
+
+async function confirmDeleteSchedule() {
+  bootstrap.Modal.getInstance(document.getElementById('deleteScheduleModal')).hide();
+  try {
+    const response = await fetch(`/api/schedules/${scheduleId}`, { method: 'DELETE' });
+    if (response.ok) {
+      showToast('Schedule deleted. Redirecting...', 'success');
+      setTimeout(() => window.location.href = '/schedules', 1500);
+    } else throw new Error('Failed');
+  } catch (e) { showToast('Error: ' + e.message, 'danger'); }
+}
+
+async function viewTask(taskId) {
+  // Route based on the schedule's task type
+  const taskType = schedule ? schedule.task_type : null;
+
+  if (taskType === 'credrecon') {
+    window.location.href = '/credrecon/scans/' + taskId;
+  } else {
+    // For port_scan and module_scan, check if task exists in task manager
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`);
+      if (response.ok) window.location.href = '/tasks/' + taskId;
+      else showToast('Task no longer available', 'warning');
+    } catch (e) { showToast('Error: ' + e.message, 'danger'); }
+  }
+}
+
+// Edit Schedule Functions
+function editSchedule() {
+  if (!schedule) return;
+
+  // Basic Info tab
+  document.getElementById('editName').value = schedule.name || '';
+  document.getElementById('editDescription').value = schedule.description || '';
+
+  // Set task type badge
+  const taskTypeBadge = document.getElementById('editTaskTypeBadge');
+  const typeMap = {
+    'port_scan': { text: 'Port Scan', class: 'bg-primary' },
+    'module_scan': { text: 'Module Scan', class: 'bg-info' },
+    'credrecon': { text: 'Cred Recon', class: 'bg-warning text-dark' },
+    'enrich': { text: 'Enrich', class: 'bg-info' }
+  };
+  const typeInfo = typeMap[schedule.task_type] || { text: schedule.task_type, class: 'bg-secondary' };
+  taskTypeBadge.textContent = typeInfo.text;
+  taskTypeBadge.className = `badge ${typeInfo.class} fs-6`;
+
+  // Schedule tab
+  document.getElementById('editScheduleType').value = schedule.schedule_type || 'interval';
+
+  // Set timezone — if the schedule's timezone isn't in the dropdown, add it dynamically
+  const editTzSelect = document.getElementById('editTimezone');
+  const tz = schedule.timezone || 'UTC';
+  const tzExists = Array.from(editTzSelect.options).some(opt => opt.value === tz);
+  if (!tzExists) {
+    const opt = document.createElement('option');
+    opt.value = tz;
+    opt.textContent = tz;
+    editTzSelect.appendChild(opt);
+  }
+  editTzSelect.value = tz;
+  document.getElementById('editMaxRuns').value = schedule.max_runs || 0;
+
+  const cfg = schedule.schedule_config || {};
+  if (schedule.schedule_type === 'interval') {
+    document.getElementById('editIntervalDays').value = cfg.days || 0;
+    document.getElementById('editIntervalHours').value = cfg.hours || 0;
+    document.getElementById('editIntervalMinutes').value = cfg.minutes || 0;
+  } else if (schedule.schedule_type === 'cron') {
+    document.getElementById('editCronMinute').value = cfg.minute || '*';
+    document.getElementById('editCronHour').value = cfg.hour || '*';
+    document.getElementById('editCronDay').value = cfg.day || '*';
+    document.getElementById('editCronDayOfWeek').value = cfg.day_of_week || '*';
+    updateCronPreview();
+  } else if (schedule.schedule_type === 'date' && cfg.run_date) {
+    document.getElementById('editRunDate').value = cfg.run_date.replace(' ', 'T').slice(0, 16);
+  }
+
+  // Populate start/end dates
+  if (schedule.start_date) {
+    const sd = schedule.start_date.replace(' ', 'T').replace('Z', '').slice(0, 16);
+    document.getElementById('editStartDate').value = sd;
+  } else {
+    document.getElementById('editStartDate').value = '';
+  }
+  if (schedule.end_date) {
+    const ed = schedule.end_date.replace(' ', 'T').replace('Z', '').slice(0, 16);
+    document.getElementById('editEndDate').value = ed;
+  } else {
+    document.getElementById('editEndDate').value = '';
+  }
+
+  toggleEditScheduleConfig();
+  populateEditTaskConfig();
+
+  // Advanced tab
+  document.getElementById('editAllowConcurrent').checked = schedule.allow_concurrent || false;
+  document.getElementById('editCheckResources').checked = schedule.check_resources || false;
+  document.getElementById('editMaxConcurrent').value = schedule.max_concurrent_runs || 1;
+  const cpuVal = schedule.max_cpu_percent || 80;
+  const memVal = schedule.max_memory_percent || 80;
+  document.getElementById('editMaxCpu').value = cpuVal;
+  document.getElementById('editMaxMemory').value = memVal;
+  document.getElementById('editCpuValue').textContent = cpuVal;
+  document.getElementById('editMemoryValue').textContent = memVal;
+
+  // Reset to first tab (sidebar nav)
+  document.querySelectorAll('.edit-scan-nav-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.edit-scan-tab').forEach(t => t.classList.remove('active'));
+  const firstNav = document.querySelector('.edit-scan-nav-item[data-edit-tab="edit-basic"]');
+  if (firstNav) firstNav.classList.add('active');
+  document.getElementById('edit-tab-edit-basic').classList.add('active');
+
+  new bootstrap.Modal(document.getElementById('editScheduleModal')).show();
+}
+
+function updateCronPreview() {
+  const minute = document.getElementById('editCronMinute').value || '*';
+  const hour = document.getElementById('editCronHour').value || '*';
+  const day = document.getElementById('editCronDay').value || '*';
+  const dow = document.getElementById('editCronDayOfWeek').value || '*';
+  document.getElementById('cronPreview').textContent = `${minute} ${hour} ${day} * ${dow}`;
+}
+
+function toggleEditScheduleConfig() {
+  const type = document.getElementById('editScheduleType').value;
+  document.getElementById('editIntervalConfig').style.display = type === 'interval' ? 'block' : 'none';
+  document.getElementById('editCronConfig').style.display = type === 'cron' ? 'block' : 'none';
+  document.getElementById('editDateConfig').style.display = type === 'date' ? 'block' : 'none';
+  // Show date range for interval and cron (not one-time date which has its own run_date)
+  document.getElementById('editDateRangeConfig').style.display = (type === 'interval' || type === 'cron') ? 'block' : 'none';
+}
+
+function populateEditTaskConfig() {
+  const config = schedule.config || {};
+  const type = schedule.task_type;
+  let html = '';
+
+  if (type === 'port_scan') {
+    html = `
+      <!-- Targets Section -->
+      <div class="p-3 bg-black rounded border border-secondary mb-4">
+        <h6 class="text-primary mb-3"><i class="bi bi-crosshair me-1"></i>Scan Targets</h6>
+        <label class="form-label">Targets <span class="text-danger">*</span></label>
+        <textarea class="form-control bg-dark text-light border-secondary font-monospace" id="editTargets" rows="5" placeholder="Enter targets, one per line:&#10;&#10;192.168.1.0/24&#10;10.0.0.1-10.0.0.50&#10;example.com">${(config.targets || []).join('\n')}</textarea>
+        <small class="text-light opacity-75">Supports CIDR notation, IP ranges, hostnames, and single IPs</small>
+      </div>
+
+      <!-- Exclusions -->
+      <div class="p-3 bg-black rounded border border-secondary mb-4">
+        <h6 class="text-secondary mb-3"><i class="bi bi-x-circle me-1"></i>Exclusions (Optional)</h6>
+        <textarea class="form-control bg-dark text-light border-secondary font-monospace" id="editExclusions" rows="3" placeholder="IPs or ranges to exclude from scanning...">${(config.exclusions || []).join('\n')}</textarea>
+      </div>
+
+      <!-- Discovery Tools -->
+      <div class="p-3 bg-black rounded border border-secondary mb-4">
+        <h6 class="text-warning mb-3"><i class="bi bi-radar me-1"></i>Discovery Tools</h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="editDiscoverMasscan" ${config.discover === 'masscan' || config.discover?.includes?.('masscan') || !config.discover ? 'checked' : ''}>
+              <label class="form-check-label" for="editDiscoverMasscan">
+                <strong>Masscan</strong> <span class="badge bg-success">Fastest</span>
+                <br><small class="text-light opacity-75">World's fastest port scanner - ideal for large networks</small>
+              </label>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="editDiscoverNaabu" ${config.discover === 'naabu' || config.discover?.includes?.('naabu') ? 'checked' : ''}>
+              <label class="form-check-label" for="editDiscoverNaabu">
+                <strong>Naabu</strong>
+                <br><small class="text-light opacity-75">Modern Go-based scanner with CDN/WAF detection</small>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3">
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="editDiscoverMode" id="editModeFull" value="full" ${!config.discover_only ? 'checked' : ''}>
+            <label class="form-check-label" for="editModeFull">Discovery + Nmap</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="editDiscoverMode" id="editModeDiscoveryOnly" value="discovery-only" ${config.discover_only ? 'checked' : ''}>
+            <label class="form-check-label" for="editModeDiscoveryOnly">Discovery Only</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Nmap Options -->
+      <div class="p-3 bg-black rounded border border-secondary" id="editNmapSection">
+        <h6 class="text-success mb-3"><i class="bi bi-terminal me-1"></i>Nmap Options</h6>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Scan Type</label>
+            <select class="form-select bg-dark text-light border-secondary" id="editScanType">
+              <option value="quick" ${config.scan_type === 'quick' ? 'selected' : ''}>Quick (Top 100 Ports)</option>
+              <option value="top-ports" ${config.scan_type === 'top-ports' || !config.scan_type ? 'selected' : ''}>Standard (Top 1000 Ports)</option>
+              <option value="top-10000" ${config.scan_type === 'top-10000' ? 'selected' : ''}>Comprehensive (Top 10000)</option>
+              <option value="fullscan" ${config.scan_type === 'fullscan' ? 'selected' : ''}>Full (All 65535 Ports)</option>
+              <option value="custom" ${config.scan_type === 'custom' ? 'selected' : ''}>Custom Ports</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Custom Ports</label>
+            <input type="text" class="form-control bg-dark text-light border-secondary" id="editPorts" value="${config.ports || ''}" placeholder="e.g., 80,443,8080-8090">
+            <small class="text-light opacity-75">Used when Scan Type is "Custom Ports"</small>
+          </div>
+        </div>
+        <div class="row g-3 mt-2">
+          <div class="col-md-6">
+            <label class="form-label">Custom Nmap Options</label>
+            <input type="text" class="form-control bg-dark text-light border-secondary" id="editNmapOptions" value="${config.nmap_options || ''}" placeholder="e.g., -sS -T4">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Network Interface</label>
+            <input type="text" class="form-control bg-dark text-light border-secondary" id="editInterface" value="${config.interface || ''}" placeholder="e.g., eth0, tun0">
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (type === 'credrecon') {
+    const attackMode = config.attack_mode || 'default';
+    html = `
+      <!-- Targets Section -->
+      <div class="p-3 bg-black rounded border border-secondary mb-4">
+        <h6 class="text-warning mb-3"><i class="bi bi-crosshair me-1"></i>Scan Targets</h6>
+        <div class="btn-group mb-3" role="group">
+          <button type="button" class="btn btn-sm ${!config.targets_file ? 'btn-outline-light active' : 'btn-outline-secondary'}" id="editTargetMethodManualBtn" onclick="switchEditTargetMethod('manual')">
+            <i class="bi bi-pencil me-1"></i>Manual Input
+          </button>
+          <button type="button" class="btn btn-sm ${config.targets_file ? 'btn-outline-light active' : 'btn-outline-secondary'}" id="editTargetMethodFileBtn" onclick="switchEditTargetMethod('file')">
+            <i class="bi bi-file-earmark-text me-1"></i>Targets File
+          </button>
+        </div>
+        <div id="editTargetManual" style="display: ${!config.targets_file ? 'block' : 'none'};">
+          <label class="form-label">Targets <span class="text-danger">*</span></label>
+          <textarea class="form-control bg-dark text-light border-secondary font-monospace" id="editCredTargets" rows="5" placeholder="Enter targets, one per line:&#10;&#10;192.168.1.100:22&#10;10.10.10.5:3306&#10;http://admin.example.com/login">${(config.targets || []).join('\n')}</textarea>
+          <div class="mt-2">
+            <small class="text-light opacity-75 me-3"><i class="bi bi-check-circle text-success me-1"></i>IP:PORT format</small>
+            <small class="text-light opacity-75 me-3"><i class="bi bi-check-circle text-success me-1"></i>Full URLs with paths</small>
+            <small class="text-light opacity-75"><i class="bi bi-check-circle text-success me-1"></i>Auto-detect by port</small>
+          </div>
+        </div>
+        <div id="editTargetFile" style="display: ${config.targets_file ? 'block' : 'none'};">
+          <label class="form-label">Targets File <span class="text-danger">*</span></label>
+          <div class="input-group">
+            <input type="text" class="form-control bg-dark text-light border-secondary" id="editTargetsFilePath" value="${config.targets_file || ''}" placeholder="/path/to/targets.txt">
+            <button class="btn btn-outline-secondary" type="button" onclick="openEditFileBrowser('editTargetsFilePath', '.txt,.list,.csv')"><i class="bi bi-folder2-open"></i></button>
+          </div>
+          <small class="text-light opacity-75 mt-1 d-block">One target per line (IP:PORT format)</small>
+        </div>
+      </div>
+
+      <!-- Attack Mode Section -->
+      <div class="p-3 bg-black rounded border border-secondary mb-4">
+        <h6 class="text-warning mb-3"><i class="bi bi-shield-lock me-1"></i>Attack Mode</h6>
+        <div class="row g-3 mb-3">
+          <div class="col-md-3">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="editAttackMode" id="editModeDefault" value="default" ${attackMode === 'default' ? 'checked' : ''} onchange="toggleEditAttackModeSection()">
+              <label class="form-check-label" for="editModeDefault">
+                <strong>Default Credentials</strong>
+                <br><small class="text-light opacity-75">Built-in vendor defaults</small>
+              </label>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="editAttackMode" id="editModeSingle" value="single" ${attackMode === 'single' ? 'checked' : ''} onchange="toggleEditAttackModeSection()">
+              <label class="form-check-label" for="editModeSingle">
+                <strong>Single Credential</strong>
+                <br><small class="text-light opacity-75">Test one user/pass pair</small>
+              </label>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="editAttackMode" id="editModeSpray" value="spray" ${attackMode === 'spray' ? 'checked' : ''} onchange="toggleEditAttackModeSection()">
+              <label class="form-check-label" for="editModeSpray">
+                <strong>Password Spray</strong>
+                <br><small class="text-light opacity-75">One password, many users</small>
+              </label>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="editAttackMode" id="editModeStuff" value="stuff" ${attackMode === 'stuff' ? 'checked' : ''} onchange="toggleEditAttackModeSection()">
+              <label class="form-check-label" for="editModeStuff">
+                <strong>Credential Stuffing</strong>
+                <br><small class="text-light opacity-75">One user, many passwords</small>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="row g-3 mb-3">
+          <div class="col-md-3">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="editAttackMode" id="editModeKey" value="key" ${attackMode === 'key' ? 'checked' : ''} onchange="toggleEditAttackModeSection()">
+              <label class="form-check-label" for="editModeKey">
+                <strong>Key Authentication</strong>
+                <br><small class="text-light opacity-75">SSH key / certificate</small>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Default Credentials Settings -->
+        <div id="editDefaultCredsSection" class="mt-3 p-3 bg-dark rounded" style="display: ${attackMode === 'default' ? 'block' : 'none'};">
+          <h6 class="text-success mb-3"><i class="bi bi-database me-1"></i>Credential Sources</h6>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="editUseBuiltinCreds" ${config.use_builtin !== false ? 'checked' : ''}>
+                <label class="form-check-label" for="editUseBuiltinCreds">
+                  <strong>Built-in Database</strong> <span class="badge bg-secondary">Default</span>
+                  <br><small class="text-light opacity-75">Enterprise devices, IoT, databases</small>
+                </label>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="editUseExternalCreds" ${config.use_external ? 'checked' : ''}>
+                <label class="form-check-label" for="editUseExternalCreds">
+                  <strong>External Sources</strong>
+                  <br><small class="text-light opacity-75">DefaultCreds-cheat-sheet, CIRT.net</small>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Custom Usernames File (Optional)</label>
+              <div class="input-group">
+                <input type="text" class="form-control bg-black text-light border-secondary" id="editDefaultUsernamesFile" value="${config.usernames_file || ''}" placeholder="/path/to/usernames.txt">
+                <button class="btn btn-outline-secondary" type="button" onclick="openEditFileBrowser('editDefaultUsernamesFile', '.txt,.list,.csv')"><i class="bi bi-folder2-open"></i></button>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Custom Passwords File (Optional)</label>
+              <div class="input-group">
+                <input type="text" class="form-control bg-black text-light border-secondary" id="editDefaultPasswordsFile" value="${config.passwords_file || ''}" placeholder="/path/to/passwords.txt">
+                <button class="btn btn-outline-secondary" type="button" onclick="openEditFileBrowser('editDefaultPasswordsFile', '.txt,.list,.csv')"><i class="bi bi-folder2-open"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Single Credential Settings -->
+        <div id="editSingleCredsSection" class="mt-3 p-3 bg-dark rounded" style="display: ${attackMode === 'single' ? 'block' : 'none'};">
+          <h6 class="text-success mb-3"><i class="bi bi-person me-1"></i>Single Credential</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Username <span class="text-danger">*</span></label>
+              <input type="text" class="form-control bg-black text-light border-secondary" id="editSingleUsername" value="${config.username || ''}" placeholder="admin">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Password <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <input type="password" class="form-control bg-black text-light border-secondary" id="editSinglePassword" value="${config.password || ''}" placeholder="Enter password">
+                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('editSinglePassword', this)">
+                  <i class="bi bi-eye"></i>
+                </button>
+              </div>
+              <small class="text-light opacity-75">Password is case-sensitive</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Password Spray Settings -->
+        <div id="editSpraySection" class="mt-3 p-3 bg-dark rounded" style="display: ${attackMode === 'spray' ? 'block' : 'none'};">
+          <h6 class="text-success mb-3"><i class="bi bi-people me-1"></i>Password Spray Configuration</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Password to Spray <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <input type="password" class="form-control bg-black text-light border-secondary" id="editSprayPassword" value="${config.spray_password || ''}" placeholder="Summer2024!">
+                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('editSprayPassword', this)">
+                  <i class="bi bi-eye"></i>
+                </button>
+              </div>
+              <small class="text-light opacity-75">This password will be tested against all usernames (case-sensitive)</small>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Usernames File <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <input type="text" class="form-control bg-black text-light border-secondary" id="editSprayUsernamesFile" value="${config.usernames_file || ''}" placeholder="/path/to/usernames.txt">
+                <button class="btn btn-outline-secondary" type="button" onclick="openEditFileBrowser('editSprayUsernamesFile', '.txt,.list,.csv')"><i class="bi bi-folder2-open"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Credential Stuffing Settings -->
+        <div id="editStuffSection" class="mt-3 p-3 bg-dark rounded" style="display: ${attackMode === 'stuff' ? 'block' : 'none'};">
+          <h6 class="text-success mb-3"><i class="bi bi-key me-1"></i>Credential Stuffing Configuration</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Username to Test <span class="text-danger">*</span></label>
+              <input type="text" class="form-control bg-black text-light border-secondary" id="editStuffUsername" value="${config.stuff_username || ''}" placeholder="admin">
+              <small class="text-light opacity-75">This username will be tested with all passwords</small>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Passwords File <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <input type="text" class="form-control bg-black text-light border-secondary" id="editStuffPasswordsFile" value="${config.passwords_file || ''}" placeholder="/path/to/passwords.txt">
+                <button class="btn btn-outline-secondary" type="button" onclick="openEditFileBrowser('editStuffPasswordsFile', '.txt,.list,.csv')"><i class="bi bi-folder2-open"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+        <!-- Key Authentication Settings -->
+        <div id="editKeyAuthSection" class="mt-3 p-3 bg-dark rounded" style="display: ${attackMode === 'key' ? 'block' : 'none'};">
+          <h6 class="text-success mb-3"><i class="bi bi-key-fill me-1"></i>Key Authentication Configuration</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">SSH Private Key / PEM File <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <input type="text" class="form-control bg-black text-light border-secondary" id="editSshKeyPath" value="${config.ssh_key || ''}" placeholder="/path/to/id_rsa or /path/to/key.pem">
+                <button class="btn btn-outline-secondary" type="button" onclick="openEditFileBrowser('editSshKeyPath', '*')"><i class="bi bi-folder2-open"></i></button>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">SSH Certificate (Optional)</label>
+              <div class="input-group">
+                <input type="text" class="form-control bg-black text-light border-secondary" id="editSshCertPath" value="${config.ssh_cert || ''}" placeholder="/path/to/id_rsa-cert.pub">
+                <button class="btn btn-outline-secondary" type="button" onclick="openEditFileBrowser('editSshCertPath', '*')"><i class="bi bi-folder2-open"></i></button>
+              </div>
+            </div>
+          </div>
+          <div class="row g-3 mt-2">
+            <div class="col-md-6">
+              <label class="form-label">Key Passphrase</label>
+              <div class="input-group">
+                <input type="password" class="form-control bg-black text-light border-secondary" id="editSshKeyPassphrase" value="${config.ssh_key_passphrase || ''}" placeholder="Optional passphrase">
+                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('editSshKeyPassphrase', this)"><i class="bi bi-eye"></i></button>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Usernames to Test</label>
+              <input type="text" class="form-control bg-black text-light border-secondary" id="editKeyAuthUsername" value="${config.key_usernames || ''}" placeholder="root, admin, deploy (comma-separated)">
+              <div class="mt-1">
+                <label class="form-label small text-light opacity-75 mb-1">Or provide a usernames file:</label>
+                <div class="input-group input-group-sm">
+                  <input type="text" class="form-control bg-black text-light border-secondary" id="editKeyAuthUsernamesFile" value="${config.key_usernames_file || ''}" placeholder="/path/to/usernames.txt">
+                  <button class="btn btn-outline-secondary" type="button" onclick="openEditFileBrowser('editKeyAuthUsernamesFile', '.txt,.list,.csv')"><i class="bi bi-folder2-open"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scan Options Section -->
+      <div class="p-3 bg-black rounded border border-secondary">
+        <h6 class="text-info mb-3"><i class="bi bi-gear me-1"></i>Scan Options</h6>
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">Threads</label>
+            <input type="number" class="form-control bg-dark text-light border-secondary" id="editThreads" value="${config.threads || 10}" min="1" max="50">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Timeout (sec)</label>
+            <input type="number" class="form-control bg-dark text-light border-secondary" id="editTimeout" value="${config.timeout || 5}" min="1" max="60">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Max Attempts</label>
+            <input type="number" class="form-control bg-dark text-light border-secondary" id="editMaxAttempts" value="${config.max_attempts || ''}" placeholder="Unlimited" min="1">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Protocols to Test</label>
+            <div class="edit-protocol-picker" style="position:relative;">
+              <button type="button" class="form-select bg-dark text-light border-secondary text-start d-flex justify-content-between align-items-center"
+                      id="editProtocolToggle" onclick="toggleEditProtocolPicker()">
+                <span id="editProtocolLabel">${config.protocols ? config.protocols.map(p => p.toUpperCase()).join(', ') : (config.protocol && config.protocol !== 'auto' ? config.protocol.toUpperCase() : 'Auto-detect')}</span>
+                <i class="bi bi-chevron-down ms-2"></i>
+              </button>
+              <div class="edit-protocol-dropdown" id="editProtocolDropdown" style="display:none; position:fixed; z-index:1050; background:#1a1d21; border:1px solid #495057; border-radius:0.375rem; margin-top:2px; box-shadow:0 6px 16px rgba(0,0,0,0.4);">
+                <div class="p-2 border-bottom border-secondary">
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;">
+                    <input class="form-check-input" type="checkbox" id="editProto_auto" value="auto" ${!config.protocol && !config.protocols ? 'checked' : (config.protocol === 'auto' ? 'checked' : '')} onchange="updateEditProtocolSelection('auto')">
+                    <label class="form-check-label text-light" for="editProto_auto" style="font-size:0.9rem; cursor:pointer;">Auto-detect</label>
+                  </div>
+                </div>
+                <div class="p-2" style="max-height:250px; overflow-y:auto;">
+                  <div class="small text-secondary mb-1 fw-bold" onclick="selectEditProtocolGroup('webshell')" style="cursor:pointer;">Web & Shell</div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="webshell" type="checkbox" id="editProto_ssh" value="ssh" ${(config.protocols||[]).includes('ssh') || config.protocol === 'ssh' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_ssh" style="font-size:0.9rem; cursor:pointer;">SSH :22</label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="webshell" type="checkbox" id="editProto_http" value="http" ${(config.protocols||[]).includes('http') || config.protocol === 'http' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_http" style="font-size:0.9rem; cursor:pointer;">HTTP :80/443</label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="webshell" type="checkbox" id="editProto_ftp" value="ftp" ${(config.protocols||[]).includes('ftp') || config.protocol === 'ftp' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_ftp" style="font-size:0.9rem; cursor:pointer;">FTP :21</label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="webshell" type="checkbox" id="editProto_telnet" value="telnet" ${(config.protocols||[]).includes('telnet') || config.protocol === 'telnet' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_telnet" style="font-size:0.9rem; cursor:pointer;">Telnet :23</label></div>
+                  <div class="small text-secondary mb-1 mt-2 fw-bold" onclick="selectEditProtocolGroup('windows')" style="cursor:pointer;">Windows</div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="windows" type="checkbox" id="editProto_smb" value="smb" ${(config.protocols||[]).includes('smb') || config.protocol === 'smb' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_smb" style="font-size:0.9rem; cursor:pointer;">SMB :445</label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="windows" type="checkbox" id="editProto_rdp" value="rdp" ${(config.protocols||[]).includes('rdp') || config.protocol === 'rdp' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_rdp" style="font-size:0.9rem; cursor:pointer;">RDP :3389</label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="windows" type="checkbox" id="editProto_winrm" value="winrm" ${(config.protocols||[]).includes('winrm') || config.protocol === 'winrm' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_winrm" style="font-size:0.9rem; cursor:pointer;">WinRM :5985</label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="windows" type="checkbox" id="editProto_winrm_ssl" value="winrm-ssl" ${(config.protocols||[]).includes('winrm-ssl') || config.protocol === 'winrm-ssl' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_winrm_ssl" style="font-size:0.9rem; cursor:pointer;">WinRM-SSL <small class="text-secondary">:5986</small></label></div>
+                  <div class="small text-secondary mb-1 mt-2 fw-bold" onclick="selectEditProtocolGroup('databases')" style="cursor:pointer;">Databases</div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="databases" type="checkbox" id="editProto_mysql" value="mysql" ${(config.protocols||[]).includes('mysql') || config.protocol === 'mysql' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_mysql" style="font-size:0.9rem; cursor:pointer;">MySQL :3306</label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="databases" type="checkbox" id="editProto_postgres" value="postgres" ${(config.protocols||[]).includes('postgres') || config.protocol === 'postgres' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_postgres" style="font-size:0.9rem; cursor:pointer;">PostgreSQL :5432</label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="databases" type="checkbox" id="editProto_mssql" value="mssql" ${(config.protocols||[]).includes('mssql') || config.protocol === 'mssql' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_mssql" style="font-size:0.9rem; cursor:pointer;">MSSQL :1433</label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="databases" type="checkbox" id="editProto_redis" value="redis" ${(config.protocols||[]).includes('redis') || config.protocol === 'redis' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_redis" style="font-size:0.9rem; cursor:pointer;">Redis :6379</label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="databases" type="checkbox" id="editProto_mongodb" value="mongodb" ${(config.protocols||[]).includes('mongodb') || config.protocol === 'mongodb' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_mongodb" style="font-size:0.9rem; cursor:pointer;">MongoDB <small class="text-secondary">:27017</small></label></div>
+                  <div class="small text-secondary mb-1 mt-2 fw-bold" onclick="selectEditProtocolGroup('directory')" style="cursor:pointer;">Directory & Mail</div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="directory" type="checkbox" id="editProto_ldap" value="ldap" ${(config.protocols||[]).includes('ldap') || config.protocol === 'ldap' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_ldap" style="font-size:0.9rem; cursor:pointer;">LDAP :389</label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="directory" type="checkbox" id="editProto_smtp" value="smtp" ${(config.protocols||[]).includes('smtp') || config.protocol === 'smtp' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_smtp" style="font-size:0.9rem; cursor:pointer;">SMTP :25</label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="directory" type="checkbox" id="editProto_imap" value="imap" ${(config.protocols||[]).includes('imap') || config.protocol === 'imap' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_imap" style="font-size:0.9rem; cursor:pointer;">IMAP <small class="text-secondary">:143</small></label></div>
+                  <div class="small text-secondary mb-1 mt-2 fw-bold" onclick="selectEditProtocolGroup('iot')" style="cursor:pointer;">IoT / Network</div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="iot" type="checkbox" id="editProto_snmp" value="snmp" ${(config.protocols||[]).includes('snmp') || config.protocol === 'snmp' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_snmp" style="font-size:0.9rem; cursor:pointer;">SNMP :161</label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="iot" type="checkbox" id="editProto_mqtt" value="mqtt" ${(config.protocols||[]).includes('mqtt') || config.protocol === 'mqtt' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_mqtt" style="font-size:0.9rem; cursor:pointer;">MQTT :1883</label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input edit-proto-check" data-group="iot" type="checkbox" id="editProto_ipmi" value="ipmi" ${(config.protocols||[]).includes('ipmi') || config.protocol === 'ipmi' ? 'checked' : ''} onchange="updateEditProtocolSelection('svc')"><label class="form-check-label text-light" for="editProto_ipmi" style="font-size:0.9rem; cursor:pointer;">IPMI :623</label></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="row g-3 mt-2">
+          <div class="col-md-6">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="editEnableProbing" ${config.probe !== false ? 'checked' : ''}>
+              <label class="form-check-label" for="editEnableProbing">Enable service detection/fingerprinting</label>
+            </div>
+            <small class="text-light opacity-75">Probe services to detect product/vendor for smart credential selection</small>
+          </div>
+        </div>
+        <div class="row g-3 mt-3">
+          <div class="col-md-3">
+            <label class="form-label">Jitter (seconds)</label>
+            <input type="number" class="form-control bg-dark text-light border-secondary" id="editJitter" value="${config.jitter || 0}" min="0" max="30" step="0.5">
+            <small class="text-light opacity-75">Random delay between tests</small>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Max Attempts/User</label>
+            <input type="number" class="form-control bg-dark text-light border-secondary" id="editMaxAttemptsPerUser" value="${config.max_attempts_per_user || 0}" min="0" max="100">
+            <small class="text-light opacity-75">0 = unlimited</small>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">SNMP Tier</label>
+            <select class="form-select bg-dark text-light border-secondary" id="editSnmpTier">
+              <option value="default" ${!config.snmp_tier || config.snmp_tier === 'default' ? 'selected' : ''}>Default (25)</option>
+              <option value="extended" ${config.snmp_tier === 'extended' ? 'selected' : ''}>Extended (75)</option>
+              <option value="full" ${config.snmp_tier === 'full' ? 'selected' : ''}>Full (200+)</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">SSH Bad Keys</label>
+            <div class="form-check form-switch mt-2">
+              <input class="form-check-input" type="checkbox" id="editEnableBadkeys" ${config.badkeys !== false ? 'checked' : ''}>
+              <label class="form-check-label" for="editEnableBadkeys">Test compromised keys</label>
+            </div>
+          </div>
+        </div>
+        <div class="row g-3 mt-2">
+          <div class="col-md-4">
+            <label class="form-label">SMB NTLM Hash</label>
+            <input type="text" class="form-control bg-dark text-light border-secondary" id="editSmbHash" value="${config.smb_hash || ''}" placeholder="LMHASH:NTHASH">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Domain</label>
+            <input type="text" class="form-control bg-dark text-light border-secondary" id="editDomain" value="${config.domain || ''}" placeholder="WORKGROUP">
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (type === 'module_scan') {
+    html = `
+      <div class="p-3 bg-black rounded border border-secondary mb-4">
+        <h6 class="text-info mb-3"><i class="bi bi-puzzle me-1"></i>Module Configuration</h6>
+        <div class="mb-4">
+          <label class="form-label">Module <span class="text-danger">*</span></label>
+          <select class="form-select bg-dark text-light border-secondary" id="editModuleName">
+            <option value="">Select module...</option>
+            <option value="lockon" ${config.module_name === 'lockon' ? 'selected' : ''}>Lockon (Web Screenshots)</option>
+            <option value="smbexplorer" ${config.module_name === 'smbexplorer' ? 'selected' : ''}>SMB Explorer</option>
+            <option value="nfsexplorer" ${config.module_name === 'nfsexplorer' ? 'selected' : ''}>NFS Explorer</option>
+          </select>
+        </div>
+        <div class="mb-4">
+          <label class="form-label">Targets File <span class="text-danger">*</span></label>
+          <input type="text" class="form-control bg-dark text-light border-secondary" id="editTargetsFile" value="${config.targets_file || ''}" placeholder="Path to targets file">
+          <small class="text-light opacity-75">Full path to file containing targets (one per line)</small>
+        </div>
+        <div>
+          <label class="form-label">Output Directory (Optional)</label>
+          <input type="text" class="form-control bg-dark text-light border-secondary" id="editModuleOutputDir" value="${config.output_dir || ''}" placeholder="Leave empty for default">
+        </div>
+      </div>
+    `;
+  } else if (type === 'enrich') {
+    html = `
+      <div class="p-3 bg-black rounded border border-secondary mb-4">
+        <h6 class="text-info mb-3"><i class="bi bi-search me-1"></i>IOC Enrichment Configuration</h6>
+        <label class="form-label">IOCs (Indicators of Compromise) <span class="text-danger">*</span></label>
+        <textarea class="form-control bg-dark text-light border-secondary font-monospace" id="editIocs" rows="8" placeholder="Enter IOCs (one per line):&#10;&#10;192.168.1.1&#10;example.com&#10;44d88612fea8a8f36de82e1278abb02f">${(config.iocs || []).join('\n')}</textarea>
+        <div class="form-text">Supports IP addresses, domains, and file hashes (MD5, SHA1, SHA256)</div>
+      </div>
+      <div class="p-3 bg-black rounded border border-secondary">
+        <h6 class="text-info mb-3"><i class="bi bi-cloud-arrow-down me-1"></i>Data Sources</h6>
+        <div class="row g-2">
+          <div class="col-md-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="editSource_shodan" value="shodan" ${(config.sources || ['shodan','virustotal','abuseipdb']).includes('shodan') ? 'checked' : ''}>
+              <label class="form-check-label" for="editSource_shodan">Shodan</label>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="editSource_virustotal" value="virustotal" ${(config.sources || ['shodan','virustotal','abuseipdb']).includes('virustotal') ? 'checked' : ''}>
+              <label class="form-check-label" for="editSource_virustotal">VirusTotal</label>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="editSource_abuseipdb" value="abuseipdb" ${(config.sources || ['shodan','virustotal','abuseipdb']).includes('abuseipdb') ? 'checked' : ''}>
+              <label class="form-check-label" for="editSource_abuseipdb">AbuseIPDB</label>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="editSource_otx" value="otx" ${(config.sources || []).includes('otx') ? 'checked' : ''}>
+              <label class="form-check-label" for="editSource_otx">LevelBlue OTX</label>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="editSource_urlscan" value="urlscan" ${(config.sources || []).includes('urlscan') ? 'checked' : ''}>
+              <label class="form-check-label" for="editSource_urlscan">URLScan.io</label>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="editSource_greynoise" value="greynoise" ${(config.sources || []).includes('greynoise') ? 'checked' : ''}>
+              <label class="form-check-label" for="editSource_greynoise">GreyNoise</label>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="editSource_spur" value="spur" ${(config.sources || []).includes('spur') ? 'checked' : ''}>
+              <label class="form-check-label" for="editSource_spur">Spur</label>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="editSource_censys" value="censys" ${(config.sources || []).includes('censys') ? 'checked' : ''}>
+              <label class="form-check-label" for="editSource_censys">Censys</label>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  document.getElementById('editTaskConfigBody').innerHTML = html;
+
+  // Attach event listener for attack mode toggle
+  if (type === 'credrecon') {
+    // Re-call toggle to ensure correct section is shown
+    setTimeout(() => toggleEditAttackModeSection(), 10);
+  }
+}
+
+function toggleEditAttackModeSection() {
+  const mode = document.querySelector('input[name="editAttackMode"]:checked')?.value || 'default';
+
+  // Hide all sections first
+  const sections = ['editDefaultCredsSection', 'editSingleCredsSection', 'editSpraySection', 'editStuffSection', 'editKeyAuthSection'];
+  sections.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+
+  // Show the relevant section
+  if (mode === 'default') {
+    document.getElementById('editDefaultCredsSection').style.display = 'block';
+  } else if (mode === 'single') {
+    document.getElementById('editSingleCredsSection').style.display = 'block';
+  } else if (mode === 'spray') {
+    document.getElementById('editSpraySection').style.display = 'block';
+  } else if (mode === 'stuff') {
+    document.getElementById('editStuffSection').style.display = 'block';
+  } else if (mode === 'key') {
+    document.getElementById('editKeyAuthSection').style.display = 'block';
+  }
+}
+
+function togglePasswordVisibility(inputId, button) {
+  const input = document.getElementById(inputId);
+  const icon = button.querySelector('i');
+
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.classList.remove('bi-eye');
+    icon.classList.add('bi-eye-slash');
+  } else {
+    input.type = 'password';
+    icon.classList.remove('bi-eye-slash');
+    icon.classList.add('bi-eye');
+  }
+}
+
+function buildEditTaskConfig() {
+  const type = schedule.task_type;
+  const config = {};
+
+  if (type === 'port_scan') {
+    config.targets = document.getElementById('editTargets').value.split('\n').map(t => t.trim()).filter(t => t);
+
+    // Exclusions
+    const exclusions = document.getElementById('editExclusions').value.split('\n').map(t => t.trim()).filter(t => t);
+    if (exclusions.length > 0) config.exclusions = exclusions;
+
+    // Discovery tools
+    const discoveryTools = [];
+    if (document.getElementById('editDiscoverMasscan')?.checked) discoveryTools.push('masscan');
+    if (document.getElementById('editDiscoverNaabu')?.checked) discoveryTools.push('naabu');
+    if (discoveryTools.length > 0) config.discover = discoveryTools;
+
+    // Discovery mode
+    const discoveryOnly = document.querySelector('input[name="editDiscoverMode"]:checked')?.value === 'discovery-only';
+    if (discoveryOnly) config.discover_only = true;
+
+    // Nmap options
+    config.scan_type = document.getElementById('editScanType').value;
+    const ports = document.getElementById('editPorts').value.trim();
+    if (ports) config.ports = ports;
+    const nmapOptions = document.getElementById('editNmapOptions').value.trim();
+    if (nmapOptions) config.nmap_options = nmapOptions;
+    const netInterface = document.getElementById('editInterface').value.trim();
+    if (netInterface) config.interface = netInterface;
+
+  } else if (type === 'credrecon') {
+    // Check which target method is active
+    const targetsFileDiv = document.getElementById('editTargetFile');
+    if (targetsFileDiv && targetsFileDiv.style.display !== 'none') {
+      const targetsFilePath = document.getElementById('editTargetsFilePath')?.value.trim();
+      if (targetsFilePath) config.targets_file = targetsFilePath;
+    } else {
+      config.targets = document.getElementById('editCredTargets').value.split('\n').map(t => t.trim()).filter(t => t);
+    }
+
+    // Attack mode
+    const attackMode = document.querySelector('input[name="editAttackMode"]:checked')?.value || 'default';
+    config.attack_mode = attackMode;
+
+    // Attack mode specific settings
+    if (attackMode === 'default') {
+      config.use_builtin = document.getElementById('editUseBuiltinCreds')?.checked ?? true;
+      config.use_external = document.getElementById('editUseExternalCreds')?.checked ?? false;
+
+      const usernamesFile = document.getElementById('editDefaultUsernamesFile')?.value.trim();
+      if (usernamesFile) config.usernames_file = usernamesFile;
+
+      const passwordsFile = document.getElementById('editDefaultPasswordsFile')?.value.trim();
+      if (passwordsFile) config.passwords_file = passwordsFile;
+    } else if (attackMode === 'single') {
+      config.username = document.getElementById('editSingleUsername')?.value.trim();
+      config.password = document.getElementById('editSinglePassword')?.value;
+    } else if (attackMode === 'spray') {
+      config.spray_password = document.getElementById('editSprayPassword')?.value;
+      config.usernames_file = document.getElementById('editSprayUsernamesFile')?.value.trim();
+    } else if (attackMode === 'stuff') {
+      config.stuff_username = document.getElementById('editStuffUsername')?.value.trim();
+      config.passwords_file = document.getElementById('editStuffPasswordsFile')?.value.trim();
+    } else if (attackMode === 'key') {
+      const sshKeyPath = document.getElementById('editSshKeyPath')?.value.trim();
+      if (sshKeyPath) config.ssh_key = sshKeyPath;
+      const sshCertPath = document.getElementById('editSshCertPath')?.value.trim();
+      if (sshCertPath) config.ssh_cert = sshCertPath;
+      const sshKeyPassphrase = document.getElementById('editSshKeyPassphrase')?.value;
+      if (sshKeyPassphrase) config.ssh_key_passphrase = sshKeyPassphrase;
+      const keyUsernames = document.getElementById('editKeyAuthUsername')?.value.trim();
+      if (keyUsernames) config.key_usernames = keyUsernames;
+      const keyUsernamesFile = document.getElementById('editKeyAuthUsernamesFile')?.value.trim();
+      if (keyUsernamesFile) config.key_usernames_file = keyUsernamesFile;
+    }
+
+    // Scan options — multi-protocol from edit picker
+    const editSelectedProtocols = getEditSelectedProtocols();
+    if (editSelectedProtocols.length === 1 && editSelectedProtocols[0] !== 'auto') {
+      config.protocol = editSelectedProtocols[0];
+    } else if (editSelectedProtocols.length > 1) {
+      config.protocols = editSelectedProtocols;
+    }
+
+    const threads = parseInt(document.getElementById('editThreads')?.value);
+    if (threads) config.threads = threads;
+
+    const timeout = parseInt(document.getElementById('editTimeout')?.value);
+    if (timeout) config.timeout = timeout;
+
+    const maxAttempts = document.getElementById('editMaxAttempts')?.value;
+    if (maxAttempts) config.max_attempts = parseInt(maxAttempts);
+
+    const enableProbing = document.getElementById('editEnableProbing')?.checked;
+    config.probe = enableProbing !== false;
+
+    const jitter = parseFloat(document.getElementById('editJitter')?.value);
+    if (jitter > 0) config.jitter = jitter;
+    const maxAttemptsPerUser = parseInt(document.getElementById('editMaxAttemptsPerUser')?.value);
+    if (maxAttemptsPerUser > 0) config.max_attempts_per_user = maxAttemptsPerUser;
+    const snmpTier = document.getElementById('editSnmpTier')?.value;
+    if (snmpTier && snmpTier !== 'default') config.snmp_tier = snmpTier;
+    const smbHash = document.getElementById('editSmbHash')?.value?.trim();
+    if (smbHash) config.smb_hash = smbHash;
+    const domain = document.getElementById('editDomain')?.value?.trim();
+    if (domain) config.domain = domain;
+    const enableBadkeys = document.getElementById('editEnableBadkeys')?.checked;
+    if (enableBadkeys === false) config.badkeys = false;
+
+  } else if (type === 'module_scan') {
+    config.module_name = document.getElementById('editModuleName').value;
+    config.targets_file = document.getElementById('editTargetsFile').value.trim();
+
+    const outputDir = document.getElementById('editModuleOutputDir')?.value.trim();
+    if (outputDir) config.output_dir = outputDir;
+  } else if (type === 'enrich') {
+    config.iocs = document.getElementById('editIocs').value.split('\n').map(t => t.trim()).filter(t => t);
+    const sources = Array.from(document.querySelectorAll('[id^="editSource_"]:checked')).map(c => c.value);
+    if (sources.length > 0) config.sources = sources;
+  }
+
+  return config;
+}
+
+function buildEditScheduleConfig() {
+  const type = document.getElementById('editScheduleType').value;
+  const config = {};
+
+  if (type === 'interval') {
+    const days = parseInt(document.getElementById('editIntervalDays').value) || 0;
+    const hours = parseInt(document.getElementById('editIntervalHours').value) || 0;
+    const minutes = parseInt(document.getElementById('editIntervalMinutes').value) || 0;
+    if (days > 0) config.days = days;
+    if (hours > 0) config.hours = hours;
+    if (minutes > 0) config.minutes = minutes;
+  } else if (type === 'cron') {
+    config.minute = document.getElementById('editCronMinute').value || '*';
+    config.hour = document.getElementById('editCronHour').value || '*';
+    config.day = document.getElementById('editCronDay').value || '*';
+    config.day_of_week = document.getElementById('editCronDayOfWeek').value || '*';
+  } else if (type === 'date') {
+    config.run_date = document.getElementById('editRunDate').value.replace('T', ' ');
+  }
+
+  return config;
+}
+
+// ==================== EDIT PROTOCOL MULTI-SELECT PICKER ====================
+function toggleEditProtocolPicker() {
+  const dd = document.getElementById('editProtocolDropdown');
+  if (dd.style.display === 'none') {
+    const btn = document.getElementById('editProtocolToggle');
+    const rect = btn.getBoundingClientRect();
+    dd.style.left = rect.left + 'px';
+    dd.style.top = (rect.bottom + 2) + 'px';
+    dd.style.width = rect.width + 'px';
+    dd.style.display = 'block';
+  } else {
+    dd.style.display = 'none';
+  }
+}
+
+document.addEventListener('click', function(e) {
+  const picker = document.querySelector('.edit-protocol-picker');
+  if (picker && !picker.contains(e.target)) {
+    const dd = document.getElementById('editProtocolDropdown');
+    if (dd) dd.style.display = 'none';
+  }
+});
+window.addEventListener('scroll', function(e) {
+  const dd = document.getElementById('editProtocolDropdown');
+  if (dd && !dd.contains(e.target)) {
+    dd.style.display = 'none';
+  }
+}, true);
+
+function updateEditProtocolSelection(source) {
+  const autoCheck = document.getElementById('editProto_auto');
+  const protoChecks = document.querySelectorAll('.edit-proto-check');
+
+  if (source === 'auto') {
+    if (autoCheck.checked) {
+      protoChecks.forEach(c => c.checked = false);
+    }
+  } else {
+    const anyChecked = Array.from(protoChecks).some(c => c.checked);
+    autoCheck.checked = !anyChecked;
+  }
+
+  const label = document.getElementById('editProtocolLabel');
+  const selected = Array.from(protoChecks).filter(c => c.checked).map(c => c.value.toUpperCase());
+  if (autoCheck.checked || selected.length === 0) {
+    autoCheck.checked = true;
+    label.textContent = 'Auto-detect';
+  } else {
+    label.textContent = selected.length <= 3 ? selected.join(', ') : `${selected.length} protocols selected`;
+  }
+}
+
+function getEditSelectedProtocols() {
+  const autoCheck = document.getElementById('editProto_auto');
+  if (autoCheck && autoCheck.checked) return ['auto'];
+  const checked = Array.from(document.querySelectorAll('.edit-proto-check:checked')).map(c => c.value);
+  return checked.length > 0 ? checked : ['auto'];
+}
+
+function selectEditProtocolGroup(groupName) {
+  const groupChecks = document.querySelectorAll(`.edit-proto-check[data-group="${groupName}"]`);
+  const allChecked = Array.from(groupChecks).every(c => c.checked);
+  groupChecks.forEach(c => c.checked = !allChecked);
+  updateEditProtocolSelection('svc');
+}
+
+async function saveScheduleChanges() {
+  const data = {
+    name: document.getElementById('editName').value,
+    description: document.getElementById('editDescription').value || null,
+    schedule_type: document.getElementById('editScheduleType').value,
+    schedule_config: buildEditScheduleConfig(),
+    timezone: (() => { const tz = document.getElementById('editTimezone').value; if (typeof setCygorTimezone === 'function') setCygorTimezone(tz); return tz; })(),
+    max_runs: parseInt(document.getElementById('editMaxRuns').value) || null,
+    config: buildEditTaskConfig(),
+    allow_concurrent: document.getElementById('editAllowConcurrent').checked,
+    check_resources: document.getElementById('editCheckResources').checked,
+    max_concurrent_runs: parseInt(document.getElementById('editMaxConcurrent').value) || 1,
+    max_cpu_percent: parseFloat(document.getElementById('editMaxCpu').value) || 80,
+    max_memory_percent: parseFloat(document.getElementById('editMaxMemory').value) || 80
+  };
+
+  // Include start/end dates for interval and cron schedules
+  const startDate = document.getElementById('editStartDate').value;
+  const endDate = document.getElementById('editEndDate').value;
+  if (startDate) {
+    data.start_date = startDate.replace('T', ' ');
+  } else {
+    data.start_date = null;
+  }
+  if (endDate) {
+    data.end_date = endDate.replace('T', ' ');
+  } else {
+    data.end_date = null;
+  }
+
+  if (!data.name) { showToast('Name is required', 'danger'); return; }
+
+  try {
+    const response = await fetch(`/api/schedules/${scheduleId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+
+    if (response.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('editScheduleModal')).hide();
+      showToast('Schedule updated', 'success');
+      loadSchedule();
+    } else {
+      const err = await response.json();
+      throw new Error(err.detail || 'Update failed');
+    }
+  } catch (e) { showToast('Error: ' + e.message, 'danger'); }
+}
+
+// ==================== TARGET METHOD TOGGLE ====================
+function switchEditTargetMethod(method) {
+  const manualDiv = document.getElementById('editTargetManual');
+  const fileDiv = document.getElementById('editTargetFile');
+  const manualBtn = document.getElementById('editTargetMethodManualBtn');
+  const fileBtn = document.getElementById('editTargetMethodFileBtn');
+  if (!manualDiv || !fileDiv) return;
+  if (method === 'file') {
+    manualDiv.style.display = 'none';
+    fileDiv.style.display = 'block';
+    manualBtn.className = 'btn btn-sm btn-outline-secondary';
+    fileBtn.className = 'btn btn-sm btn-outline-light active';
+  } else {
+    manualDiv.style.display = 'block';
+    fileDiv.style.display = 'none';
+    manualBtn.className = 'btn btn-sm btn-outline-light active';
+    fileBtn.className = 'btn btn-sm btn-outline-secondary';
+  }
+}
+
+// ==================== SERVER FILE BROWSER ====================
+let _editSfbTargetInputId = null;
+let _editSfbFileTypes = '';
+let _editSfbCurrentPath = '';
+let _editSfbSelectedPath = null;
+
+function openEditFileBrowser(targetInputId, fileTypes) {
+  _editSfbTargetInputId = targetInputId;
+  _editSfbFileTypes = fileTypes || '';
+  _editSfbSelectedPath = null;
+
+  const selectBtn = document.getElementById('editSfbSelectBtn');
+  selectBtn.disabled = true;
+
+  const currentVal = document.getElementById(targetInputId)?.value.trim();
+  let startPath = '';
+  if (currentVal) {
+    const lastSlash = currentVal.lastIndexOf('/');
+    startPath = lastSlash > 0 ? currentVal.substring(0, lastSlash) : '';
+  }
+
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('editFileBrowserModal'));
+  modal.show();
+  editSfbLoadDirectory(startPath);
+}
+
+async function editSfbLoadDirectory(path) {
+  const fileList = document.getElementById('editSfbFileList');
+  const pathField = document.getElementById('editSfbCurrentPath');
+
+  fileList.innerHTML = '<div class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
+
+  try {
+    let url = `/api/browse?path=${encodeURIComponent(path)}`;
+    if (_editSfbFileTypes) url += `&file_types=${encodeURIComponent(_editSfbFileTypes)}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    _editSfbCurrentPath = data.current_path;
+    pathField.value = _editSfbCurrentPath;
+
+    if (!data.items || data.items.length === 0) {
+      fileList.innerHTML = '<div class="text-center py-4 text-secondary">Empty directory</div>';
+      return;
+    }
+
+    fileList.innerHTML = '';
+    _editSfbSelectedPath = null;
+    document.getElementById('editSfbSelectBtn').disabled = true;
+
+    data.items.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'edit-sfb-item';
+      el.dataset.path = item.path;
+      el.dataset.type = item.type;
+
+      let iconHtml, iconClass;
+      if (item.type === 'parent') {
+        iconHtml = '<i class="bi bi-arrow-left"></i>';
+        iconClass = 'parent';
+      } else if (item.type === 'directory') {
+        iconHtml = '<i class="bi bi-folder-fill"></i>';
+        iconClass = 'dir';
+      } else {
+        iconHtml = '<i class="bi bi-file-earmark"></i>';
+        iconClass = 'file';
+      }
+
+      let sizeText = '';
+      if (item.type === 'file' && item.size > 0) {
+        const kb = (item.size / 1024).toFixed(1);
+        sizeText = `<span class="edit-sfb-size">${kb} KB</span>`;
+      }
+
+      el.innerHTML = `<span class="edit-sfb-icon ${iconClass}">${iconHtml}</span><span class="edit-sfb-name">${item.name}</span>${sizeText}`;
+
+      if (item.type === 'directory' || item.type === 'parent') {
+        el.addEventListener('click', () => editSfbLoadDirectory(item.path));
+      } else {
+        el.addEventListener('click', function() {
+          document.querySelectorAll('.edit-sfb-item.selected').forEach(s => s.classList.remove('selected'));
+          this.classList.add('selected');
+          _editSfbSelectedPath = item.path;
+          document.getElementById('editSfbSelectBtn').disabled = false;
+        });
+        el.addEventListener('dblclick', function() {
+          _editSfbSelectedPath = item.path;
+          editSfbConfirmSelection();
+        });
+      }
+
+      fileList.appendChild(el);
+    });
+  } catch (error) {
+    fileList.innerHTML = `<div class="alert alert-danger">Error loading directory: ${error.message}</div>`;
+  }
+}
+
+function editSfbGoUp() {
+  if (_editSfbCurrentPath && _editSfbCurrentPath !== '/') {
+    const lastSlash = _editSfbCurrentPath.lastIndexOf('/');
+    const parentPath = lastSlash > 0 ? _editSfbCurrentPath.substring(0, lastSlash) : '/';
+    editSfbLoadDirectory(parentPath);
+  }
+}
+
+function editSfbConfirmSelection() {
+  if (_editSfbSelectedPath && _editSfbTargetInputId) {
+    document.getElementById(_editSfbTargetInputId).value = _editSfbSelectedPath;
+  }
+  const modal = bootstrap.Modal.getInstance(document.getElementById('editFileBrowserModal'));
+  if (modal) modal.hide();
+}
+
+</script>
+
+{% endblock %}

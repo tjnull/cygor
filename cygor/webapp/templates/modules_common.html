@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h2 class="mb-0 text-uppercase fw-bold">{{ module.name }}</h2>
+      <div class="text-secondary small">
+        {% if module.description %}{{ module.description }}{% endif %}
+        {% if module.version %}<span class="ms-2">v{{ module.version }}</span>{% endif %}
+        {% if module.author %}<span class="ms-2">by {{ module.author }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="text-muted small">&nbsp;</div>
+  </div>
+
+  {% macro empty_state(kind) %}
+    <div class="card bg-dark border-secondary mb-3">
+      <div class="card-body">
+        <div class="d-flex align-items-start gap-3 mb-3">
+          <i class="bi bi-info-circle-fill text-info" style="font-size: 1.5rem;"></i>
+          <div class="flex-grow-1">
+            <h5 class="mb-1">No {{ kind }} to display yet</h5>
+            <div class="text-secondary small">
+              {% if module.source == "plugin" %}This plugin hasn't run in this workspace.
+              {% else %}This module hasn't run in this workspace.
+              {% endif %}
+              Generate results with the command below, then refresh this page.
+            </div>
+          </div>
+        </div>
+        <div class="bg-black rounded p-3 mb-3" style="font-family: monospace;">
+          <span class="text-secondary">$</span>
+          <span class="text-light">cygor enum {{ module.slug }} -t &lt;target&gt;</span>
+        </div>
+        {% if module.columns %}
+          <div class="small text-secondary mb-2">Expected columns:</div>
+          <div class="d-flex flex-wrap gap-1 mb-2">
+            {% for c in module.columns %}
+              <span class="badge bg-secondary">{{ c.label or c.key }}</span>
+            {% endfor %}
+          </div>
+        {% endif %}
+        <div class="d-flex flex-wrap gap-3 small text-muted mt-3">
+          {% if module.version %}<span><i class="bi bi-bookmark me-1"></i>v{{ module.version }}</span>{% endif %}
+          {% if module.author %}<span><i class="bi bi-person me-1"></i>{{ module.author }}</span>{% endif %}
+          {% if module.requires_cygor %}<span><i class="bi bi-shield-check me-1"></i>cygor &ge; {{ module.requires_cygor }}</span>{% endif %}
+          {% if module.source == "plugin" %}<span class="badge bg-info">plugin</span>{% endif %}
+          {% if module.plugin_path %}<span><i class="bi bi-folder me-1"></i><code class="text-info">{{ module.plugin_path }}</code></span>{% endif %}
+        </div>
+        {% if module.source == "plugin" %}
+          <div class="mt-3">
+            <a href="/docs/Plugin-Development" target="_blank" rel="noopener" class="text-info small">
+              <i class="bi bi-book me-1"></i>Plugin development guide
+            </a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endmacro %}
+
+  {% if module.view == "gallery" %}
+    {% set items = ctx.items or [] %}
+    {% if items|length == 0 %}
+      {{ empty_state("items") }}
+    {% else %}
+      <div class="row g-3">
+        {% for it in items %}
+          <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+            <div class="card h-100">
+              {% if it.screenshot_url %}
+                <img class="card-img-top" src="{{ it.screenshot_url }}" alt="screenshot">
+              {% else %}
+                <div class="card-img-top d-flex align-items-center justify-content-center" style="height:160px;background:#111;">
+                  <span class="text-secondary">No screenshot</span>
+                </div>
+              {% endif %}
+              <div class="card-body p-2">
+                <a href="{{ it.url }}" target="_blank" rel="noopener">{{ it.url }}</a>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% else %}
+    {% set rows = ctx.rows or [] %}
+    {% if rows|length == 0 %}
+      {{ empty_state("rows") }}
+    {% else %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              {% if module.columns and module.columns|length>0 %}
+                {% for c in module.columns %}
+                  <th>{{ c.label }}</th>
+                {% endfor %}
+              {% else %}
+                {% for k in rows[0].keys() %}
+                  <th>{{ k }}</th>
+                {% endfor %}
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+              <tr>
+                {% if module.columns and module.columns|length>0 %}
+                  {% for c in module.columns %}
+                    <td>{{ r[c.key] }}</td>
+                  {% endfor %}
+                {% else %}
+                  {% for v in r.values() %}
+                    <td>{{ v }}</td>
+                  {% endfor %}
+                {% endif %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

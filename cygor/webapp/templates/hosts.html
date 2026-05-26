@@ -1,0 +1,715 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+/* ===== Hosts review-table ===== */
+/* This is the primary asset-review surface — give it more substantial
+   sizing than the default harmonized .table-dark so reviewers can
+   scan rows comfortably. */
+#hostsTable {
+  font-size: var(--fs-md);   /* 13px instead of the global 12px */
+}
+#hostsTable thead th {
+  font-size: var(--fs-xs);
+  padding: var(--space-3) var(--space-3) !important;
+}
+#hostsTable tbody td {
+  padding: var(--space-3) var(--space-3) !important;
+  vertical-align: middle;
+}
+#hostsTable tbody tr {
+  transition: background-color 0.12s ease;
+}
+#hostsTable .os-name {
+  color: var(--text-1);
+  font-weight: 500;
+  font-size: var(--fs-md);
+}
+#hostsTable .os-secondary { color: var(--text-3); font-size: var(--fs-xs); }
+#hostsTable .accuracy-bar {
+  height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+#hostsTable .accuracy-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+#hostsTable .accuracy-bar-fill--high { background: var(--success); }
+#hostsTable .accuracy-bar-fill--mid  { background: var(--warn); }
+#hostsTable .accuracy-bar-fill--low  { background: var(--danger); }
+#hostsTable .accuracy-pct {
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  min-width: 36px;
+  display: inline-block;
+  text-align: right;
+}
+#hostsTable .ports-count {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+#hostsTable .services-list {
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+#hostsTable .review-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+</style>
+
+<div class="cy-page-header">
+  <h1><i class="bi bi-hdd-network"></i>Hosts</h1>
+  <span class="cy-page-subtitle">{{ hosts|length }} host{{ 's' if hosts|length != 1 else '' }} discovered</span>
+  <div class="cy-page-actions">
+    <div class="btn-group" role="group">
+      <button type="button" class="btn btn-sm btn-outline-info active" id="filter-all">
+        <i class="bi bi-list-ul me-1"></i>All
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-success" id="filter-reviewed">
+        <i class="bi bi-check-circle me-1"></i>Reviewed
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-warning" id="filter-unreviewed">
+        <i class="bi bi-exclamation-circle me-1"></i>Unreviewed
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="cy-card">
+  <div class="cy-card-body cy-card-body--flush">
+    <div class="table-responsive">
+      <table id="hostsTable" class="table table-dark table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 40px;"></th>
+            <th>Host</th>
+            <th>Hostname</th>
+            <th>OS</th>
+            <th style="min-width: 140px;">OS Accuracy</th>
+            <th class="text-center">Ports</th>
+            <th>Services</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in hosts %}
+          {% set osg = top_os_map.get(h.id) if top_os_map else None %}
+          <tr>
+            <!-- Reviewed checkbox -->
+            <td class="text-center">
+              <input type="checkbox" class="form-check-input review-checkbox" data-host="{{ h.address }}" style="cursor: pointer;">
+            </td>
+
+            <!-- Host (IP) -->
+            <td>
+              <a href="/hosts/{{ h.id }}" class="host-ip text-decoration-none">
+                {{ h.address }}
+              </a>
+            </td>
+
+            <!-- Hostname -->
+            <td>
+              {% set di_hn = device_info_map.get(h.id) if device_info_map else None %}
+              {% if h.hostname %}
+                <span class="host-hostname">{{ h.hostname }}</span>
+              {% elif di_hn and di_hn.netbios_name %}
+                <span class="host-hostname-muted" title="NetBIOS name">{{ di_hn.netbios_name }}</span>
+                <i class="bi bi-hdd-network ms-1" style="font-size: 0.75rem; color: var(--text-3);" title="Discovered via NetBIOS"></i>
+              {% elif di_hn and di_hn.ssl_common_name %}
+                <span class="host-hostname-muted" title="SSL certificate CN">{{ di_hn.ssl_common_name }}</span>
+                <i class="bi bi-shield-lock ms-1" style="font-size: 0.75rem; color: var(--text-3);" title="Discovered via SSL cert"></i>
+              {% else %}
+                <span class="host-hostname-muted">—</span>
+              {% endif %}
+            </td>
+
+            <!-- OS -->
+            <td>
+              {% set di = device_info_map.get(h.id) if device_info_map else None %}
+              {% set is_windows = di and 'windows' in (di.os_family or '')|lower %}
+              {% set os_display = None %}
+              {% set os_full_generic = di and di.os_full and di.os_full|lower in ['windows', 'linux', 'unix', 'freebsd', 'openbsd'] %}
+              {% if di %}
+                {% if is_windows %}
+                  {% if di.smb_os %}
+                    {% set os_display = di.smb_os %}
+                  {% elif di.os_name %}
+                    {% set os_display = di.os_name ~ (' ' ~ di.os_version if di.os_version else '') %}
+                  {% elif di.inferred_os %}
+                    {% set os_display = di.inferred_os %}
+                  {% elif di.os_full and not os_full_generic %}
+                    {% set os_display = di.os_full %}
+                  {% elif di.nmap_os_raw %}
+                    {% set os_display = di.nmap_os_raw %}
+                  {% elif osg %}
+                    {% set os_display = osg.name %}
+                  {% elif di.os_full %}
+                    {% set os_display = di.os_full %}
+                  {% endif %}
+                {% else %}
+                  {% if di.inferred_firmware and di.inferred_firmware|lower not in ['microsoft firmware'] %}
+                    {% set os_display = di.inferred_firmware %}
+                  {% elif di.inferred_os %}
+                    {% set os_display = di.inferred_os %}
+                  {% elif di.os_full and not os_full_generic %}
+                    {% set os_display = di.os_full %}
+                  {% elif di.os_name %}
+                    {% set os_display = di.os_name ~ (' ' ~ di.os_version if di.os_version else '') %}
+                  {% elif di.nmap_os_raw %}
+                    {% set os_display = di.nmap_os_raw %}
+                  {% elif di.os_full %}
+                    {% set os_display = di.os_full %}
+                  {% endif %}
+                {% endif %}
+              {% endif %}
+              {% if os_display %}
+                <div class="os-name">
+                  <i class="bi bi-{% if di.manufacturer and 'ubiquiti' in di.manufacturer|lower %}router{% elif di.manufacturer and 'mikrotik' in di.manufacturer|lower %}hdd-network{% elif di.manufacturer and 'cisco' in di.manufacturer|lower %}diagram-3{% elif di.manufacturer and 'proxmox' in di.manufacturer|lower %}server{% elif is_windows %}windows{% elif 'linux' in (di.os_family or '')|lower %}ubuntu{% elif 'mac' in (di.os_family or '')|lower %}apple{% else %}cpu{% endif %} me-2" style="color: {% if di.validated %}var(--success){% else %}var(--accent){% endif %};"></i>
+                  {{ os_display }}
+                  {% if di.validated %}
+                  <span class="cy-badge cy-badge-success ms-1" title="Validated by {{ di.validation_sources }} sources"><i class="bi bi-check-circle"></i></span>
+                  {% endif %}
+                </div>
+                {% if di.netbios_name and h.hostname and not (h.hostname|lower).startswith(di.netbios_name|lower) %}
+                <div class="os-secondary">{{ di.netbios_name }}</div>
+                {% endif %}
+              {% elif osg %}
+                <span class="os-name">{{ osg.name }}</span>
+              {% else %}
+                <span class="host-hostname-muted">Unknown</span>
+              {% endif %}
+            </td>
+
+            <!-- OS Accuracy -->
+            <td>
+              {% if osg %}
+                <div class="d-flex align-items-center gap-2">
+                  <div class="accuracy-bar flex-grow-1">
+                    <div class="accuracy-bar-fill {% if osg.accuracy >= 90 %}accuracy-bar-fill--high{% elif osg.accuracy >= 60 %}accuracy-bar-fill--mid{% else %}accuracy-bar-fill--low{% endif %}" style="width: {{ osg.accuracy }}%;"></div>
+                  </div>
+                  <span class="accuracy-pct">{{ osg.accuracy }}%</span>
+                </div>
+              {% else %}
+                <span class="host-hostname-muted">—</span>
+              {% endif %}
+            </td>
+
+            <!-- Ports -->
+            <td class="text-center">
+              {% set open_ports = (h.ports | selectattr('state', 'equalto', 'open') | list) if h.ports else [] %}
+              {% set all_ports = open_ports if open_ports else (h.ports | list if h.ports else []) %}
+              <span class="ports-count">{{ all_ports | length }}</span>
+            </td>
+
+            <!-- Services -->
+            <td>
+              {% set svc_list = (h.ports | selectattr('state', 'equalto', 'open') | map(attribute='service') | reject('equalto', None) | unique | list) if h.ports else [] %}
+              {% if svc_list %}
+                <span class="services-list">{{ svc_list | join(', ') }}</span>
+              {% else %}
+                <span class="host-hostname-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- jQuery + DataTables -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-bs5@1.13.6/css/dataTables.bootstrap5.min.css"/>
+<script src="https://cdn.jsdelivr.net/npm/datatables.net@1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/datatables.net-bs5@1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<style>
+/* ===== Dark theme DataTables overrides ===== */
+#hostsTable {
+  --bs-table-bg: transparent;
+  --bs-table-hover-bg: rgba(13, 110, 253, 0.08);
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+#hostsTable thead {
+  border-bottom: 2px solid #1e293b;
+}
+
+#hostsTable thead th {
+  background: #0a0a1a;
+  color: #94a3b8;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #1e293b;
+  white-space: nowrap;
+}
+
+#hostsTable tbody tr {
+  border-bottom: 1px solid #1a1a2e;
+  transition: background-color 0.15s ease;
+}
+
+#hostsTable tbody tr:hover {
+  background-color: rgba(13, 110, 253, 0.08) !important;
+}
+
+#hostsTable tbody td {
+  padding: 0.4rem 0.625rem;
+  color: #e4e4e7;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  vertical-align: middle;
+}
+
+/* Reviewed row fade */
+.reviewed-row {
+  opacity: 0.4;
+}
+.reviewed-row:hover {
+  opacity: 0.7;
+}
+
+/* ===== DataTables controls dark theme ===== */
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_paginate {
+  color: #94a3b8 !important;
+  padding: 0.75rem 1rem;
+}
+
+.dataTables_wrapper .dataTables_length label,
+.dataTables_wrapper .dataTables_filter label {
+  color: #94a3b8 !important;
+}
+
+.dataTables_wrapper .dataTables_filter input {
+  background: #0a0a1a;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  color: #e4e4e7;
+  padding: 0.4rem 0.75rem;
+  margin-left: 0.5rem;
+  transition: border-color 0.2s ease;
+}
+
+.dataTables_wrapper .dataTables_filter input::placeholder {
+  color: #64748b;
+}
+
+.dataTables_wrapper .dataTables_filter input:focus {
+  border-color: #0d6efd;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.2);
+}
+
+.dataTables_wrapper .dataTables_length select {
+  background: #0a0a1a;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  color: #e4e4e7;
+  padding: 0.4rem 2rem 0.4rem 0.75rem;
+  margin: 0 0.5rem;
+}
+
+/* ===== Flat inline pagination toolbar ===== */
+/* Custom bottom bar: pagination | items-per-page | info — all on one line */
+.dataTables_wrapper .dt-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1.25rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+/* Paginate container — flat inline row */
+.dataTables_wrapper .dataTables_paginate {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.dataTables_wrapper .dataTables_paginate span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+/* All pagination buttons — dark rounded squares */
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #2a2a3a !important;
+  border: none !important;
+  border-radius: 6px !important;
+  color: #b0b0b8 !important;
+  width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
+  margin: 0 2px !important;
+  font-size: 0.82rem !important;
+  font-weight: 500;
+  line-height: 1;
+  text-align: center;
+  transition: background 0.15s ease, color 0.15s ease;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+/* Nav arrow buttons (first, previous, next, last) */
+.dataTables_wrapper .dataTables_paginate .paginate_button.first,
+.dataTables_wrapper .dataTables_paginate .paginate_button.previous,
+.dataTables_wrapper .dataTables_paginate .paginate_button.next,
+.dataTables_wrapper .dataTables_paginate .paginate_button.last {
+  color: #94a3b8 !important;
+  font-size: 0.7rem !important;
+}
+
+/* Hover — all buttons */
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+  background: #3a3a4a !important;
+  color: #fff !important;
+}
+
+/* Active / current page number */
+.dataTables_wrapper .dataTables_paginate .paginate_button.current {
+  background: #404052 !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+  background: #4a4a5c !important;
+  color: #fff !important;
+}
+
+/* Disabled nav buttons */
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
+  background: #1e1e2a !important;
+  color: #4a4a5c !important;
+  cursor: default;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled:hover {
+  background: #1e1e2a !important;
+  color: #4a4a5c !important;
+}
+
+/* Length menu — inside the bottom bar */
+.dt-bottom-bar .dataTables_length {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 !important;
+  color: #94a3b8 !important;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.dt-bottom-bar .dataTables_length label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: #94a3b8 !important;
+}
+
+.dt-bottom-bar .dataTables_length select {
+  background: #1a1a2e;
+  border: 1px solid #2d2d44;
+  border-radius: 6px;
+  color: #e4e4e7;
+  padding: 0.3rem 1.75rem 0.3rem 0.6rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+/* Info text — pushed to right */
+.dt-bottom-bar .dataTables_info {
+  margin-left: auto;
+  padding: 0 !important;
+  color: #9ca3ab !important;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+/* Hide the default top-area length control (moved to bottom bar) */
+.dataTables_wrapper > .dataTables_length {
+  display: none !important;
+}
+
+/* Sorting indicators */
+table.dataTable thead th {
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+}
+
+table.dataTable thead th.sorting,
+table.dataTable thead th.sorting_asc,
+table.dataTable thead th.sorting_desc {
+  padding-right: 28px;
+}
+
+table.dataTable thead th.sorting:before,
+table.dataTable thead th.sorting_asc:before,
+table.dataTable thead th.sorting_desc:before {
+  right: 0.8em;
+  content: "\2195";
+  color: #475569;
+  opacity: 0.6;
+  font-size: 0.85em;
+}
+
+table.dataTable thead th.sorting_asc:before {
+  content: "\2191";
+  color: #0d6efd;
+  opacity: 1;
+}
+
+table.dataTable thead th.sorting_desc:before {
+  content: "\2193";
+  color: #0d6efd;
+  opacity: 1;
+}
+
+table.dataTable thead th.sorting:after,
+table.dataTable thead th.sorting_asc:after,
+table.dataTable thead th.sorting_desc:after {
+  display: none;
+}
+
+.dataTables_wrapper .dataTables_empty {
+  color: #9ca3ab;
+  padding: 2rem !important;
+}
+
+/* Filter button active state */
+.btn-group .btn.active {
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.3);
+}
+
+/* ===== Light theme overrides ===== */
+body.light-theme #hostsTable {
+  --bs-table-bg: #fff;
+  --bs-table-hover-bg: rgba(13, 110, 253, 0.05);
+}
+
+body.light-theme #hostsTable thead th {
+  background: #f8f9fa;
+  color: #495057;
+  border-bottom-color: #dee2e6;
+}
+
+body.light-theme #hostsTable tbody td {
+  color: #212529;
+  border-bottom-color: #f0f0f0;
+}
+
+body.light-theme #hostsTable tbody tr:hover {
+  background-color: rgba(13, 110, 253, 0.05) !important;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_filter input,
+body.light-theme .dataTables_wrapper .dataTables_length select {
+  background: #fff;
+  border-color: #ced4da;
+  color: #212529;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_length,
+body.light-theme .dataTables_wrapper .dataTables_filter,
+body.light-theme .dataTables_wrapper .dataTables_info,
+body.light-theme .dataTables_wrapper .dataTables_paginate {
+  color: #495057 !important;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_length label,
+body.light-theme .dataTables_wrapper .dataTables_filter label {
+  color: #495057 !important;
+}
+
+body.light-theme .dt-bottom-bar {
+  border-top-color: #e9ecef;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_paginate .paginate_button {
+  background: #e8e8ec !important;
+  color: #495057 !important;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+  background: #d8d8de !important;
+  color: #212529 !important;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+  background: #ced4da !important;
+  color: #212529 !important;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+  background: #c0c6cc !important;
+  color: #212529 !important;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
+  background: #f0f0f2 !important;
+  color: #b0b4b8 !important;
+}
+
+body.light-theme .dataTables_wrapper .dataTables_paginate .paginate_button.disabled:hover {
+  background: #f0f0f2 !important;
+  color: #b0b4b8 !important;
+}
+
+body.light-theme .dt-bottom-bar .dataTables_length,
+body.light-theme .dt-bottom-bar .dataTables_length label {
+  color: #495057 !important;
+}
+
+body.light-theme .dt-bottom-bar .dataTables_length select {
+  background: #fff;
+  border-color: #ced4da;
+  color: #212529;
+}
+
+body.light-theme .dt-bottom-bar .dataTables_info {
+  color: #6c757d !important;
+}
+</style>
+
+<script>
+// Custom sorting for IP addresses
+jQuery.extend(jQuery.fn.dataTable.ext.type.order, {
+  "ip-pre": function (data) {
+    if (!data) return 0;
+    var text = data.replace(/<[^>]*>/g, '').trim();
+    var parts = text.split('.').map(function(x){ return parseInt(x,10) || 0; });
+    return (parts[0]<<24) + (parts[1]<<16) + (parts[2]<<8) + parts[3];
+  },
+  "ip-asc": function (a, b) { return a - b; },
+  "ip-desc": function (a, b) { return b - a; }
+});
+
+$(document).ready(function() {
+  // Build adaptive length menu
+  var totalRows = $('#hostsTable tbody tr').length;
+  var steps = [25, 50, 100, 250, 500, 1000];
+  var menuValues = [];
+  var menuLabels = [];
+  for (var i = 0; i < steps.length; i++) {
+    if (steps[i] < totalRows) {
+      menuValues.push(steps[i]);
+      menuLabels.push(steps[i]);
+    }
+  }
+  menuValues.push(-1);
+  menuLabels.push("All (" + totalRows + ")");
+
+  var table = $('#hostsTable').DataTable({
+    paging: true,
+    pagingType: 'full_numbers',
+    searching: true,
+    ordering: true,
+    pageLength: 50,
+    lengthMenu: [menuValues, menuLabels],
+    dom: '<"dataTables_top"f>t<"dt-bottom-bar"pli>',
+    columnDefs: [
+      { orderable: false, targets: 0 },
+      { type: 'ip', targets: 1 }
+    ],
+    order: [[1, 'asc']],
+    language: {
+      search: "_INPUT_",
+      searchPlaceholder: "Search hosts...",
+      lengthMenu: "_MENU_ Items per page",
+      info: "_START_ - _END_ of _TOTAL_ items",
+      infoEmpty: "No hosts found",
+      infoFiltered: "(filtered from _MAX_ total)",
+      emptyTable: "No hosts discovered yet",
+      paginate: {
+        first: '&#x23EE;',
+        previous: '&#x25C0;',
+        next: '&#x25B6;',
+        last: '&#x23ED;'
+      }
+    }
+  });
+
+  // Restore checkbox states
+  table.rows().every(function() {
+    var $row = $(this.node());
+    var $cb = $row.find('.review-checkbox');
+    var host = $cb.data('host');
+    if (localStorage.getItem('reviewed_' + host) === 'true') {
+      $cb.prop('checked', true);
+      $row.addClass('reviewed-row');
+    }
+  });
+
+  // Save checkbox state
+  $('#hostsTable').on('change', '.review-checkbox', function() {
+    var host = $(this).data('host');
+    var row = $(this).closest('tr');
+    if ($(this).is(':checked')) {
+      localStorage.setItem('reviewed_' + host, 'true');
+      row.addClass('reviewed-row');
+    } else {
+      localStorage.removeItem('reviewed_' + host);
+      row.removeClass('reviewed-row');
+    }
+  });
+
+  // Filter buttons
+  var $filterBtns = $('#filter-all, #filter-reviewed, #filter-unreviewed');
+
+  function setActiveFilter($btn) {
+    $filterBtns.removeClass('active');
+    $btn.addClass('active');
+  }
+
+  $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+    if (settings.nTable.id !== 'hostsTable') return true;
+    var activeFilter = $filterBtns.filter('.active').attr('id');
+    if (activeFilter === 'filter-all') return true;
+    var $row = $(table.row(dataIndex).node());
+    var isChecked = $row.find('.review-checkbox').is(':checked');
+    if (activeFilter === 'filter-reviewed') return isChecked;
+    if (activeFilter === 'filter-unreviewed') return !isChecked;
+    return true;
+  });
+
+  $('#filter-all').on('click', function() {
+    setActiveFilter($(this));
+    table.draw();
+  });
+
+  $('#filter-reviewed').on('click', function() {
+    setActiveFilter($(this));
+    table.draw();
+  });
+
+  $('#filter-unreviewed').on('click', function() {
+    setActiveFilter($(this));
+    table.draw();
+  });
+});
+</script>
+{% endblock %}

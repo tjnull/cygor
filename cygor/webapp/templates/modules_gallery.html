@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid py-3">
+  <!-- Page header -->
+  <div class="cy-page-header">
+    <h1><i class="bi bi-images"></i>{{ module.name }}</h1>
+    <span class="cy-page-subtitle">
+      {% if module.description %}{{ module.description }}{% endif %}
+      {% if module.version %}<span class="cy-badge ms-2">v{{ module.version }}</span>{% endif %}
+      {% if module.author %}<span class="ms-2">by {{ module.author }}</span>{% endif %}
+    </span>
+  </div>
+
+  <!-- Gallery Section -->
+  {% set items = ctx.items or [] %}
+  {% if items|length == 0 %}
+    <div class="alert alert-warning">
+      <i class="bi bi-exclamation-triangle me-1"></i> No gallery items found for this module.
+    </div>
+  {% else %}
+    <div class="row g-3">
+      {% for item in items %}
+        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+          <div class="card h-100 border-0 shadow-sm bg-dark text-light">
+            <!-- Screenshot -->
+            {% if item.screenshot_url %}
+              <a href="{{ item.url or item.screenshot_url }}" target="_blank" rel="noopener">
+                <img src="{{ item.screenshot_url }}" class="card-img-top img-fluid"
+                     alt="screenshot" style="border-bottom:1px solid rgba(255,255,255,0.1);">
+              </a>
+            {% else %}
+              <div class="d-flex align-items-center justify-content-center"
+                   style="height:180px; background:rgba(255,255,255,0.05); border-radius:.25rem;">
+                <span class="text-muted small">No screenshot</span>
+              </div>
+            {% endif %}
+
+            <!-- Card Body -->
+            <div class="card-body py-2 px-3">
+              {% if item.url %}
+                <div class="small text-break">
+                  <a href="{{ item.url }}" target="_blank" rel="noopener" class="text-info text-decoration-none">
+                    {{ item.url }}
+                  </a>
+                </div>
+              {% endif %}
+
+              {% if item.title %}
+                <div class="fw-semibold">{{ item.title }}</div>
+              {% endif %}
+              {% if item.status %}
+                <div class="text-secondary small">Status: {{ item.status }}</div>
+              {% endif %}
+              {% if item.timestamp %}
+                <div class="text-muted small">Seen: {{ item.timestamp }}</div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+<!-- Optional: Lightbox script for screenshots -->
+<link href="https://cdn.jsdelivr.net/npm/glightbox@3.3.0/dist/css/glightbox.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/glightbox@3.3.0/dist/js/glightbox.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  GLightbox({ selector: '.card a[href$=".png"], .card a[href$=".jpg"], .card a[href$=".jpeg"]' });
+});
+</script>
+{% endblock %}

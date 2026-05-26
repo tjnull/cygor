@@ -1,0 +1,67 @@
+# SSH Bad Keys Manifest
+# Known-compromised SSH private keys from vendor products.
+# These are tested automatically against SSH targets.
+#
+# Sources:
+#   - https://github.com/rapid7/ssh-badkeys
+#   - Public CVE disclosures
+#   - Vendor security advisories
+#
+# To add a key: place the private key file in keys/ and add an entry here.
+
+keys:
+  - file: vagrant_insecure.key
+    vendor: HashiCorp
+    product: Vagrant
+    cve: null
+    default_username: vagrant
+    description: "Vagrant insecure default private key - used by all Vagrant boxes"
+
+  - file: f5_bigip_root.key
+    vendor: F5
+    product: BIG-IP
+    cve: CVE-2012-1493
+    default_username: root
+    description: "F5 BIG-IP hardcoded SSH key allowing root access"
+
+  - file: exagrid_support.key
+    vendor: ExaGrid
+    product: ExaGrid Backup
+    cve: CVE-2016-1560
+    default_username: support
+    description: "ExaGrid backup appliance hardcoded support key"
+
+  - file: ceragon_fibeair.key
+    vendor: Ceragon
+    product: FibeAir
+    cve: CVE-2015-0936
+    default_username: mateidu
+    description: "Ceragon FibeAir wireless backhaul hardcoded key"
+
+  - file: array_networks.key
+    vendor: Array Networks
+    product: vxAG/APV
+    cve: CVE-2023-28461
+    default_username: sync
+    description: "Array Networks vxAG/APV hardcoded SSH key"
+
+  - file: loadbalancer_org.key
+    vendor: Loadbalancer.org
+    product: Enterprise VA
+    cve: null
+    default_username: root
+    description: "Loadbalancer.org Enterprise VA default SSH key"
+
+  - file: quantum_dxi.key
+    vendor: Quantum
+    product: DXi V1000
+    cve: null
+    default_username: root
+    description: "Quantum DXi V1000 backup appliance default key"
+
+  - file: barracuda.key
+    vendor: Barracuda
+    product: Multiple Appliances
+    cve: CVE-2013-0140
+    default_username: root
+    description: "Barracuda Networks multiple appliances hardcoded key"

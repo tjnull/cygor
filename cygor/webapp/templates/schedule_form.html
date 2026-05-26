@@ -1,0 +1,4265 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <!-- Page header -->
+  <div class="cy-page-header">
+    <a href="/schedules" class="cy-btn cy-btn-icon" title="Back to Schedules">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <h1><i class="bi bi-calendar3"></i><span id="formTitle">Create Scheduled Task</span></h1>
+    <span class="cy-page-subtitle">Configure target and timing</span>
+  </div>
+
+  <!-- About Scheduler & Quick Guide (Collapsible) -->
+  <div class="card bg-dark mb-4">
+    <div class="card-header" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#schedulerGuide">
+      <h5 class="mb-0 d-flex justify-content-between align-items-center" style="font-size: 1.25rem;">
+        <span>
+          <svg class="me-2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          About Scheduler & Quick Guide
+        </span>
+        <i class="bi bi-chevron-down"></i>
+      </h5>
+    </div>
+    <div id="schedulerGuide" class="collapse">
+      <div class="card-body">
+        <p class="text-light mb-4" style="font-size: 1.05rem; line-height: 1.7;">
+          Cygor's Task Scheduler allows you to automate recurring security scans and reconnaissance tasks.
+          Schedule port scans, credential testing, and more to run automatically.
+        </p>
+        <div class="row">
+          <div class="col-md-4">
+            <h6 class="text-secondary mb-2" style="font-size: 1rem; font-weight: 600;">Schedule Types</h6>
+            <ul class="mb-0 text-light" style="font-size: 0.95rem; line-height: 1.7;">
+              <li><strong>Interval:</strong> Run every X hours/minutes</li>
+              <li><strong>Cron:</strong> Run at specific times (daily at 2 AM)</li>
+              <li><strong>One-time:</strong> Run once at a scheduled date</li>
+            </ul>
+          </div>
+          <div class="col-md-4">
+            <h6 class="text-secondary mb-2" style="font-size: 1rem; font-weight: 600;">Resource Monitoring</h6>
+            <p class="text-light mb-0" style="font-size: 0.95rem; line-height: 1.7;">
+              Optionally check CPU and memory usage before running. Tasks will queue until resources are available.
+            </p>
+          </div>
+          <div class="col-md-4">
+            <h6 class="text-secondary mb-2" style="font-size: 1rem; font-weight: 600;">Concurrent Runs</h6>
+            <p class="text-light mb-0" style="font-size: 0.95rem; line-height: 1.7;">
+              By default, new runs wait for previous ones to complete. Enable concurrent mode to allow parallel execution.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <form id="scheduleForm">
+    <div class="row g-4">
+      <!-- ==================== LEFT: TAB NAVIGATION ==================== -->
+      <div class="col-lg-3 col-xl-2">
+        <div class="scan-nav-container">
+          <nav class="scan-nav">
+            <button type="button" class="scan-nav-item" data-tab="info">
+              <span class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                  <line x1="8" y1="6" x2="16" y2="6"/>
+                  <line x1="8" y1="10" x2="16" y2="10"/>
+                  <line x1="8" y1="14" x2="12" y2="14"/>
+                </svg>
+              </span>
+              <span class="nav-text">Info & Help</span>
+            </button>
+            <button type="button" class="scan-nav-item active" data-tab="basic">
+              <span class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="16" x2="12" y2="12"/>
+                  <line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+              </span>
+              <span class="nav-text">Basic Info</span>
+              <span class="nav-status" id="status-basic"></span>
+            </button>
+            <button type="button" class="scan-nav-item" data-tab="task">
+              <span class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+              </span>
+              <span class="nav-text">Task Config</span>
+              <span class="nav-status" id="status-task"></span>
+            </button>
+            <button type="button" class="scan-nav-item" data-tab="schedule">
+              <span class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </span>
+              <span class="nav-text">Schedule</span>
+              <span class="nav-status" id="status-schedule"></span>
+            </button>
+            <button type="button" class="scan-nav-item" data-tab="advanced">
+              <span class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="4" y1="21" x2="4" y2="14"/>
+                  <line x1="4" y1="10" x2="4" y2="3"/>
+                  <line x1="12" y1="21" x2="12" y2="12"/>
+                  <line x1="12" y1="8" x2="12" y2="3"/>
+                  <line x1="20" y1="21" x2="20" y2="16"/>
+                  <line x1="20" y1="12" x2="20" y2="3"/>
+                  <line x1="1" y1="14" x2="7" y2="14"/>
+                  <line x1="9" y1="8" x2="15" y2="8"/>
+                  <line x1="17" y1="16" x2="23" y2="16"/>
+                </svg>
+              </span>
+              <span class="nav-text">Advanced</span>
+            </button>
+          </nav>
+
+          <!-- Timezone Card in Sidebar -->
+          <div class="auth-card mt-4">
+            <div class="auth-card-header" style="background: rgba(13, 110, 253, 0.1); color: #0d6efd;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="2" y1="12" x2="22" y2="12"/>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+              </svg>
+              <span>Timezone</span>
+            </div>
+            <div class="auth-card-body" style="overflow: visible;">
+              <select class="form-select form-select-sm" id="timezone">
+                <option value="UTC">UTC</option>
+                <!-- Americas -->
+                <option value="America/New_York">America/New_York (EST/EDT)</option>
+                <option value="America/Chicago">America/Chicago (CST/CDT)</option>
+                <option value="America/Denver">America/Denver (MST/MDT)</option>
+                <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
+                <option value="America/Anchorage">America/Anchorage (AKST)</option>
+                <option value="America/Phoenix">America/Phoenix (MST)</option>
+                <option value="America/Toronto">America/Toronto (EST/EDT)</option>
+                <option value="America/Vancouver">America/Vancouver (PST/PDT)</option>
+                <option value="America/Mexico_City">America/Mexico_City (CST)</option>
+                <option value="America/Sao_Paulo">America/Sao_Paulo (BRT)</option>
+                <!-- Europe -->
+                <option value="Europe/London">Europe/London (GMT/BST)</option>
+                <option value="Europe/Paris">Europe/Paris (CET/CEST)</option>
+                <option value="Europe/Berlin">Europe/Berlin (CET/CEST)</option>
+                <option value="Europe/Amsterdam">Europe/Amsterdam (CET/CEST)</option>
+                <option value="Europe/Madrid">Europe/Madrid (CET/CEST)</option>
+                <option value="Europe/Rome">Europe/Rome (CET/CEST)</option>
+                <option value="Europe/Moscow">Europe/Moscow (MSK)</option>
+                <!-- Asia -->
+                <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+                <option value="Asia/Seoul">Asia/Seoul (KST)</option>
+                <option value="Asia/Shanghai">Asia/Shanghai (CST)</option>
+                <option value="Asia/Hong_Kong">Asia/Hong_Kong (HKT)</option>
+                <option value="Asia/Singapore">Asia/Singapore (SGT)</option>
+                <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+                <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+                <!-- Australia/Pacific -->
+                <option value="Australia/Sydney">Australia/Sydney (AEST/AEDT)</option>
+                <option value="Australia/Melbourne">Australia/Melbourne (AEST/AEDT)</option>
+                <option value="Australia/Perth">Australia/Perth (AWST)</option>
+                <option value="Pacific/Auckland">Pacific/Auckland (NZST/NZDT)</option>
+                <option value="Pacific/Honolulu">Pacific/Honolulu (HST)</option>
+              </select>
+              <small class="text-muted d-block mt-2" id="detectedTimezone"></small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== RIGHT: TAB CONTENT ==================== -->
+      <div class="col-lg-9 col-xl-10">
+        <!-- TAB: Basic Info -->
+        <div class="scan-tab active" id="tab-basic">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="16" x2="12" y2="12"/>
+                  <line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+                Basic Information
+              </h4>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Provide a name and description for this scheduled task.</p>
+
+              <div class="mb-4">
+                <label for="name" class="form-label">Schedule Name <span class="text-danger">*</span></label>
+                <input type="text" class="form-control form-control-lg" id="name" required
+                       placeholder="e.g., Daily Production Scan">
+                <div class="form-text">A unique, descriptive name for this schedule</div>
+              </div>
+
+              <div class="mb-3">
+                <label for="description" class="form-label">Description</label>
+                <textarea class="form-control" id="description" rows="4"
+                          placeholder="Optional description of what this schedule does and why it runs..."></textarea>
+                <div class="form-text">Help your team understand the purpose of this scheduled task</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Task Configuration -->
+        <div class="scan-tab" id="tab-task">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                Task Configuration
+              </h4>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Select the type of task and configure its parameters.</p>
+
+              <!-- Task Type Selection -->
+              <div class="mb-4">
+                <label class="form-label">Task Type <span class="text-danger">*</span></label>
+                <div class="task-type-grid">
+                  <label class="task-type-card">
+                    <input type="radio" name="taskType" value="port_scan">
+                    <div class="task-type-content">
+                      <div class="task-type-icon">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <circle cx="12" cy="12" r="10"/>
+                          <path d="M12 2a10 10 0 0 1 10 10"/>
+                          <circle cx="12" cy="12" r="6"/>
+                          <path d="M12 6a6 6 0 0 1 6 6"/>
+                          <circle cx="12" cy="12" r="2"/>
+                        </svg>
+                      </div>
+                      <div class="task-type-info">
+                        <span class="task-type-name">Port Scan</span>
+                        <span class="task-type-desc">Network discovery & enumeration</span>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="task-type-card">
+                    <input type="radio" name="taskType" value="credrecon">
+                    <div class="task-type-content">
+                      <div class="task-type-icon text-warning">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                          <path d="M9 12l2 2 4-4"/>
+                        </svg>
+                      </div>
+                      <div class="task-type-info">
+                        <span class="task-type-name">Cred Recon</span>
+                        <span class="task-type-desc">Credential testing</span>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="task-type-card">
+                    <input type="radio" name="taskType" value="module_scan">
+                    <div class="task-type-content">
+                      <div class="task-type-icon text-info">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <circle cx="12" cy="12" r="3"/>
+                          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21"/>
+                        </svg>
+                      </div>
+                      <div class="task-type-info">
+                        <span class="task-type-name">Module</span>
+                        <span class="task-type-desc">Run custom modules</span>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="task-type-card">
+                    <input type="radio" name="taskType" value="enrich">
+                    <div class="task-type-content">
+                      <div class="task-type-icon" style="color: #8b5cf6;">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <circle cx="11" cy="11" r="8"/>
+                          <path d="M21 21l-4.35-4.35"/>
+                          <path d="M11 8v6"/>
+                          <path d="M8 11h6"/>
+                        </svg>
+                      </div>
+                      <div class="task-type-info">
+                        <span class="task-type-name">Enrich</span>
+                        <span class="task-type-desc">IOC enrichment</span>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Dynamic Task Config Container -->
+              <div id="taskConfigContainer"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Schedule Configuration -->
+        <div class="scan-tab" id="tab-schedule">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                Schedule Configuration
+              </h4>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Configure when and how often this task should run.</p>
+
+              <!-- Schedule Type Selection -->
+              <div class="mb-4">
+                <label class="form-label">Schedule Type <span class="text-danger">*</span></label>
+                <div class="schedule-type-grid">
+                  <label class="schedule-type-card">
+                    <input type="radio" name="scheduleType" value="interval">
+                    <div class="schedule-type-content">
+                      <div class="schedule-type-icon" style="color: #20c997;">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="23 4 23 10 17 10"/>
+                          <polyline points="1 20 1 14 7 14"/>
+                          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                      </div>
+                      <div class="schedule-type-info">
+                        <span class="schedule-type-name">Interval</span>
+                        <span class="schedule-type-desc">Run every X hours/minutes</span>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="schedule-type-card">
+                    <input type="radio" name="scheduleType" value="cron">
+                    <div class="schedule-type-content">
+                      <div class="schedule-type-icon" style="color: #a78bfa;">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <circle cx="12" cy="12" r="10"/>
+                          <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                      </div>
+                      <div class="schedule-type-info">
+                        <span class="schedule-type-name">Cron</span>
+                        <span class="schedule-type-desc">Run at specific times/days</span>
+                      </div>
+                    </div>
+                  </label>
+                  <label class="schedule-type-card">
+                    <input type="radio" name="scheduleType" value="date">
+                    <div class="schedule-type-content">
+                      <div class="schedule-type-icon" style="color: #fd7e14;">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                          <line x1="16" y1="2" x2="16" y2="6"/>
+                          <line x1="8" y1="2" x2="8" y2="6"/>
+                          <line x1="3" y1="10" x2="21" y2="10"/>
+                        </svg>
+                      </div>
+                      <div class="schedule-type-info">
+                        <span class="schedule-type-name">One-time</span>
+                        <span class="schedule-type-desc">Run once at a specific time</span>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Dynamic Schedule Config Container -->
+              <div id="scheduleConfigContainer"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Advanced Options -->
+        <div class="scan-tab" id="tab-advanced">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="4" y1="21" x2="4" y2="14"/>
+                  <line x1="4" y1="10" x2="4" y2="3"/>
+                  <line x1="12" y1="21" x2="12" y2="12"/>
+                  <line x1="12" y1="8" x2="12" y2="3"/>
+                  <line x1="20" y1="21" x2="20" y2="16"/>
+                  <line x1="20" y1="12" x2="20" y2="3"/>
+                  <line x1="1" y1="14" x2="7" y2="14"/>
+                  <line x1="9" y1="8" x2="15" y2="8"/>
+                  <line x1="17" y1="16" x2="23" y2="16"/>
+                </svg>
+                Advanced Options
+              </h4>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Configure run limits, date ranges, and resource monitoring.</p>
+
+              <!-- Run Limits -->
+              <div class="advanced-section mb-5">
+                <h5 class="advanced-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d6efd" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                  Run Limits
+                </h5>
+                <div class="row g-4">
+                  <div class="col-md-6">
+                    <label for="maxRuns" class="form-label">Maximum Runs</label>
+                    <input type="number" class="form-control" id="maxRuns" min="1" placeholder="Unlimited">
+                    <div class="form-text">Leave empty for unlimited runs</div>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Date Range</label>
+                    <div class="row g-2">
+                      <div class="col-6">
+                        <input type="text" class="form-control" id="startDate" placeholder="Select start date..." readonly>
+                        <input type="hidden" id="startDateHidden">
+                        <div class="form-text">Start date (optional)</div>
+                      </div>
+                      <div class="col-6">
+                        <input type="text" class="form-control" id="endDate" placeholder="Select end date..." readonly>
+                        <input type="hidden" id="endDateHidden">
+                        <div class="form-text">End date (optional)</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Concurrent Execution -->
+              <div class="advanced-section mb-5">
+                <h5 class="advanced-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                    <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                    <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                    <line x1="6" y1="6" x2="6.01" y2="6"/>
+                    <line x1="6" y1="18" x2="6.01" y2="18"/>
+                  </svg>
+                  Concurrent Execution
+                </h5>
+                <label class="toggle-card">
+                  <input type="checkbox" id="allowConcurrent">
+                  <div class="toggle-card-content">
+                    <div class="toggle-card-header">
+                      <span>Allow Concurrent Runs</span>
+                    </div>
+                    <p>Allow new runs to start even if the previous one is still executing.</p>
+                  </div>
+                </label>
+                <div class="concurrent-sub" id="maxConcurrentContainer" style="display:none;">
+                  <label for="maxConcurrentRuns" class="form-label">Max Concurrent Runs</label>
+                  <input type="number" class="form-control" id="maxConcurrentRuns" min="1" max="10" value="2" style="max-width: 150px;">
+                </div>
+              </div>
+
+              <!-- Resource Monitoring -->
+              <div class="advanced-section">
+                <h5 class="advanced-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                  </svg>
+                  Resource Monitoring
+                </h5>
+                <label class="toggle-card">
+                  <input type="checkbox" id="checkResources" checked>
+                  <div class="toggle-card-content">
+                    <div class="toggle-card-header">
+                      <span>Check System Resources Before Running</span>
+                    </div>
+                    <p>Queue the task if CPU or memory usage exceeds the configured thresholds.</p>
+                  </div>
+                </label>
+                <div class="resource-sliders" id="resourceLimitsContainer">
+                  <div class="row g-4 mt-2">
+                    <div class="col-md-6">
+                      <label class="form-label">
+                        Max CPU Usage: <strong id="cpuValue">80</strong>%
+                      </label>
+                      <input type="range" class="form-range" id="maxCpu" min="10" max="100" value="80"
+                             oninput="document.getElementById('cpuValue').textContent = this.value">
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label">
+                        Max Memory Usage: <strong id="memoryValue">80</strong>%
+                      </label>
+                      <input type="range" class="form-range" id="maxMemory" min="10" max="100" value="80"
+                             oninput="document.getElementById('memoryValue').textContent = this.value">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Retry & Resilience -->
+              <div class="advanced-section mt-5">
+                <h5 class="advanced-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2">
+                    <polyline points="1 4 1 10 7 10"/>
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                  </svg>
+                  Retry &amp; Resilience
+                </h5>
+                <p class="text-secondary mb-3">Configure automatic retries when tasks are skipped or fail.</p>
+
+                <div class="row g-4">
+                  <div class="col-md-4">
+                    <label for="maxRetries" class="form-label">Max Retries</label>
+                    <input type="number" class="form-control" id="maxRetries" min="0" max="10" value="3">
+                    <div class="form-text">Retry attempts per scheduled fire (0 = no retry)</div>
+                  </div>
+                  <div class="col-md-4">
+                    <label for="retryDelay" class="form-label">Retry Delay (minutes)</label>
+                    <input type="number" class="form-control" id="retryDelay" min="1" max="1440" value="5">
+                    <div class="form-text">Base delay between retries</div>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">&nbsp;</label>
+                    <label class="toggle-card">
+                      <input type="checkbox" id="retryBackoff" checked>
+                      <div class="toggle-card-content">
+                        <div class="toggle-card-header">
+                          <span>Exponential Backoff</span>
+                        </div>
+                        <p>Double the delay on each retry (5m, 10m, 20m)</p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="row g-4 mt-2">
+                  <div class="col-md-6">
+                    <label for="stallTimeout" class="form-label">Stall Timeout (minutes)</label>
+                    <input type="number" class="form-control" id="stallTimeout" min="0" placeholder="Disabled">
+                    <div class="form-text">Kill task if no output for this long (empty = disabled). Recommended: 30 min.</div>
+                  </div>
+                  <div class="col-md-6">
+                    <label for="misfireGrace" class="form-label">Misfire Grace Period (minutes)</label>
+                    <input type="number" class="form-control" id="misfireGrace" min="1" placeholder="60 (default)">
+                    <div class="form-text">How long after a missed fire time the task can still execute. Default: 60 min.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Info & Help -->
+        <div class="scan-tab" id="tab-info">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+                Scheduler Documentation
+              </h4>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Learn how to effectively use Cygor's task scheduler.</p>
+
+              <!-- Schedule Types -->
+              <div class="info-section">
+                <h5 class="info-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d6efd" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  Schedule Types Explained
+                </h5>
+                <div class="info-content">
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <div class="info-item-header">
+                        <span class="info-badge" style="background: rgba(32, 201, 151, 0.2); color: #20c997;">Interval</span>
+                      </div>
+                      <p>Runs the task repeatedly at fixed time intervals. Example: every 6 hours, every 30 minutes.</p>
+                      <code>Best for: Regular recurring scans, monitoring tasks</code>
+                    </div>
+                    <div class="info-item">
+                      <div class="info-item-header">
+                        <span class="info-badge" style="background: rgba(167, 139, 250, 0.2); color: #a78bfa;">Cron</span>
+                      </div>
+                      <p>Runs at specific times using cron-style scheduling. Example: daily at 2:00 AM, weekdays at noon.</p>
+                      <code>Best for: Maintenance windows, business-hour scans</code>
+                    </div>
+                    <div class="info-item">
+                      <div class="info-item-header">
+                        <span class="info-badge" style="background: rgba(253, 126, 20, 0.2); color: #fd7e14;">One-time</span>
+                      </div>
+                      <p>Runs exactly once at a specified date and time. Automatically becomes inactive after execution.</p>
+                      <code>Best for: One-off assessments, scheduled pentests</code>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Task Types -->
+              <div class="info-section mt-5">
+                <h5 class="info-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33"/>
+                  </svg>
+                  Available Task Types
+                </h5>
+                <div class="task-info-grid">
+                  <div class="task-info-item">
+                    <h6><i class="bi bi-radar me-2"></i>Port Scan</h6>
+                    <p>Network discovery and port enumeration using Masscan, Naabu, and Nmap.</p>
+                  </div>
+                  <div class="task-info-item">
+                    <h6><i class="bi bi-shield-check me-2 text-warning"></i>Credential Recon</h6>
+                    <p>Test default and common credentials against network services.</p>
+                  </div>
+                  <div class="task-info-item">
+                    <h6><i class="bi bi-gear me-2 text-info"></i>Module Scan</h6>
+                    <p>Run custom modules like Lockon (screenshots), SMB/NFS explorers.</p>
+                  </div>
+                  <div class="task-info-item">
+                    <h6><i class="bi bi-search me-2" style="color: #8b5cf6;"></i>IOC Enrichment</h6>
+                    <p>Enrich indicators with threat intelligence from multiple sources.</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Output Info -->
+              <div class="info-section mt-5">
+                <h5 class="info-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  Output & Results
+                </h5>
+                <div class="info-content">
+                  <p class="mb-3">Scheduled task results are automatically saved to organized directories:</p>
+                  <div class="output-path">
+                    <code>&lt;load-dir&gt;/schedule-scans/&lt;task-type&gt;/&lt;timestamp&gt;</code>
+                  </div>
+                  <p class="mt-3 mb-0 text-secondary">Results are automatically synced to the database when scans complete. View execution history and results from the schedule detail page.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Submit Bar -->
+        <div class="submit-bar mt-4">
+          <a href="/schedules" class="cygor-btn">
+            <svg class="me-2" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+            Cancel
+          </a>
+          <button type="submit" class="cygor-btn cygor-btn-primary">
+            <svg class="me-2" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Create Schedule
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Success Modal -->
+<div class="modal fade" id="successModal" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-success">
+      <div class="modal-header border-success">
+        <h5 class="modal-title text-white" id="successModalLabel">
+          <i class="bi bi-check-circle-fill me-2 text-success"></i>Success
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="successMessage"></p>
+      </div>
+      <div class="modal-footer border-success">
+        <button type="button" class="btn btn-success" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Error Modal -->
+<div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-danger">
+      <div class="modal-header border-danger">
+        <h5 class="modal-title text-white" id="errorModalLabel">
+          <i class="bi bi-exclamation-triangle-fill me-2 text-danger"></i>Error
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="errorMessage"></p>
+      </div>
+      <div class="modal-footer border-danger">
+        <button type="button" class="btn btn-danger" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Server File Browser Modal -->
+<div class="modal fade" id="serverFileBrowserModal" tabindex="-1" aria-labelledby="serverFileBrowserLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title" id="serverFileBrowserLabel">
+          <svg class="me-2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+          Browse Server Files
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label small text-secondary">Current Path:</label>
+          <div class="input-group">
+            <input type="text" class="form-control bg-dark text-light border-secondary" id="sfbCurrentPath" readonly>
+            <button class="btn btn-outline-secondary" type="button" id="sfbGoToPath" title="Navigate to path">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div id="sfbFileList" style="max-height: 400px; overflow-y: auto;">
+          <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="sfbSelectBtn" disabled>
+          <svg class="me-2" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Select File
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* cygor-nav-link styles now in cygor-components.css */
+
+/* ==================== SCAN NAV ==================== */
+.scan-nav-container {
+  position: sticky;
+  top: 80px;
+}
+
+.scan-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.scan-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: #adb5bd;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+  font-size: 1.05rem;
+}
+
+.scan-nav-item:hover {
+  background: rgba(13, 110, 253, 0.1);
+  border-color: rgba(13, 110, 253, 0.3);
+  color: #fff;
+}
+
+.scan-nav-item.active {
+  background: rgba(13, 110, 253, 0.15);
+  border-color: #0d6efd;
+  color: #fff;
+}
+
+.scan-nav-item .nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.scan-nav-item .nav-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.scan-nav-item .nav-text {
+  flex: 1;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.scan-nav-item .nav-status {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.scan-nav-item .nav-status.configured {
+  background: #22c55e;
+}
+
+/* ==================== AUTH/TIMEZONE CARD ==================== */
+.auth-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  /* Note: removed overflow: hidden to allow dropdown menus to display */
+}
+
+.auth-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: rgba(220, 53, 69, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: #dc3545;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.auth-card-body {
+  padding: 1.25rem;
+}
+
+/* ==================== TABS ==================== */
+.scan-tab {
+  display: none;
+}
+
+.scan-tab.active {
+  display: block;
+}
+
+/* ==================== TASK TYPE GRID ==================== */
+.task-type-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+}
+
+.task-type-card {
+  cursor: pointer;
+  display: block;
+}
+
+.task-type-card input {
+  display: none;
+}
+
+.task-type-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.75rem 1rem;
+  min-height: 140px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.task-type-card:hover .task-type-content {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.task-type-card input:checked + .task-type-content {
+  border-color: #0d6efd;
+  background: rgba(13, 110, 253, 0.15);
+}
+
+.task-type-icon {
+  margin-bottom: 0.75rem;
+  color: #0d6efd;
+}
+
+.task-type-icon svg,
+.task-type-icon i {
+  font-size: 1.75rem;
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.task-type-name {
+  font-weight: 600;
+  font-size: 1rem;
+  display: block;
+}
+
+.task-type-desc {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  display: block;
+  margin-top: 0.35rem;
+  line-height: 1.3;
+}
+
+@media (max-width: 992px) {
+  .task-type-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 576px) {
+  .task-type-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ==================== SCHEDULE TYPE GRID ==================== */
+.schedule-type-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .schedule-type-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.schedule-type-card {
+  cursor: pointer;
+}
+
+.schedule-type-card input {
+  display: none;
+}
+
+.schedule-type-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.schedule-type-card:hover .schedule-type-content {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.schedule-type-card input:checked + .schedule-type-content {
+  border-color: #0d6efd;
+  background: rgba(13, 110, 253, 0.15);
+}
+
+.schedule-type-icon {
+  margin-bottom: 1rem;
+}
+
+.schedule-type-name {
+  font-weight: 600;
+  font-size: 1.1rem;
+  display: block;
+}
+
+.schedule-type-desc {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  display: block;
+  margin-top: 0.25rem;
+}
+
+/* ==================== ADVANCED SECTIONS ==================== */
+.advanced-section {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.advanced-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ==================== TOGGLE CARD ==================== */
+.toggle-card {
+  display: flex;
+  cursor: pointer;
+  padding: 1.25rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.toggle-card input {
+  display: none;
+}
+
+.toggle-card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.toggle-card:has(input:checked) {
+  border-color: #0d6efd;
+  background: rgba(13, 110, 253, 0.1);
+}
+
+.toggle-card-header {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.toggle-card-content p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #9ca3af;
+}
+
+.concurrent-sub, .resource-sliders {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+}
+
+/* ==================== INFO SECTIONS ==================== */
+.info-section {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.info-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 992px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.info-item {
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+}
+
+.info-item-header {
+  margin-bottom: 0.75rem;
+}
+
+.info-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.info-item p {
+  font-size: 0.9rem;
+  color: #9ca3af;
+  margin-bottom: 0.75rem;
+}
+
+.info-item code {
+  font-size: 0.8rem;
+  color: #9ca3ab;
+  background: transparent;
+}
+
+.task-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.task-info-item {
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+}
+
+.task-info-item h6 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.task-info-item p {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.output-path {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.output-path code {
+  font-size: 0.9rem;
+  color: #22c55e;
+  background: transparent;
+}
+
+/* ==================== SUBMIT BAR ==================== */
+.submit-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 0;
+}
+
+.submit-bar .btn {
+  padding: 0.875rem 2rem;
+  font-size: 1rem;
+}
+
+/* ==================== FORM CONTROLS ==================== */
+.form-control, .form-select {
+  background: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 4px !important;
+  color: #e5e7eb !important;
+  font-size: 0.9375rem;
+  padding: 0.75rem 1rem;
+}
+
+.form-control:focus, .form-select:focus {
+  border-color: #0d6efd !important;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15) !important;
+}
+
+.form-control::placeholder {
+  color: #6b7280 !important;
+}
+
+.form-control-lg {
+  font-size: 1rem;
+  padding: 1rem 1.25rem;
+}
+
+.form-label {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.form-text {
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  color: #9ca3ab;
+}
+
+/* ==================== CARD OVERRIDES ==================== */
+.card.bg-dark {
+  border-radius: 8px !important;
+}
+
+.card-header {
+  padding: 1.25rem 1.5rem;
+  border-radius: 8px 8px 0 0 !important;
+}
+
+.card-header h4 {
+  font-size: 1.25rem;
+}
+
+.card-header h4 svg {
+  width: 28px;
+  height: 28px;
+}
+
+.card-body {
+  padding: 1.75rem;
+}
+
+.card-body > p.text-secondary {
+  font-size: 1rem;
+  margin-bottom: 1.5rem !important;
+}
+
+/* ==================== DYNAMIC TASK CONFIG ==================== */
+.config-section {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.config-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+}
+
+.target-input {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  font-size: 1rem;
+  background: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 4px !important;
+  line-height: 1.7;
+  padding: 1rem !important;
+}
+
+.target-input:focus {
+  border-color: #0d6efd !important;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15) !important;
+}
+
+/* Target hints */
+.target-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.target-hints .hint-item {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
+
+.target-hints .hint-item i {
+  font-size: 0.9rem;
+}
+
+/* Discovery tool cards for port scan config */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .tool-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tool-card {
+  display: block;
+  cursor: pointer;
+}
+
+.tool-card input {
+  display: none;
+}
+
+.tool-card-content {
+  padding: 1.25rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.tool-card:hover .tool-card-content {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.tool-card input:checked + .tool-card-content {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.tool-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.tool-name {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.tool-badge {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  background: #f59e0b;
+  color: #000;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.tool-features {
+  margin: 0;
+  padding: 0 0 0 1rem;
+  list-style: disc;
+}
+
+.tool-features li {
+  font-size: 0.85rem;
+  color: #9ca3af;
+  margin-bottom: 0.25rem;
+}
+
+/* Discovery mode toggle */
+.discovery-mode-toggle {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.mode-option {
+  cursor: pointer;
+}
+
+.mode-option input {
+  display: none;
+}
+
+.mode-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #adb5bd;
+  transition: all 0.2s;
+}
+
+.mode-option:hover .mode-label {
+  border-color: rgba(13, 110, 253, 0.3);
+  color: #fff;
+}
+
+.mode-option input:checked + .mode-label {
+  background: rgba(13, 110, 253, 0.15);
+  border-color: #0d6efd;
+  color: #fff;
+}
+
+/* Schedule config inputs */
+.schedule-config-section {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+}
+
+/* ==================== DATETIME PICKER STYLING ==================== */
+.datetime-picker-wrapper {
+  position: relative;
+}
+
+.datetime-input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* ==================== FLATPICKR BLACK THEME ==================== */
+.flatpickr-calendar {
+  background: #000000 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.9) !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif !important;
+  padding: 16px !important;
+  padding-bottom: 0 !important;
+  width: 344px !important;
+  overflow: visible !important;
+}
+
+/* Calendar with time picker */
+.flatpickr-calendar.hasTime {
+  padding-bottom: 0 !important;
+}
+
+.flatpickr-innerContainer,
+.flatpickr-rContainer {
+  background: #000000 !important;
+}
+
+/* Month/Year Header */
+.flatpickr-months {
+  background: #000000 !important;
+  padding: 8px 4px 16px 4px !important;
+  margin-bottom: 8px !important;
+}
+
+.flatpickr-months .flatpickr-month {
+  background: #000000 !important;
+  color: #e2e8f0 !important;
+  fill: #94a3b8 !important;
+  height: 40px !important;
+}
+
+.flatpickr-current-month {
+  color: #f1f5f9 !important;
+  font-weight: 500 !important;
+  font-size: 1rem !important;
+  letter-spacing: 0.01em !important;
+  padding-top: 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+}
+
+/* Month Dropdown */
+.flatpickr-current-month .flatpickr-monthDropdown-months {
+  background: #000000 !important;
+  color: #e2e8f0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  font-size: 0.95rem !important;
+  padding: 6px 8px !important;
+  cursor: pointer !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+}
+
+.flatpickr-current-month .flatpickr-monthDropdown-months:hover {
+  background: #111111 !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+.flatpickr-current-month .flatpickr-monthDropdown-months:focus {
+  outline: none !important;
+  border-color: #6366f1 !important;
+}
+
+.flatpickr-current-month .flatpickr-monthDropdown-months option {
+  background: #000000 !important;
+  color: #e2e8f0 !important;
+  padding: 8px !important;
+}
+
+/* Year Input/Dropdown */
+.flatpickr-current-month input.cur-year,
+.flatpickr-current-month .numInputWrapper {
+  background: #000000 !important;
+  color: #f1f5f9 !important;
+  font-weight: 500 !important;
+  font-size: 0.95rem !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 6px !important;
+  padding: 6px 8px !important;
+  width: 70px !important;
+}
+
+.flatpickr-current-month input.cur-year:hover,
+.flatpickr-current-month .numInputWrapper:hover {
+  background: #111111 !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+.flatpickr-current-month input.cur-year:focus {
+  outline: none !important;
+  border-color: #6366f1 !important;
+}
+
+.flatpickr-current-month .numInputWrapper span {
+  border: none !important;
+  opacity: 0 !important;
+}
+
+.flatpickr-current-month .numInputWrapper:hover span {
+  opacity: 0.6 !important;
+}
+
+.flatpickr-current-month .arrowUp:after {
+  border-bottom-color: #e2e8f0 !important;
+}
+
+.flatpickr-current-month .arrowDown:after {
+  border-top-color: #e2e8f0 !important;
+}
+
+/* Navigation Arrows */
+.flatpickr-months .flatpickr-prev-month,
+.flatpickr-months .flatpickr-next-month {
+  fill: #64748b !important;
+  padding: 6px !important;
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+}
+
+.flatpickr-months .flatpickr-prev-month:hover,
+.flatpickr-months .flatpickr-next-month:hover {
+  background: rgba(99, 102, 241, 0.2) !important;
+  fill: #a5b4fc !important;
+}
+
+.flatpickr-months .flatpickr-prev-month svg,
+.flatpickr-months .flatpickr-next-month svg {
+  fill: inherit !important;
+}
+
+/* Weekday Headers */
+.flatpickr-weekdays {
+  background: #000000 !important;
+  padding: 0 0 12px 0 !important;
+}
+
+span.flatpickr-weekday {
+  color: #8b949e !important;
+  font-weight: 600 !important;
+  font-size: 0.7rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+  background: #000000 !important;
+}
+
+/* Days Grid */
+.flatpickr-days {
+  background: #000000 !important;
+  border: none !important;
+}
+
+.dayContainer {
+  background: #000000 !important;
+  min-width: 312px !important;
+  max-width: 312px !important;
+}
+
+/* Individual Days */
+.flatpickr-day {
+  color: #e2e8f0 !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 10px !important;
+  font-weight: 400 !important;
+  font-size: 0.875rem !important;
+  height: 40px !important;
+  line-height: 40px !important;
+  max-width: 40px !important;
+  margin: 1px !important;
+  transition: all 0.15s ease !important;
+}
+
+.flatpickr-day:hover {
+  background: rgba(99, 102, 241, 0.2) !important;
+  color: #fff !important;
+}
+
+.flatpickr-day.today {
+  background: rgba(99, 102, 241, 0.15) !important;
+  color: #a5b4fc !important;
+  font-weight: 600 !important;
+}
+
+.flatpickr-day.today:hover {
+  background: rgba(99, 102, 241, 0.3) !important;
+  color: #fff !important;
+}
+
+.flatpickr-day.selected,
+.flatpickr-day.selected:hover {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
+  color: #fff !important;
+  font-weight: 500 !important;
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.5) !important;
+}
+
+.flatpickr-day.inRange {
+  background: rgba(99, 102, 241, 0.25) !important;
+  color: #e2e8f0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+.flatpickr-day.startRange {
+  border-radius: 10px 0 0 10px !important;
+}
+
+.flatpickr-day.endRange {
+  border-radius: 0 10px 10px 0 !important;
+}
+
+.flatpickr-day.prevMonthDay,
+.flatpickr-day.nextMonthDay {
+  color: #374151 !important;
+}
+
+.flatpickr-day.prevMonthDay:hover,
+.flatpickr-day.nextMonthDay:hover {
+  background: rgba(99, 102, 241, 0.1) !important;
+  color: #6b7280 !important;
+}
+
+.flatpickr-day.flatpickr-disabled,
+.flatpickr-day.flatpickr-disabled:hover {
+  color: #1f2937 !important;
+  background: transparent !important;
+  cursor: not-allowed !important;
+}
+
+/* Time Picker - Calendar with Time */
+.flatpickr-calendar.hasTime {
+  padding-bottom: 0 !important;
+  overflow: visible !important;
+}
+
+.flatpickr-calendar.hasTime .flatpickr-innerContainer {
+  border-bottom: none !important;
+  margin-bottom: 0 !important;
+}
+
+/* Time picker wrapper */
+.flatpickr-time {
+  background: #0a0a0a !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 8px !important;
+  margin: 12px 0 16px 0 !important;
+  padding: 12px 16px !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.flatpickr-time input {
+  color: #e2e8f0 !important;
+  font-size: 1.1rem !important;
+  font-weight: 500 !important;
+  background: #000000 !important;
+  border-radius: 4px !important;
+  height: 40px !important;
+  padding: 0 8px !important;
+  border: none !important;
+}
+
+.flatpickr-time input:hover,
+.flatpickr-time input:focus {
+  background: #111111 !important;
+}
+
+.flatpickr-time .numInputWrapper {
+  background: #000000 !important;
+  border-radius: 4px !important;
+  height: 40px !important;
+  width: 50px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.flatpickr-time .numInputWrapper:hover {
+  background: #111111 !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.flatpickr-time .flatpickr-time-separator {
+  color: #6b7280 !important;
+  font-size: 1.2rem !important;
+  font-weight: 600 !important;
+  height: 40px !important;
+  line-height: 40px !important;
+  width: auto !important;
+  padding: 0 4px !important;
+}
+
+.flatpickr-time .flatpickr-am-pm {
+  color: #e2e8f0 !important;
+  background: #000000 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 4px !important;
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
+  height: 40px !important;
+  line-height: 40px !important;
+  width: 48px !important;
+  margin-left: 8px !important;
+}
+
+.flatpickr-time .flatpickr-am-pm:hover {
+  background: #111111 !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.flatpickr-time .numInputWrapper span.arrowUp,
+.flatpickr-time .numInputWrapper span.arrowDown {
+  display: none !important;
+}
+
+.flatpickr-time .numInputWrapper span.arrowUp:hover,
+.flatpickr-time .numInputWrapper span.arrowDown:hover {
+  opacity: 1 !important;
+}
+
+.flatpickr-time .numInputWrapper span.arrowUp:after {
+  border-bottom-color: #a5b4fc !important;
+}
+
+.flatpickr-time .numInputWrapper span.arrowDown:after {
+  border-top-color: #a5b4fc !important;
+}
+
+/* ==================== TIME-ONLY PICKER - PURE BLACK ==================== */
+.flatpickr-calendar.noCalendar,
+.flatpickr-calendar.noCalendar.open,
+.flatpickr-calendar.noCalendar.inline,
+.flatpickr-calendar.hasTime.noCalendar {
+  background: #000000 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9) !important;
+  padding: 16px 20px !important;
+  width: auto !important;
+  min-width: 220px !important;
+  overflow: visible !important;
+}
+
+.flatpickr-calendar.noCalendar .flatpickr-time,
+.flatpickr-calendar.hasTime.noCalendar .flatpickr-time {
+  background: #000000 !important;
+  border: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  height: 44px !important;
+  max-height: none !important;
+  overflow: visible !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+}
+
+.flatpickr-calendar.noCalendar .numInputWrapper,
+.flatpickr-calendar.hasTime.noCalendar .numInputWrapper {
+  background: #0a0a0a !important;
+  border-radius: 2px !important;
+  height: 44px !important;
+  width: 52px !important;
+  flex: 0 0 52px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  overflow: visible !important;
+}
+
+.flatpickr-calendar.noCalendar .numInputWrapper:hover,
+.flatpickr-calendar.hasTime.noCalendar .numInputWrapper:hover {
+  background: #111111 !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.flatpickr-calendar.noCalendar .flatpickr-time input,
+.flatpickr-calendar.hasTime.noCalendar .flatpickr-time input {
+  background: transparent !important;
+  color: #e5e7eb !important;
+  font-size: 1.1rem !important;
+  font-weight: 500 !important;
+  height: 44px !important;
+  line-height: 44px !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.flatpickr-calendar.noCalendar .flatpickr-time-separator,
+.flatpickr-calendar.hasTime.noCalendar .flatpickr-time-separator {
+  color: #8b949e !important;
+  font-size: 1.1rem !important;
+  font-weight: 600 !important;
+  height: 44px !important;
+  line-height: 44px !important;
+  width: 12px !important;
+  flex: 0 0 12px !important;
+}
+
+.flatpickr-calendar.noCalendar .flatpickr-am-pm,
+.flatpickr-calendar.hasTime.noCalendar .flatpickr-am-pm {
+  color: #e5e7eb !important;
+  background: #0a0a0a !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 2px !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  height: 44px !important;
+  line-height: 44px !important;
+  width: 48px !important;
+  flex: 0 0 48px !important;
+  margin-left: 6px !important;
+}
+
+.flatpickr-calendar.noCalendar .flatpickr-am-pm:hover,
+.flatpickr-calendar.hasTime.noCalendar .flatpickr-am-pm:hover {
+  background: #111111 !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.flatpickr-calendar.noCalendar .numInputWrapper span,
+.flatpickr-calendar.noCalendar .numInputWrapper span.arrowUp,
+.flatpickr-calendar.noCalendar .numInputWrapper span.arrowDown {
+  display: none !important;
+}
+
+/* ==================== CUSTOM DARK DROPDOWNS ==================== */
+.custom-dropdown {
+  position: relative;
+  width: 100%;
+}
+
+.custom-dropdown-toggle {
+  background-color: #000000 !important;
+  color: #e5e7eb !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 4px !important;
+  padding: 0.5rem 2.5rem 0.5rem 0.75rem !important;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  display: block;
+}
+
+.custom-dropdown-toggle::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: solid #9ca3af;
+  border-width: 0 2px 2px 0;
+  padding: 3px;
+  transform: translateY(-70%) rotate(45deg);
+}
+
+.custom-dropdown-toggle:hover {
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+.custom-dropdown-toggle:focus {
+  border-color: #0d6efd !important;
+  outline: none;
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25) !important;
+}
+
+.custom-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background-color: #000000 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 4px !important;
+  margin-top: 4px;
+  max-height: 250px;
+  overflow-y: auto;
+  z-index: 1050;
+  display: none;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+}
+
+.custom-dropdown-menu.show {
+  display: block;
+}
+
+.custom-dropdown-item {
+  padding: 10px 12px;
+  color: #e5e7eb !important;
+  background-color: #000000 !important;
+  cursor: pointer;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.custom-dropdown-item:hover {
+  background-color: #1a1a1a !important;
+  color: #ffffff !important;
+}
+
+.custom-dropdown-item.selected {
+  background-color: #1e3a5f !important;
+  color: #ffffff !important;
+}
+
+/* Scrollbar for dropdown */
+.custom-dropdown-menu::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-dropdown-menu::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+.custom-dropdown-menu::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+.custom-dropdown-menu::-webkit-scrollbar-thumb:hover {
+  background: #444;
+}
+
+/* Hide original select when custom dropdown is active */
+select.custom-dropdown-native {
+  display: none !important;
+}
+
+/* Fallback styling for native selects */
+.scan-card select.form-select,
+.scan-card select.form-control,
+.scan-tab select.form-select,
+.scan-tab select.form-control,
+#scheduleConfigFields select.form-select,
+#scheduleConfigFields select.form-control {
+  background-color: #000000 !important;
+  color: #e5e7eb !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 4px !important;
+}
+
+/* ==================== FILE BROWSE GROUP ==================== */
+.file-browse-group {
+  display: flex;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.file-browse-group .form-control {
+  flex: 1;
+}
+
+.file-browse-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  white-space: nowrap;
+  font-weight: 500;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #e5e7eb !important;
+  transition: all 0.2s;
+}
+
+.file-browse-btn:hover {
+  background: rgba(245, 158, 11, 0.15) !important;
+  border-color: #f59e0b !important;
+  color: #fff !important;
+}
+
+.file-browse-btn svg {
+  flex-shrink: 0;
+}
+
+/* ==================== SERVER FILE BROWSER MODAL ==================== */
+.sfb-item {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+  gap: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sfb-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sfb-item.selected {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.sfb-item .sfb-icon {
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.sfb-item .sfb-icon.dir { color: #f59e0b; }
+.sfb-item .sfb-icon.file { color: #6c757d; }
+.sfb-item .sfb-icon.parent { color: #60a5fa; }
+
+.sfb-item .sfb-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sfb-item .sfb-size {
+  color: #6c757d;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+</style>
+
+<script>
+// ==================== CUSTOM DROPDOWN INITIALIZATION ====================
+function initCustomDropdown(selectElement) {
+  if (!selectElement || selectElement.classList.contains('custom-dropdown-initialized')) return;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'custom-dropdown';
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'custom-dropdown-toggle';
+
+  const menu = document.createElement('div');
+  menu.className = 'custom-dropdown-menu';
+
+  // Get current selected option
+  const selectedOption = selectElement.options[selectElement.selectedIndex];
+  toggle.textContent = selectedOption ? selectedOption.textContent : 'Select...';
+
+  // Build menu items
+  Array.from(selectElement.options).forEach((option, index) => {
+    const item = document.createElement('div');
+    item.className = 'custom-dropdown-item';
+    if (index === selectElement.selectedIndex) {
+      item.classList.add('selected');
+    }
+    item.textContent = option.textContent;
+    item.dataset.value = option.value;
+
+    item.addEventListener('click', () => {
+      // Update native select
+      selectElement.value = option.value;
+      selectElement.dispatchEvent(new Event('change', { bubbles: true }));
+
+      // Update toggle text
+      toggle.textContent = option.textContent;
+
+      // Update selected state
+      menu.querySelectorAll('.custom-dropdown-item').forEach(i => i.classList.remove('selected'));
+      item.classList.add('selected');
+
+      // Close menu
+      menu.classList.remove('show');
+    });
+
+    menu.appendChild(item);
+  });
+
+  // Toggle menu on click
+  toggle.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Close other dropdowns
+    document.querySelectorAll('.custom-dropdown-menu.show').forEach(m => {
+      if (m !== menu) m.classList.remove('show');
+    });
+
+    menu.classList.toggle('show');
+  });
+
+  // Close on outside click
+  document.addEventListener('click', (e) => {
+    if (!wrapper.contains(e.target)) {
+      menu.classList.remove('show');
+    }
+  });
+
+  // Insert wrapper
+  selectElement.parentNode.insertBefore(wrapper, selectElement);
+  wrapper.appendChild(toggle);
+  wrapper.appendChild(menu);
+
+  // Hide native select
+  selectElement.classList.add('custom-dropdown-native', 'custom-dropdown-initialized');
+}
+
+// Set timezone in the dropdown, adding the option dynamically if missing.
+function _applyTimezone(timezoneSelect, tzName, detectedInfo, label) {
+  const aliasMap = {
+    'US/Eastern': 'America/New_York', 'US/Central': 'America/Chicago',
+    'US/Mountain': 'America/Denver', 'US/Pacific': 'America/Los_Angeles',
+    'US/Hawaii': 'Pacific/Honolulu', 'US/Alaska': 'America/Anchorage',
+    'Canada/Eastern': 'America/Toronto', 'Canada/Pacific': 'America/Vancouver',
+    'Etc/UTC': 'UTC', 'Etc/GMT': 'UTC',
+  };
+  const resolved = aliasMap[tzName] || tzName;
+  if (!Array.from(timezoneSelect.options).some(o => o.value === resolved)) {
+    const opt = document.createElement('option');
+    opt.value = resolved;
+    opt.textContent = resolved;
+    timezoneSelect.appendChild(opt);
+  }
+  timezoneSelect.value = resolved;
+  if (detectedInfo) {
+    let offsetStr = '';
+    try { offsetStr = new Date().toLocaleString('en-US', { timeZone: resolved, timeZoneName: 'short' }).split(' ').pop(); } catch(e) {}
+    detectedInfo.innerHTML = `<i class="bi bi-check-circle text-success me-1"></i>${label}: <strong>${resolved}</strong>${offsetStr ? ' (' + offsetStr + ')' : ''}`;
+  }
+}
+
+// Auto-detect timezone: prefer saved user preference, then non-UTC server/browser, then fallback
+async function autoDetectTimezone() {
+  const timezoneSelect = document.getElementById('timezone');
+  const detectedInfo = document.getElementById('detectedTimezone');
+  if (!timezoneSelect) return;
+
+  // 1. Check for saved user preference (persisted when user picks a timezone)
+  const savedTz = typeof getCygorTimezone === 'function' ? getCygorTimezone() : null;
+  const hasSavedPref = savedTz && savedTz !== 'UTC' && savedTz !== 'Etc/UTC';
+
+  // 2. Get server timezone
+  let serverTz = null;
+  try {
+    const resp = await fetch('/api/server/timezone');
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.timezone) serverTz = data.timezone;
+    }
+  } catch (e) {}
+
+  // 3. Get browser timezone
+  let browserTz = null;
+  try {
+    browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch (e) {}
+
+  // Priority: saved preference > non-UTC server > non-UTC browser > anything available
+  if (hasSavedPref) {
+    _applyTimezone(timezoneSelect, savedTz, detectedInfo, 'Your timezone');
+  } else if (serverTz && serverTz !== 'UTC' && serverTz !== 'Etc/UTC') {
+    _applyTimezone(timezoneSelect, serverTz, detectedInfo, 'Server timezone');
+  } else if (browserTz && browserTz !== 'UTC' && browserTz !== 'Etc/UTC') {
+    _applyTimezone(timezoneSelect, browserTz, detectedInfo, 'Browser timezone');
+  } else if (serverTz) {
+    _applyTimezone(timezoneSelect, serverTz, detectedInfo, 'Server timezone');
+  } else if (browserTz) {
+    _applyTimezone(timezoneSelect, browserTz, detectedInfo, 'Browser timezone');
+  } else {
+    if (detectedInfo) {
+      detectedInfo.innerHTML = `<i class="bi bi-exclamation-circle text-warning me-1"></i>Could not detect timezone. Please select manually.`;
+    }
+  }
+
+  // Persist the user's choice whenever they change the timezone dropdown
+  timezoneSelect.addEventListener('change', function() {
+    if (this.value && typeof setCygorTimezone === 'function') {
+      setCygorTimezone(this.value);
+    }
+  });
+}
+
+// Initialize dropdowns for timezone and cron day of week
+async function initAllCustomDropdowns() {
+  // Auto-detect timezone first (before custom dropdown initialization)
+  await autoDetectTimezone();
+
+  const timezoneSelect = document.getElementById('timezone');
+  if (timezoneSelect) initCustomDropdown(timezoneSelect);
+
+  const cronDaySelect = document.getElementById('cronDayOfWeek');
+  if (cronDaySelect) initCustomDropdown(cronDaySelect);
+}
+
+// Run on DOM ready
+document.addEventListener('DOMContentLoaded', initAllCustomDropdowns);
+
+// Also run immediately in case DOM is already loaded
+if (document.readyState !== 'loading') {
+  initAllCustomDropdowns();
+}
+
+// ==================== TAB NAVIGATION ====================
+document.querySelectorAll('.scan-nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.scan-nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    const tabId = btn.dataset.tab;
+    document.querySelectorAll('.scan-tab').forEach(tab => tab.classList.remove('active'));
+    document.getElementById(`tab-${tabId}`).classList.add('active');
+  });
+});
+
+// ==================== TASK TYPE SELECTION ====================
+document.querySelectorAll('input[name="taskType"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    updateTaskConfig(e.target.value);
+    updateNavStatus('task', true);
+  });
+});
+
+// ==================== SCHEDULE TYPE SELECTION ====================
+document.querySelectorAll('input[name="scheduleType"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    updateScheduleConfig(e.target.value);
+    updateNavStatus('schedule', true);
+  });
+});
+
+// ==================== CONCURRENT CHECKBOX ====================
+document.getElementById('allowConcurrent').addEventListener('change', function() {
+  document.getElementById('maxConcurrentContainer').style.display = this.checked ? 'block' : 'none';
+});
+
+// ==================== RESOURCE CHECK CHECKBOX ====================
+document.getElementById('checkResources').addEventListener('change', function() {
+  document.getElementById('resourceLimitsContainer').style.display = this.checked ? 'block' : 'none';
+});
+
+// ==================== NAME INPUT STATUS ====================
+document.getElementById('name').addEventListener('input', function() {
+  updateNavStatus('basic', this.value.trim().length > 0);
+});
+
+function updateNavStatus(tab, configured) {
+  const status = document.getElementById(`status-${tab}`);
+  if (status) {
+    status.classList.toggle('configured', configured);
+  }
+}
+
+// ==================== FLATPICKR INITIALIZATION ====================
+let datePicker = null;
+let timePicker = null;
+let startDatePicker = null;
+let endDatePicker = null;
+
+// Initialize date range pickers in Advanced Options
+function initializeDateRangePickers() {
+  const startDateEl = document.getElementById('startDate');
+  const endDateEl = document.getElementById('endDate');
+
+  if (startDateEl && typeof flatpickr !== 'undefined') {
+    if (startDatePicker) startDatePicker.destroy();
+
+    startDatePicker = flatpickr(startDateEl, {
+      enableTime: true,
+      dateFormat: 'Y-m-d H:i',
+      altInput: true,
+      altFormat: 'F j, Y h:i K',
+      time_24hr: false,
+      monthSelectorType: 'dropdown',
+      onChange: function(selectedDates, dateStr) {
+        const hiddenInput = document.getElementById('startDateHidden');
+        if (hiddenInput && selectedDates[0]) {
+          // Send as naive local datetime string (YYYY-MM-DDTHH:MM:SS)
+          // The backend will localize this to the schedule's selected timezone
+          // Do NOT use .toISOString() — that converts to UTC causing double-conversion
+          const d = selectedDates[0];
+          const pad = n => String(n).padStart(2, '0');
+          hiddenInput.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        }
+        // Update end date min date
+        if (endDatePicker && selectedDates[0]) {
+          endDatePicker.set('minDate', selectedDates[0]);
+        }
+      }
+    });
+  }
+
+  if (endDateEl && typeof flatpickr !== 'undefined') {
+    if (endDatePicker) endDatePicker.destroy();
+
+    endDatePicker = flatpickr(endDateEl, {
+      enableTime: true,
+      dateFormat: 'Y-m-d H:i',
+      altInput: true,
+      altFormat: 'F j, Y h:i K',
+      time_24hr: false,
+      monthSelectorType: 'dropdown',
+      onChange: function(selectedDates, dateStr) {
+        const hiddenInput = document.getElementById('endDateHidden');
+        if (hiddenInput && selectedDates[0]) {
+          // Send as naive local datetime string — see startDatePicker comment
+          const d = selectedDates[0];
+          const pad = n => String(n).padStart(2, '0');
+          hiddenInput.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        }
+      }
+    });
+  }
+}
+
+// Initialize date range pickers on page load
+document.addEventListener('DOMContentLoaded', initializeDateRangePickers);
+
+function initializeFlatpickr() {
+  // Small delay to ensure DOM is ready
+  setTimeout(() => {
+    const dateEl = document.getElementById('datePickerInput');
+    const timeEl = document.getElementById('timePickerInput');
+
+    if (dateEl && typeof flatpickr !== 'undefined') {
+      // Destroy existing instance if any
+      if (datePicker) datePicker.destroy();
+
+      datePicker = flatpickr(dateEl, {
+        dateFormat: 'F j, Y',
+        altInput: true,
+        altFormat: 'F j, Y',
+        minDate: 'today',
+        monthSelectorType: 'dropdown',
+        onChange: function(selectedDates, dateStr) {
+          updateHiddenInput();
+        }
+      });
+    }
+
+    if (timeEl && typeof flatpickr !== 'undefined') {
+      // Destroy existing instance if any
+      if (timePicker) timePicker.destroy();
+
+      timePicker = flatpickr(timeEl, {
+        enableTime: true,
+        noCalendar: true,
+        dateFormat: 'H:i',
+        altInput: true,
+        altFormat: 'h:i K',
+        time_24hr: false,
+        defaultHour: 9,
+        defaultMinute: 0,
+        onChange: function(selectedDates, timeStr) {
+          updateHiddenInput();
+        }
+      });
+    }
+  }, 50);
+}
+
+function updateHiddenInput() {
+  const hiddenInput = document.getElementById('runDate');
+  if (!hiddenInput) return;
+
+  // Get date from datePicker
+  const dateVal = datePicker?.selectedDates?.[0];
+  // Get time from timePicker
+  const timeVal = timePicker?.selectedDates?.[0];
+
+  if (dateVal && timeVal) {
+    const year = dateVal.getFullYear();
+    const month = String(dateVal.getMonth() + 1).padStart(2, '0');
+    const day = String(dateVal.getDate()).padStart(2, '0');
+    const hours = String(timeVal.getHours()).padStart(2, '0');
+    const minutes = String(timeVal.getMinutes()).padStart(2, '0');
+
+    hiddenInput.value = `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+}
+
+function updateTaskConfig(taskType) {
+  const container = document.getElementById('taskConfigContainer');
+
+  if (!taskType) {
+    container.innerHTML = '';
+    return;
+  }
+
+  let html = '';
+
+  if (taskType === 'port_scan') {
+    html = `
+      <div class="config-section">
+        <h5 class="config-section-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d6efd" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="22" y1="12" x2="18" y2="12"/>
+            <line x1="6" y1="12" x2="2" y2="12"/>
+            <line x1="12" y1="6" x2="12" y2="2"/>
+            <line x1="12" y1="22" x2="12" y2="18"/>
+          </svg>
+          Scan Targets
+        </h5>
+        <div class="mb-4">
+          <label class="form-label">Targets <span class="text-danger">*</span></label>
+          <textarea class="form-control target-input" id="targets" rows="8" required
+                    placeholder="Enter targets, one per line:
+
+192.168.1.0/24
+10.0.0.1-10.0.0.50
+example.com
+172.16.0.1"></textarea>
+          <div class="form-text">Supports CIDR notation, IP ranges, hostnames, and single IPs</div>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label">Exclusions (Optional)</label>
+          <textarea class="form-control target-input" id="exclusions" rows="4"
+                    placeholder="IPs or ranges to exclude from scanning..."></textarea>
+        </div>
+
+        <h5 class="config-section-title mt-5">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 2a10 10 0 0 1 10 10"/>
+            <circle cx="12" cy="12" r="6"/>
+            <path d="M12 6a6 6 0 0 1 6 6"/>
+            <circle cx="12" cy="12" r="2"/>
+          </svg>
+          Discovery Tools
+        </h5>
+        <div class="tool-grid mb-4">
+          <label class="tool-card">
+            <input type="checkbox" id="discoverMasscan" value="masscan" checked>
+            <div class="tool-card-content">
+              <div class="tool-card-header">
+                <span class="tool-name">Masscan</span>
+                <span class="tool-badge">Fastest</span>
+              </div>
+              <ul class="tool-features">
+                <li>World's fastest port scanner</li>
+                <li>Asynchronous SYN scanning</li>
+                <li>Ideal for large network ranges</li>
+              </ul>
+            </div>
+          </label>
+          <label class="tool-card">
+            <input type="checkbox" id="discoverNaabu" value="naabu">
+            <div class="tool-card-content">
+              <div class="tool-card-header">
+                <span class="tool-name">Naabu</span>
+              </div>
+              <ul class="tool-features">
+                <li>Modern Go-based scanner</li>
+                <li>Smart CDN/WAF detection</li>
+                <li>Automatic rate limiting</li>
+              </ul>
+            </div>
+          </label>
+        </div>
+
+        <div class="discovery-mode-toggle">
+          <label class="mode-option">
+            <input type="radio" name="discoverMode" value="full" checked>
+            <span class="mode-label">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              Discovery + Nmap
+            </span>
+          </label>
+          <label class="mode-option">
+            <input type="radio" name="discoverMode" value="discovery-only">
+            <span class="mode-label">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="M21 21l-4.35-4.35"/>
+              </svg>
+              Discovery Only
+            </span>
+          </label>
+        </div>
+
+        <div id="nmapOptionsSection">
+          <h5 class="config-section-title mt-4">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+              <rect x="2" y="4" width="20" height="16" rx="2"/>
+              <path d="M6 8l4 4-4 4"/>
+              <line x1="12" y1="16" x2="18" y2="16"/>
+            </svg>
+            Nmap Options
+          </h5>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Scan Type</label>
+              <select class="form-select" id="scanType" onchange="toggleCustomPorts()">
+                <option value="quick">Quick (Top 100 Ports)</option>
+                <option value="top-ports" selected>Standard (Top 1000 Ports)</option>
+                <option value="top-10000">Comprehensive (Top 10000)</option>
+                <option value="fullscan">Full (All 65535 Ports)</option>
+                <option value="custom">Custom Ports</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Custom Ports</label>
+              <input type="text" class="form-control" id="ports" placeholder="e.g., 80,443,8080-8090" disabled>
+            </div>
+          </div>
+          <div class="row g-3 mt-2">
+            <div class="col-md-6">
+              <label class="form-label">Custom Nmap Options</label>
+              <input type="text" class="form-control" id="nmapOptions" placeholder="e.g., -sS -T4">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Network Interface</label>
+              <input type="text" class="form-control" id="interface" placeholder="e.g., eth0, tun0">
+            </div>
+          </div>
+        </div>
+
+        <div class="workflow-info mt-4">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+          <div>
+            <strong>Output:</strong>
+            <span>Results saved to &lt;load-dir&gt;/schedule-scans/port-scan/&lt;timestamp&gt;</span>
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (taskType === 'module_scan') {
+    html = `
+      <div class="config-section">
+        <h5 class="config-section-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0dcaf0" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06"/>
+          </svg>
+          Module Configuration
+        </h5>
+        <div class="mb-4">
+          <label class="form-label">Module <span class="text-danger">*</span></label>
+          <select class="form-select" id="moduleName" required onchange="renderScheduleModuleOptions(this.value)">
+            <option value="">Select module...</option>
+            {% for m in request.state.modules %}<option value="{{ m.slug }}">{{ m.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="mb-4">
+          <label class="form-label">Targets File <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="targetsFile" required placeholder="Path to targets file">
+          <div class="form-text">Full path to file containing targets (one per line)</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Output Directory (Optional)</label>
+          <input type="text" class="form-control" id="moduleOutputDir" placeholder="Leave empty for default">
+        </div>
+        <div class="mb-3" id="moduleScanOptionsSection" style="display:none;">
+          <label class="form-label">Module Options</label>
+          <div id="moduleScanOptions"></div>
+        </div>
+      </div>
+    `;
+    setTimeout(loadScheduleModuleConfigs, 0);
+  } else if (taskType === 'credrecon') {
+    html = `
+      <div class="config-section">
+        <!-- Targets Section -->
+        <h5 class="config-section-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d6efd" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="22" y1="12" x2="18" y2="12"/>
+            <line x1="6" y1="12" x2="2" y2="12"/>
+            <line x1="12" y1="6" x2="12" y2="2"/>
+            <line x1="12" y1="22" x2="12" y2="18"/>
+          </svg>
+          Scan Targets
+        </h5>
+        <p class="text-secondary small mb-3">Define targets manually, provide a targets file on the server, or use a credential file with targets built in.</p>
+
+        <!-- Input Method Toggle: Manual | Targets File | Credential File -->
+        <div class="input-method-toggle mb-4" style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+          <button type="button" class="btn btn-outline-primary active sched-target-method-btn" data-method="manual" onclick="switchSchedTargetMethod('manual')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="me-1">
+              <rect x="2" y="4" width="20" height="16" rx="2"/>
+              <path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/>
+              <path d="M6 12h12"/>
+            </svg>
+            Manual Input
+          </button>
+          <button type="button" class="btn btn-outline-primary sched-target-method-btn" data-method="file" onclick="switchSchedTargetMethod('file')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="me-1">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            Targets File
+          </button>
+          <button type="button" class="btn btn-outline-primary sched-target-method-btn" data-method="credfile" onclick="switchSchedTargetMethod('credfile')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="me-1">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+            Credential File
+          </button>
+        </div>
+
+        <!-- METHOD: Manual Input -->
+        <div id="sched-method-manual" class="mb-4">
+          <textarea class="form-control target-input" id="targets" rows="8"
+                    placeholder="Enter targets, one per line:
+
+192.168.1.100:22
+10.10.10.5:3306
+http://admin.example.com/login
+https://crm.example.com/index.php?page=admin"></textarea>
+          <div class="target-hints mt-2">
+            <span class="hint-item"><i class="bi bi-check-circle text-success me-1"></i>IP:PORT format</span>
+            <span class="hint-item"><i class="bi bi-check-circle text-success me-1"></i>Full URLs with paths</span>
+            <span class="hint-item"><i class="bi bi-check-circle text-success me-1"></i>HTTP/HTTPS login pages</span>
+            <span class="hint-item"><i class="bi bi-check-circle text-success me-1"></i>Auto-detect by port</span>
+          </div>
+        </div>
+
+        <!-- METHOD: Targets File (server path) -->
+        <div id="sched-method-file" class="mb-4" style="display:none;">
+          <label class="form-label">Targets File Path on Server</label>
+          <div class="file-browse-group">
+            <input type="text" class="form-control" id="schedTargetsFilePath" placeholder="/path/to/targets.txt">
+            <button type="button" class="btn btn-outline-secondary file-browse-btn" onclick="openServerBrowser('schedTargetsFilePath', '.txt,.list,.csv')">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+              Browse
+            </button>
+          </div>
+          <div class="form-text">Text file with one target per line (IP:PORT or URL)</div>
+        </div>
+
+        <!-- METHOD: Credential File (paste / upload / server path + services + preview) -->
+        <div id="sched-method-credfile" class="mb-4" style="display:none;">
+          <p class="text-secondary small mb-3">Each row contains the target IP, username, and password. Paste, upload, or browse for a file on the server.</p>
+
+          <!-- Sub-method toggle: Paste | Upload | Server Path -->
+          <div class="btn-group btn-group-sm mb-3" role="group">
+            <button type="button" class="btn btn-outline-secondary active sched-credfile-sub-btn" data-method="paste" onclick="toggleSchedCredfileMethod('paste')">Paste</button>
+            <button type="button" class="btn btn-outline-secondary sched-credfile-sub-btn" data-method="upload" onclick="toggleSchedCredfileMethod('upload')">Upload</button>
+            <button type="button" class="btn btn-outline-secondary sched-credfile-sub-btn" data-method="path" onclick="toggleSchedCredfileMethod('path')">Server Path</button>
+          </div>
+
+          <!-- Paste -->
+          <div id="schedCredfilePasteArea" class="mb-3">
+            <textarea class="form-control target-input" id="schedCredfilePasteInput" rows="10"
+                      placeholder="Paste credentials here, one per line:
+
+192.168.18.3,captain,constellation-asteroid726
+192.168.18.3,neo,galaxy-orbit390
+10.1.1.1,admin,password123
+
+Formats: ip,user,pass  or  ip,port,user,pass,service"></textarea>
+            <div class="mt-2">
+              <button type="button" class="btn btn-sm btn-outline-info" onclick="schedPreviewCredfilePaste()">
+                <i class="bi bi-eye me-1"></i>Preview
+              </button>
+            </div>
+          </div>
+
+          <!-- Upload -->
+          <div id="schedCredfileUploadArea" style="display:none;">
+            <div class="upload-zone" id="schedCredfileDropZone"
+                 ondragover="event.preventDefault(); this.classList.add('drag-over')"
+                 ondragleave="this.classList.remove('drag-over')"
+                 ondrop="event.preventDefault(); this.classList.remove('drag-over'); schedHandleCredfileDrop(event)">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <p class="mb-1">Drag & drop credential file here</p>
+              <p class="text-secondary small">or <a href="#" onclick="document.getElementById('schedCredfileInput').click(); return false;">browse</a> — CSV, TXT, JSON, XML</p>
+              <input type="file" id="schedCredfileInput" accept=".csv,.txt,.json,.tsv,.xml" style="display:none" onchange="schedHandleCredfileSelect(this)">
+            </div>
+            <div id="schedCredfileUploadInfo" class="mt-2" style="display:none;">
+              <span class="badge bg-success" id="schedCredfileFileName"></span>
+              <button type="button" class="btn btn-sm btn-outline-danger ms-2" onclick="schedClearCredfileUpload()">Remove</button>
+            </div>
+          </div>
+
+          <!-- Server Path -->
+          <div id="schedCredfilePathArea" style="display:none;">
+            <label class="form-label small">File path on server:</label>
+            <div class="file-browse-group">
+              <input type="text" class="form-control" id="credfilePath" placeholder="/path/to/credentials.csv">
+              <button type="button" class="btn btn-outline-secondary file-browse-btn" onclick="openServerBrowser('credfilePath', '.csv,.txt,.json,.tsv,.xml')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                Browse
+              </button>
+            </div>
+          </div>
+
+          <!-- Services & fallback port -->
+          <div class="row mt-4 mb-3">
+            <div class="col-md-8">
+              <label class="form-label small">Services to test (select one or more):</label>
+              <div class="credfile-service-picker" style="position: relative;">
+                <button type="button" class="form-select text-start d-flex justify-content-between align-items-center"
+                        id="schedCredfileServiceToggle" onclick="toggleSchedServicePicker()">
+                  <span id="schedCredfileServiceLabel">Auto-detect from port</span>
+                  <i class="bi bi-chevron-down ms-2"></i>
+                </button>
+                <div class="credfile-sched-service-dropdown" id="schedCredfileServiceDropdown" style="display:none; position:absolute; z-index:1050; top:100%; left:0; right:0; background:#1a1d21; border:1px solid #495057; border-radius:0.375rem; margin-top:2px; box-shadow:0 6px 16px rgba(0,0,0,0.4);">
+                  <div class="p-2 border-bottom border-secondary">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="schedSvc_auto" value="auto" checked onchange="updateSchedServiceSelection('auto')">
+                      <label class="form-check-label" for="schedSvc_auto">Auto-detect from port</label>
+                    </div>
+                  </div>
+                  <div class="p-2" style="max-height: 250px; overflow-y: auto;">
+                    <div class="small text-secondary mb-1 fw-bold">Web & Shell</div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_ssh" value="ssh" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_ssh">SSH :22</label></div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_ftp" value="ftp" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_ftp">FTP :21</label></div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_http" value="http" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_http">HTTP :80/443</label></div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_telnet" value="telnet" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_telnet">Telnet :23</label></div>
+                    <div class="small text-secondary mb-1 mt-2 fw-bold">Remote Access</div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_smb" value="smb" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_smb">SMB :445</label></div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_rdp" value="rdp" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_rdp">RDP :3389</label></div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_vnc" value="vnc" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_vnc">VNC :5900</label></div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_winrm" value="winrm" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_winrm">WinRM :5985</label></div>
+                    <div class="small text-secondary mb-1 mt-2 fw-bold">Databases</div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_mysql" value="mysql" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_mysql">MySQL :3306</label></div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_postgres" value="postgres" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_postgres">PostgreSQL :5432</label></div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_mssql" value="mssql" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_mssql">MSSQL :1433</label></div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_mongodb" value="mongodb" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_mongodb">MongoDB :27017</label></div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_redis" value="redis" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_redis">Redis :6379</label></div>
+                    <div class="small text-secondary mb-1 mt-2 fw-bold">Directory & Mail</div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_ldap" value="ldap" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_ldap">LDAP :389</label></div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_smtp" value="smtp" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_smtp">SMTP :25</label></div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_imap" value="imap" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_imap">IMAP :143</label></div>
+                    <div class="small text-secondary mb-1 mt-2 fw-bold">IoT / Network</div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_snmp" value="snmp" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_snmp">SNMP :161</label></div>
+                    <div class="form-check"><input class="form-check-input sched-svc-check" type="checkbox" id="schedSvc_mqtt" value="mqtt" onchange="updateSchedServiceSelection('svc')"><label class="form-check-label" for="schedSvc_mqtt">MQTT :1883</label></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Fallback port <small>(non-standard only)</small>:</label>
+              <input type="number" class="form-control" id="credfilePort" placeholder="Default per service">
+            </div>
+          </div>
+
+          <!-- Live preview table -->
+          <div id="schedCredfilePreview" style="display:none;" class="mt-3">
+            <h6 class="text-secondary mb-2">Preview (first 10 rows):</h6>
+            <div class="table-responsive">
+              <table class="table table-dark table-sm table-bordered" id="schedCredfilePreviewTable">
+                <thead><tr id="schedCredfilePreviewHeader"></tr></thead>
+                <tbody id="schedCredfilePreviewBody"></tbody>
+              </table>
+            </div>
+            <div id="schedCredfileValidation" class="mt-2">
+              <span class="badge bg-info" id="schedCredfileEntryCount"></span>
+              <span class="badge bg-warning" id="schedCredfileWarningCount" style="display:none;"></span>
+            </div>
+          </div>
+
+          <!-- Format hints -->
+          <div class="target-hints mt-3">
+            <span class="hint-item"><i class="bi bi-check-circle text-success me-1"></i>CSV: <code>ip,user,pass</code></span>
+            <span class="hint-item"><i class="bi bi-check-circle text-success me-1"></i>With port/service: <code>ip,port,user,pass,service</code></span>
+            <span class="hint-item"><i class="bi bi-check-circle text-success me-1"></i>JSON & XML supported</span>
+            <span class="hint-item"><i class="bi bi-check-circle text-success me-1"></i>Tab, space, or pipe delimited</span>
+          </div>
+
+          <div class="alert alert-dark border-secondary mt-3 mb-0">
+            <small class="text-secondary">
+              Targets are extracted automatically from the credential file. No separate target list needed.
+            </small>
+          </div>
+        </div>
+
+        <!-- Attack Mode Section -->
+        <h5 class="config-section-title mt-5">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          Attack Mode
+        </h5>
+        <div class="tool-grid mb-4">
+          <label class="tool-card">
+            <input type="radio" name="attackMode" value="default" checked>
+            <div class="tool-card-content">
+              <div class="tool-card-header">
+                <span class="tool-name">Default Credentials</span>
+                <span class="tool-badge">Recommended</span>
+              </div>
+              <ul class="tool-features">
+                <li>Test built-in vendor default passwords</li>
+                <li>Enterprise, IoT, cloud, database defaults</li>
+                <li>Smart selection based on fingerprinting</li>
+              </ul>
+            </div>
+          </label>
+          <label class="tool-card">
+            <input type="radio" name="attackMode" value="single">
+            <div class="tool-card-content">
+              <div class="tool-card-header">
+                <span class="tool-name">Single Credential</span>
+              </div>
+              <ul class="tool-features">
+                <li>Test one specific username/password</li>
+                <li>Quick verification of known creds</li>
+                <li>Confirm compromised accounts</li>
+              </ul>
+            </div>
+          </label>
+          <label class="tool-card">
+            <input type="radio" name="attackMode" value="spray">
+            <div class="tool-card-content">
+              <div class="tool-card-header">
+                <span class="tool-name">Password Spray</span>
+              </div>
+              <ul class="tool-features">
+                <li>One password against many users</li>
+                <li>Avoids account lockouts</li>
+                <li>Requires username list file</li>
+              </ul>
+            </div>
+          </label>
+          <label class="tool-card">
+            <input type="radio" name="attackMode" value="stuff">
+            <div class="tool-card-content">
+              <div class="tool-card-header">
+                <span class="tool-name">Credential Stuffing</span>
+              </div>
+              <ul class="tool-features">
+                <li>One user against many passwords</li>
+                <li>Brute-force single account</li>
+                <li>Requires password list file</li>
+              </ul>
+            </div>
+          </label>
+          <label class="tool-card">
+            <input type="radio" name="attackMode" value="key">
+            <div class="tool-card-content">
+              <div class="tool-card-header">
+                <span class="tool-name">Key Authentication</span>
+              </div>
+              <ul class="tool-features">
+                <li>Test SSH private key or PEM certificate</li>
+                <li>Supports CA-signed certificates (-cert.pub)</li>
+                <li>RSA, Ed25519, ECDSA key formats</li>
+                <li>Test key against one or many usernames</li>
+              </ul>
+            </div>
+          </label>
+        </div>
+
+        <!-- Default Credentials Settings -->
+        <div id="defaultCredsSection">
+          <h5 class="config-section-title mt-4">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+              <polyline points="17 21 17 13 7 13 7 21"/>
+              <polyline points="7 3 7 8 15 8"/>
+            </svg>
+            Credential Sources
+          </h5>
+          <div class="tool-grid mb-4">
+            <label class="tool-card">
+              <input type="checkbox" id="useBuiltinCreds" checked>
+              <div class="tool-card-content">
+                <div class="tool-card-header">
+                  <span class="tool-name">Built-in Database</span>
+                  <span class="tool-badge">Default</span>
+                </div>
+                <ul class="tool-features">
+                  <li>Enterprise devices (Cisco, Juniper)</li>
+                  <li>IoT & embedded systems</li>
+                  <li>Database & middleware defaults</li>
+                </ul>
+              </div>
+            </label>
+            <label class="tool-card">
+              <input type="checkbox" id="useExternalCreds">
+              <div class="tool-card-content">
+                <div class="tool-card-header">
+                  <span class="tool-name">External Sources</span>
+                </div>
+                <ul class="tool-features">
+                  <li>DefaultCreds-cheat-sheet database</li>
+                  <li>CIRT.net default passwords</li>
+                  <li>Broader vendor coverage</li>
+                </ul>
+              </div>
+            </label>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Custom Usernames File (Optional)</label>
+              <div class="file-browse-group">
+                <input type="text" class="form-control" id="defaultUsernamesFile" placeholder="/path/to/usernames.txt">
+                <button type="button" class="btn btn-outline-secondary file-browse-btn" onclick="openServerBrowser('defaultUsernamesFile', '.txt,.list,.csv')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  Browse
+                </button>
+              </div>
+              <div class="form-text">Text file with one username per line</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Custom Passwords File (Optional)</label>
+              <div class="file-browse-group">
+                <input type="text" class="form-control" id="defaultPasswordsFile" placeholder="/path/to/passwords.txt">
+                <button type="button" class="btn btn-outline-secondary file-browse-btn" onclick="openServerBrowser('defaultPasswordsFile', '.txt,.list,.csv')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  Browse
+                </button>
+              </div>
+              <div class="form-text">Text file with one password per line</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Single Credential Settings -->
+        <div id="singleCredsSection" style="display: none;">
+          <h5 class="config-section-title mt-4">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            Single Credential
+          </h5>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Username <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="singleUsername" placeholder="admin">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Password <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="singlePassword" placeholder="Enter password">
+            </div>
+          </div>
+        </div>
+
+        <!-- Password Spray Settings -->
+        <div id="spraySection" style="display: none;">
+          <h5 class="config-section-title mt-4">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            Password Spray Configuration
+          </h5>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Password to Spray <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="sprayPassword" placeholder="Summer2024!">
+              <div class="form-text">This password will be tested against all usernames</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Usernames File <span class="text-danger">*</span></label>
+              <div class="file-browse-group">
+                <input type="text" class="form-control" id="sprayUsernamesFile" placeholder="/path/to/usernames.txt">
+                <button type="button" class="btn btn-outline-secondary file-browse-btn" onclick="openServerBrowser('sprayUsernamesFile', '.txt,.list,.csv')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  Browse
+                </button>
+              </div>
+              <div class="form-text">Text file with one username per line</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Credential Stuffing Settings -->
+        <div id="stuffSection" style="display: none;">
+          <h5 class="config-section-title mt-4">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              <line x1="12" y1="15" x2="12" y2="17"/>
+            </svg>
+            Credential Stuffing Configuration
+          </h5>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Username to Test <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="stuffUsername" placeholder="admin">
+              <div class="form-text">This username will be tested with all passwords</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Passwords File <span class="text-danger">*</span></label>
+              <div class="file-browse-group">
+                <input type="text" class="form-control" id="stuffPasswordsFile" placeholder="/path/to/passwords.txt">
+                <button type="button" class="btn btn-outline-secondary file-browse-btn" onclick="openServerBrowser('stuffPasswordsFile', '.txt,.list,.csv')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  Browse
+                </button>
+              </div>
+              <div class="form-text">Text file with one password per line</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Key Authentication Settings -->
+        <div id="keyAuthSection" style="display: none;">
+          <h5 class="config-section-title mt-4">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+            </svg>
+            Key Authentication Configuration
+          </h5>
+          <p class="text-secondary small mb-3">Provide an SSH private key and optionally a CA-signed certificate to test key-based authentication against SSH targets.</p>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">SSH Private Key / PEM File <span class="text-danger">*</span></label>
+              <div class="file-browse-group">
+                <input type="text" class="form-control" id="sshKeyPath" placeholder="/path/to/id_rsa, id_ed25519, or certificate.pem">
+                <button type="button" class="btn btn-outline-secondary file-browse-btn" onclick="openServerBrowser('sshKeyPath', '*')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  Browse
+                </button>
+              </div>
+              <div class="form-text">Supported: RSA, Ed25519, ECDSA keys and PEM certificates</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">SSH Certificate <span class="text-secondary small fw-normal">(optional, for CA-signed key auth)</span></label>
+              <div class="file-browse-group">
+                <input type="text" class="form-control" id="sshCertPath" placeholder="/path/to/id_rsa-cert.pub or signed certificate">
+                <button type="button" class="btn btn-outline-secondary file-browse-btn" onclick="openServerBrowser('sshCertPath', '*')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  Browse
+                </button>
+              </div>
+              <div class="form-text">The <code>-cert.pub</code> file signed by a CA. Used with the private key for certificate-based SSH auth.</div>
+            </div>
+          </div>
+          <div class="row g-3 mt-2">
+            <div class="col-md-6">
+              <label class="form-label">Key Passphrase</label>
+              <input type="password" class="form-control" id="sshKeyPassphrase" placeholder="Optional passphrase">
+              <div class="form-text">Only needed if the key is encrypted</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Usernames to Test</label>
+              <input type="text" class="form-control" id="keyAuthUsername" placeholder="root, admin, deploy (comma-separated)">
+              <div class="form-text">Comma-separated usernames, or leave blank for defaults (root, admin, ubuntu, ec2-user, etc.)</div>
+              <div class="mt-2">
+                <label class="form-label small text-secondary mb-1">Or provide a usernames file:</label>
+                <div class="file-browse-group">
+                  <input type="text" class="form-control form-control-sm" id="keyAuthUsernamesFile" placeholder="/path/to/usernames.txt">
+                  <button type="button" class="btn btn-outline-secondary btn-sm file-browse-btn" onclick="openServerBrowser('keyAuthUsernamesFile', '.txt,.list,.csv')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    Browse
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="alert alert-dark border-secondary mt-3 mb-0">
+            <div class="d-flex align-items-start">
+              <svg class="me-2 flex-shrink-0 mt-1" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6c757d" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 16v-4"/><path d="M12 8h.01"/>
+              </svg>
+              <small class="text-secondary">
+                <strong>Key only:</strong> Tests the private key against SSH targets.
+                <strong>Key + Certificate:</strong> Uses CA-signed certificate auth (e.g., keys signed by an SSH CA). Provide the private key and its corresponding <code>-cert.pub</code> file.
+              </small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Credential File Settings -->
+        <!-- Scan Options -->
+        <h5 class="config-section-title mt-5">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0dcaf0" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4"/>
+          </svg>
+          Scan Options
+        </h5>
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">Threads</label>
+            <input type="number" class="form-control" id="threads" value="10" min="1" max="50">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Timeout (sec)</label>
+            <input type="number" class="form-control" id="timeout" value="5" min="1" max="60">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Max Attempts</label>
+            <input type="number" class="form-control" id="maxAttempts" placeholder="Unlimited" min="1">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Protocols to Test</label>
+            <div class="sched-protocol-picker" style="position:relative;">
+              <button type="button" class="form-select bg-dark text-light border-secondary text-start d-flex justify-content-between align-items-center"
+                      id="schedProtocolToggle" onclick="toggleSchedProtocolPicker()">
+                <span id="schedProtocolLabel">Auto-detect</span>
+                <i class="bi bi-chevron-down ms-2"></i>
+              </button>
+              <div class="sched-protocol-dropdown" id="schedProtocolDropdown" style="display:none; position:fixed; z-index:1050; background:#1a1d21; border:1px solid #495057; border-radius:0.375rem; margin-top:2px; box-shadow:0 6px 16px rgba(0,0,0,0.4);">
+                <div class="p-2 border-bottom border-secondary">
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;">
+                    <input class="form-check-input" type="checkbox" id="schedProto_auto" value="auto" checked onchange="updateSchedProtocolSelection('auto')">
+                    <label class="form-check-label text-light" for="schedProto_auto" style="font-size:0.9rem; cursor:pointer;">Auto-detect</label>
+                  </div>
+                </div>
+                <div class="p-2" style="max-height:250px; overflow-y:auto;">
+                  <div class="small text-secondary mb-1 fw-bold" onclick="selectSchedProtocolGroup('webshell')" style="cursor:pointer;">Web & Shell</div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="webshell" type="checkbox" id="schedProto_http" value="http" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_http" style="font-size:0.9rem; cursor:pointer;">HTTP <small class="text-secondary">:80/443</small></label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="webshell" type="checkbox" id="schedProto_ssh" value="ssh" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_ssh" style="font-size:0.9rem; cursor:pointer;">SSH <small class="text-secondary">:22</small></label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="webshell" type="checkbox" id="schedProto_telnet" value="telnet" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_telnet" style="font-size:0.9rem; cursor:pointer;">Telnet <small class="text-secondary">:23</small></label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="webshell" type="checkbox" id="schedProto_ftp" value="ftp" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_ftp" style="font-size:0.9rem; cursor:pointer;">FTP <small class="text-secondary">:21</small></label></div>
+                  <div class="small text-secondary mb-1 mt-2 fw-bold" onclick="selectSchedProtocolGroup('windows')" style="cursor:pointer;">Windows</div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="windows" type="checkbox" id="schedProto_smb" value="smb" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_smb" style="font-size:0.9rem; cursor:pointer;">SMB <small class="text-secondary">:445</small></label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="windows" type="checkbox" id="schedProto_rdp" value="rdp" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_rdp" style="font-size:0.9rem; cursor:pointer;">RDP <small class="text-secondary">:3389</small></label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="windows" type="checkbox" id="schedProto_winrm" value="winrm" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_winrm" style="font-size:0.9rem; cursor:pointer;">WinRM <small class="text-secondary">:5985</small></label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="windows" type="checkbox" id="schedProto_winrm_ssl" value="winrm-ssl" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_winrm_ssl" style="font-size:0.9rem; cursor:pointer;">WinRM-SSL <small class="text-secondary">:5986</small></label></div>
+                  <div class="small text-secondary mb-1 mt-2 fw-bold" onclick="selectSchedProtocolGroup('databases')" style="cursor:pointer;">Databases</div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="databases" type="checkbox" id="schedProto_mysql" value="mysql" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_mysql" style="font-size:0.9rem; cursor:pointer;">MySQL <small class="text-secondary">:3306</small></label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="databases" type="checkbox" id="schedProto_postgres" value="postgres" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_postgres" style="font-size:0.9rem; cursor:pointer;">PostgreSQL <small class="text-secondary">:5432</small></label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="databases" type="checkbox" id="schedProto_mssql" value="mssql" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_mssql" style="font-size:0.9rem; cursor:pointer;">MSSQL <small class="text-secondary">:1433</small></label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="databases" type="checkbox" id="schedProto_mongodb" value="mongodb" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_mongodb" style="font-size:0.9rem; cursor:pointer;">MongoDB <small class="text-secondary">:27017</small></label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="databases" type="checkbox" id="schedProto_redis" value="redis" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_redis" style="font-size:0.9rem; cursor:pointer;">Redis <small class="text-secondary">:6379</small></label></div>
+                  <div class="small text-secondary mb-1 mt-2 fw-bold" onclick="selectSchedProtocolGroup('directory')" style="cursor:pointer;">Directory & Mail</div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="directory" type="checkbox" id="schedProto_ldap" value="ldap" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_ldap" style="font-size:0.9rem; cursor:pointer;">LDAP <small class="text-secondary">:389</small></label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="directory" type="checkbox" id="schedProto_smtp" value="smtp" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_smtp" style="font-size:0.9rem; cursor:pointer;">SMTP <small class="text-secondary">:25</small></label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="directory" type="checkbox" id="schedProto_imap" value="imap" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_imap" style="font-size:0.9rem; cursor:pointer;">IMAP <small class="text-secondary">:143</small></label></div>
+                  <div class="small text-secondary mb-1 mt-2 fw-bold" onclick="selectSchedProtocolGroup('iot')" style="cursor:pointer;">IoT / Network</div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="iot" type="checkbox" id="schedProto_snmp" value="snmp" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_snmp" style="font-size:0.9rem; cursor:pointer;">SNMP <small class="text-secondary">:161</small></label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="iot" type="checkbox" id="schedProto_mqtt" value="mqtt" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_mqtt" style="font-size:0.9rem; cursor:pointer;">MQTT <small class="text-secondary">:1883</small></label></div>
+                  <div class="form-check" style="padding:0.2rem 0.5rem 0.2rem 2rem;"><input class="form-check-input sched-proto-check" data-group="iot" type="checkbox" id="schedProto_ipmi" value="ipmi" onchange="updateSchedProtocolSelection('svc')"><label class="form-check-label text-light" for="schedProto_ipmi" style="font-size:0.9rem; cursor:pointer;">IPMI <small class="text-secondary">:623</small></label></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="row g-3 mt-2">
+          <div class="col-md-6">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="enableProbing" checked>
+              <label class="form-check-label" for="enableProbing">Enable service detection/fingerprinting</label>
+            </div>
+            <div class="form-text">Probe services to detect product/vendor for smart credential selection</div>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-3">
+          <div class="col-md-3">
+            <label class="form-label">Jitter (seconds)</label>
+            <input type="number" class="form-control" id="jitter" value="0" min="0" max="30" step="0.5">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Max Attempts/User</label>
+            <input type="number" class="form-control" id="maxAttemptsPerUser" value="0" min="0" max="100">
+            <div class="form-text">0 = unlimited</div>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">SNMP Tier</label>
+            <select class="form-select" id="snmpTier">
+              <option value="default" selected>Default (25)</option>
+              <option value="extended">Extended (75)</option>
+              <option value="full">Full (200+)</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">SSH Bad Keys</label>
+            <div class="form-check form-switch mt-2">
+              <input class="form-check-input" type="checkbox" id="enableBadkeys" checked>
+              <label class="form-check-label" for="enableBadkeys">Test compromised keys</label>
+            </div>
+          </div>
+        </div>
+        <div class="row g-3 mt-2">
+          <div class="col-md-4">
+            <label class="form-label">SMB NTLM Hash</label>
+            <input type="text" class="form-control" id="smbHash" placeholder="LMHASH:NTHASH">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Domain</label>
+            <input type="text" class="form-control" id="domain" placeholder="WORKGROUP">
+          </div>
+        </div>
+
+        <div class="workflow-info mt-4">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+          <div>
+            <strong>Credential Testing Pipeline:</strong>
+            <span>Service Validation → Fingerprint Detection → Smart Credential Selection → Authentication Testing</span>
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (taskType === 'enrich') {
+    html = `
+      <div class="config-section">
+        <h5 class="config-section-title">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.35-4.35"/>
+            <path d="M11 8v6"/>
+            <path d="M8 11h6"/>
+          </svg>
+          IOC Enrichment Configuration
+        </h5>
+        <div class="mb-4">
+          <label class="form-label">IOCs (Indicators of Compromise) <span class="text-danger">*</span></label>
+          <textarea class="form-control target-input" id="iocs" rows="8" required
+                    placeholder="Enter IOCs (one per line):
+
+192.168.1.1
+example.com
+44d88612fea8a8f36de82e1278abb02f"></textarea>
+          <div class="form-text">Supports IP addresses, domains, and file hashes (MD5, SHA1, SHA256)</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Data Sources</label>
+          <select class="form-select" id="sources" multiple size="6">
+            <option value="shodan" selected>Shodan</option>
+            <option value="virustotal" selected>VirusTotal</option>
+            <option value="abuseipdb" selected>AbuseIPDB</option>
+            <option value="otx">LevelBlue OTX</option>
+            <option value="urlscan">URLScan.io</option>
+            <option value="greynoise">GreyNoise</option>
+            <option value="spur">Spur</option>
+            <option value="censys">Censys</option>
+          </select>
+        </div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+
+  // Re-attach event listeners for port scan discover mode
+  if (taskType === 'port_scan') {
+    document.querySelectorAll('input[name="discoverMode"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        const isDiscoveryOnly = e.target.value === 'discovery-only';
+        const nmapSection = document.getElementById('nmapOptionsSection');
+        if (nmapSection) {
+          nmapSection.style.display = isDiscoveryOnly ? 'none' : 'block';
+        }
+      });
+    });
+  }
+
+  // Credrecon attack mode switching
+  if (taskType === 'credrecon') {
+    document.querySelectorAll('input[name="attackMode"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        const mode = e.target.value;
+        // Hide all sections first
+        document.getElementById('defaultCredsSection').style.display = 'none';
+        document.getElementById('singleCredsSection').style.display = 'none';
+        document.getElementById('spraySection').style.display = 'none';
+        document.getElementById('stuffSection').style.display = 'none';
+        document.getElementById('keyAuthSection').style.display = 'none';
+
+        // Show the relevant section
+        if (mode === 'default') {
+          document.getElementById('defaultCredsSection').style.display = 'block';
+        } else if (mode === 'single') {
+          document.getElementById('singleCredsSection').style.display = 'block';
+        } else if (mode === 'spray') {
+          document.getElementById('spraySection').style.display = 'block';
+        } else if (mode === 'stuff') {
+          document.getElementById('stuffSection').style.display = 'block';
+        } else if (mode === 'key') {
+          document.getElementById('keyAuthSection').style.display = 'block';
+        }
+      });
+    });
+  }
+}
+
+function updateScheduleConfig(scheduleType) {
+  const container = document.getElementById('scheduleConfigContainer');
+
+  if (!scheduleType) {
+    container.innerHTML = '';
+    return;
+  }
+
+  let html = '<div class="schedule-config-section">';
+
+  if (scheduleType === 'interval') {
+    html += `
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Hours</label>
+          <input type="number" class="form-control" id="intervalHours" min="0" value="0" placeholder="0">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Minutes</label>
+          <input type="number" class="form-control" id="intervalMinutes" min="0" value="60" placeholder="60">
+        </div>
+      </div>
+      <div class="form-text mt-3">Run every X hours and Y minutes (minimum interval: 1 minute)</div>
+    `;
+  } else if (scheduleType === 'cron') {
+    html += `
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Hour (0-23)</label>
+          <input type="number" class="form-control" id="cronHour" min="0" max="23" value="2" placeholder="2">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Minute (0-59)</label>
+          <input type="number" class="form-control" id="cronMinute" min="0" max="59" value="0" placeholder="0">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Day of Week</label>
+          <select class="form-select" id="cronDayOfWeek">
+            <option value="*">Every Day</option>
+            <option value="mon-fri">Weekdays (Mon-Fri)</option>
+            <option value="mon">Monday</option>
+            <option value="tue">Tuesday</option>
+            <option value="wed">Wednesday</option>
+            <option value="thu">Thursday</option>
+            <option value="fri">Friday</option>
+            <option value="sat">Saturday</option>
+            <option value="sun">Sunday</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-text mt-3">
+        Schedule will run at the specified time (in <strong class="text-info cronScheduleTzLabel"></strong> timezone) on selected days.
+      </div>
+    `;
+  } else if (scheduleType === 'date') {
+    html += `
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">
+            <i class="bi bi-calendar3 me-2" style="color: #0d6efd;"></i>Date <span class="text-danger">*</span>
+          </label>
+          <input type="text" class="form-control form-control-lg" id="datePickerInput" placeholder="Select date..." readonly required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">
+            <i class="bi bi-clock me-2" style="color: #fd7e14;"></i>Time <span class="text-danger">*</span>
+          </label>
+          <input type="text" class="form-control form-control-lg" id="timePickerInput" placeholder="Select time..." readonly required>
+        </div>
+      </div>
+      <input type="hidden" id="runDate">
+      <div class="form-text mt-3">
+        Task will run once at this date and time in the <strong id="dateScheduleTzLabel" class="text-info"></strong> timezone.
+        <span class="text-warning" id="dateScheduleTzWarn" style="display:none;"><br><i class="bi bi-exclamation-triangle me-1"></i>Check the timezone in the left sidebar if this doesn't match your local time.</span>
+      </div>
+    `;
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+
+  // Initialize Flatpickr if date schedule type
+  if (scheduleType === 'date') {
+    initializeFlatpickr();
+    // Show current timezone in the date schedule hint
+    const tzLabel = document.getElementById('dateScheduleTzLabel');
+    const tzWarn = document.getElementById('dateScheduleTzWarn');
+    if (tzLabel) {
+      const tz = document.getElementById('timezone')?.value || 'UTC';
+      tzLabel.textContent = tz;
+      if (tzWarn && tz === 'UTC') {
+        const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (browserTz && browserTz !== 'UTC' && browserTz !== 'Etc/UTC') {
+          tzWarn.style.display = 'inline';
+        }
+      }
+    }
+  }
+
+  // Initialize custom dropdown for cron day of week and show timezone
+  if (scheduleType === 'cron') {
+    setTimeout(() => {
+      const cronDaySelect = document.getElementById('cronDayOfWeek');
+      if (cronDaySelect) initCustomDropdown(cronDaySelect);
+    }, 50);
+    const cronTzLabels = document.querySelectorAll('.cronScheduleTzLabel');
+    const tz = document.getElementById('timezone')?.value || 'UTC';
+    cronTzLabels.forEach(el => { el.textContent = tz; });
+  }
+}
+
+function toggleCustomPorts() {
+  const scanType = document.getElementById('scanType')?.value;
+  const portsInput = document.getElementById('ports');
+  if (portsInput) {
+    portsInput.disabled = scanType !== 'custom';
+    if (scanType !== 'custom') {
+      portsInput.value = '';
+    }
+  }
+}
+
+// ==================== SERVER FILE BROWSER ====================
+let _sfbTargetInputId = null;
+// ==================== SCHEDULE TARGET METHOD TOGGLE ====================
+function switchSchedTargetMethod(method) {
+  // Update button active states
+  document.querySelectorAll('.sched-target-method-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.method === method);
+  });
+  // Show/hide the three content areas
+  document.getElementById('sched-method-manual').style.display = method === 'manual' ? 'block' : 'none';
+  document.getElementById('sched-method-file').style.display = method === 'file' ? 'block' : 'none';
+  document.getElementById('sched-method-credfile').style.display = method === 'credfile' ? 'block' : 'none';
+
+  // Hide Credentials (attack mode) section when credential file is selected
+  const attackModeSection = document.querySelector('.tool-grid')?.closest('.config-section > div, .config-section');
+  const attackModeTitle = document.querySelector('h5.config-section-title + .tool-grid')?.previousElementSibling;
+  // Find all attack mode related sections
+  const attackModeHeading = Array.from(document.querySelectorAll('h5.config-section-title')).find(h => h.textContent.includes('Attack Mode'));
+  if (attackModeHeading) {
+    // Hide attack mode heading + grid + all mode settings when credfile
+    attackModeHeading.style.display = method === 'credfile' ? 'none' : '';
+    const grid = attackModeHeading.nextElementSibling;
+    if (grid) grid.style.display = method === 'credfile' ? 'none' : '';
+  }
+  // Hide mode-specific settings sections
+  ['defaultCredsSection', 'singleCredsSection', 'spraySection', 'stuffSection', 'keyAuthSection'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && method === 'credfile') el.style.display = 'none';
+  });
+}
+
+// ==================== CREDFILE SUB-METHOD TOGGLE (SCHEDULE) ====================
+let schedUploadedCredfileContent = '';
+
+function toggleSchedCredfileMethod(method) {
+  document.querySelectorAll('.sched-credfile-sub-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.method === method);
+  });
+  document.getElementById('schedCredfilePasteArea').style.display = method === 'paste' ? 'block' : 'none';
+  document.getElementById('schedCredfileUploadArea').style.display = method === 'upload' ? 'block' : 'none';
+  document.getElementById('schedCredfilePathArea').style.display = method === 'path' ? 'block' : 'none';
+}
+
+function schedPreviewCredfilePaste() {
+  const content = document.getElementById('schedCredfilePasteInput').value.trim();
+  if (content) {
+    schedUploadedCredfileContent = content;
+    schedPreviewCredfile(content);
+  }
+}
+
+function schedHandleCredfileDrop(event) {
+  const file = event.dataTransfer.files[0];
+  if (file) schedReadCredfile(file);
+}
+
+function schedHandleCredfileSelect(input) {
+  const file = input.files[0];
+  if (file) schedReadCredfile(file);
+}
+
+function schedReadCredfile(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    schedUploadedCredfileContent = e.target.result;
+    document.getElementById('schedCredfileFileName').textContent = file.name;
+    document.getElementById('schedCredfileUploadInfo').style.display = 'inline-block';
+    schedPreviewCredfile(schedUploadedCredfileContent);
+  };
+  reader.readAsText(file);
+}
+
+function schedClearCredfileUpload() {
+  schedUploadedCredfileContent = '';
+  document.getElementById('schedCredfileInput').value = '';
+  document.getElementById('schedCredfileUploadInfo').style.display = 'none';
+  document.getElementById('schedCredfilePreview').style.display = 'none';
+}
+
+function schedPreviewCredfile(content) {
+  const lines = content.trim().split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+  if (!lines.length) return;
+
+  const preview = document.getElementById('schedCredfilePreview');
+  const headerRow = document.getElementById('schedCredfilePreviewHeader');
+  const body = document.getElementById('schedCredfilePreviewBody');
+  headerRow.innerHTML = '';
+  body.innerHTML = '';
+
+  const trimmed = content.trim();
+
+  // XML
+  if (trimmed.startsWith('<?xml') || (trimmed.startsWith('<') && !trimmed.startsWith('[') && !trimmed.startsWith('{'))) {
+    try {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(content, 'text/xml');
+      if (!xmlDoc.querySelector('parsererror')) {
+        const entries = xmlDoc.documentElement.children;
+        if (entries.length > 0) {
+          const tags = Array.from(entries[0].children).map(c => c.tagName);
+          tags.forEach(t => { headerRow.innerHTML += `<th>${t}</th>`; });
+          Array.from(entries).slice(0, 10).forEach(entry => {
+            const tr = document.createElement('tr');
+            tags.forEach(t => {
+              const el = entry.querySelector(t);
+              tr.innerHTML += `<td>${el ? el.textContent : ''}</td>`;
+            });
+            body.appendChild(tr);
+          });
+          document.getElementById('schedCredfileEntryCount').textContent = `${entries.length} entries`;
+        }
+        preview.style.display = 'block';
+        return;
+      }
+    } catch(e) {}
+  }
+
+  // JSON
+  if (trimmed.startsWith('[')) {
+    try {
+      const data = JSON.parse(content);
+      if (data.length > 0) {
+        const keys = Object.keys(data[0]);
+        keys.forEach(k => { headerRow.innerHTML += `<th>${k}</th>`; });
+        data.slice(0, 10).forEach(obj => {
+          const tr = document.createElement('tr');
+          keys.forEach(k => { tr.innerHTML += `<td>${obj[k] || ''}</td>`; });
+          body.appendChild(tr);
+        });
+        document.getElementById('schedCredfileEntryCount').textContent = `${data.length} entries`;
+      }
+    } catch(e) {
+      document.getElementById('schedCredfileEntryCount').textContent = 'Invalid JSON';
+    }
+    preview.style.display = 'block';
+    return;
+  }
+
+  // CSV/text
+  const firstLine = lines[0];
+  let delim = ',';
+  if (firstLine.includes('\t')) delim = '\t';
+  else if (firstLine.includes('|')) delim = '|';
+
+  const firstParts = firstLine.split(delim).map(p => p.trim().toLowerCase());
+  const knownHeaders = ['ip','host','target','address','port','username','user','login','password','pass','passwd','service','protocol','proto'];
+  const hasHeaders = firstParts.some(p => knownHeaders.includes(p));
+
+  const dataLines = hasHeaders ? lines.slice(1) : lines;
+  const headers = hasHeaders ? firstLine.split(delim).map(p => p.trim()) : [];
+
+  if (hasHeaders) {
+    headers.forEach(h => { headerRow.innerHTML += `<th>${h}</th>`; });
+  } else {
+    const colCount = (dataLines[0] || '').split(delim).length;
+    const guessHeaders = colCount === 3 ? ['IP','Username','Password'] :
+                         colCount === 4 ? ['IP','Port','Username','Password'] :
+                         colCount >= 5 ? ['IP','Port','Username','Password','Service'] : [];
+    guessHeaders.forEach(h => { headerRow.innerHTML += `<th>${h}</th>`; });
+  }
+
+  dataLines.slice(0, 10).forEach(line => {
+    const parts = line.split(delim).map(p => p.trim());
+    const tr = document.createElement('tr');
+    parts.forEach(p => { tr.innerHTML += `<td>${p}</td>`; });
+    body.appendChild(tr);
+  });
+
+  document.getElementById('schedCredfileEntryCount').textContent = `${dataLines.length} entries`;
+  preview.style.display = 'block';
+}
+
+// ==================== CREDFILE SERVICE MULTI-SELECT (SCHEDULE) ====================
+function toggleSchedServicePicker() {
+  const dd = document.getElementById('schedCredfileServiceDropdown');
+  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+}
+
+document.addEventListener('click', function(e) {
+  const picker = document.querySelector('.credfile-service-picker');
+  const dd = document.getElementById('schedCredfileServiceDropdown');
+  if (picker && dd && !picker.contains(e.target)) {
+    dd.style.display = 'none';
+  }
+});
+
+function updateSchedServiceSelection(source) {
+  const autoCheck = document.getElementById('schedSvc_auto');
+  const serviceChecks = document.querySelectorAll('.sched-svc-check');
+
+  if (source === 'auto') {
+    if (autoCheck.checked) {
+      serviceChecks.forEach(c => c.checked = false);
+    }
+  } else {
+    const anyServiceChecked = Array.from(serviceChecks).some(c => c.checked);
+    autoCheck.checked = !anyServiceChecked;
+  }
+
+  const label = document.getElementById('schedCredfileServiceLabel');
+  const selected = Array.from(serviceChecks).filter(c => c.checked).map(c => c.value.toUpperCase());
+  if (autoCheck.checked || selected.length === 0) {
+    autoCheck.checked = true;
+    label.textContent = 'Auto-detect from port';
+  } else {
+    label.textContent = selected.length <= 3 ? selected.join(', ') : `${selected.length} services selected`;
+  }
+}
+
+function getSchedSelectedServices() {
+  const autoCheck = document.getElementById('schedSvc_auto');
+  if (autoCheck && autoCheck.checked) return ['auto'];
+  const checked = Array.from(document.querySelectorAll('.sched-svc-check:checked')).map(c => c.value);
+  return checked.length > 0 ? checked : ['auto'];
+}
+
+// ==================== SCHEDULE PROTOCOL MULTI-SELECT PICKER ====================
+function toggleSchedProtocolPicker() {
+  const dd = document.getElementById('schedProtocolDropdown');
+  if (dd.style.display === 'none') {
+    const btn = document.getElementById('schedProtocolToggle');
+    const rect = btn.getBoundingClientRect();
+    dd.style.left = rect.left + 'px';
+    dd.style.top = (rect.bottom + 2) + 'px';
+    dd.style.width = rect.width + 'px';
+    dd.style.display = 'block';
+  } else {
+    dd.style.display = 'none';
+  }
+}
+
+document.addEventListener('click', function(e) {
+  const picker = document.querySelector('.sched-protocol-picker');
+  if (picker && !picker.contains(e.target)) {
+    document.getElementById('schedProtocolDropdown').style.display = 'none';
+  }
+});
+window.addEventListener('scroll', function(e) {
+  const dd = document.getElementById('schedProtocolDropdown');
+  if (dd && !dd.contains(e.target)) {
+    dd.style.display = 'none';
+  }
+}, true);
+
+function updateSchedProtocolSelection(source) {
+  const autoCheck = document.getElementById('schedProto_auto');
+  const protoChecks = document.querySelectorAll('.sched-proto-check');
+
+  if (source === 'auto') {
+    if (autoCheck.checked) {
+      protoChecks.forEach(c => c.checked = false);
+    }
+  } else {
+    const anyChecked = Array.from(protoChecks).some(c => c.checked);
+    autoCheck.checked = !anyChecked;
+  }
+
+  const label = document.getElementById('schedProtocolLabel');
+  const selected = Array.from(protoChecks).filter(c => c.checked).map(c => c.value.toUpperCase());
+  if (autoCheck.checked || selected.length === 0) {
+    autoCheck.checked = true;
+    label.textContent = 'Auto-detect';
+  } else {
+    label.textContent = selected.length <= 3 ? selected.join(', ') : `${selected.length} protocols selected`;
+  }
+}
+
+function getSchedSelectedProtocols() {
+  const autoCheck = document.getElementById('schedProto_auto');
+  if (autoCheck && autoCheck.checked) return ['auto'];
+  const checked = Array.from(document.querySelectorAll('.sched-proto-check:checked')).map(c => c.value);
+  return checked.length > 0 ? checked : ['auto'];
+}
+
+function selectSchedProtocolGroup(groupName) {
+  const groupChecks = document.querySelectorAll(`.sched-proto-check[data-group="${groupName}"]`);
+  const allChecked = Array.from(groupChecks).every(c => c.checked);
+  groupChecks.forEach(c => c.checked = !allChecked);
+  updateSchedProtocolSelection('svc');
+}
+
+let _sfbFileTypes = '';
+let _sfbCurrentPath = '';
+let _sfbSelectedPath = null;
+
+function openServerBrowser(targetInputId, fileTypes) {
+  _sfbTargetInputId = targetInputId;
+  _sfbFileTypes = fileTypes || '';
+  _sfbSelectedPath = null;
+
+  const selectBtn = document.getElementById('sfbSelectBtn');
+  selectBtn.disabled = true;
+  selectBtn.innerHTML = '<svg class="me-2" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Select File';
+
+  // Start from home directory or current value
+  const currentVal = document.getElementById(targetInputId)?.value.trim();
+  let startPath = '';
+  if (currentVal) {
+    // Navigate to the parent directory of the current value
+    const lastSlash = currentVal.lastIndexOf('/');
+    startPath = lastSlash > 0 ? currentVal.substring(0, lastSlash) : '';
+  }
+
+  const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('serverFileBrowserModal'));
+  modal.show();
+  sfbLoadDirectory(startPath);
+}
+
+async function sfbLoadDirectory(path) {
+  const fileList = document.getElementById('sfbFileList');
+  const pathField = document.getElementById('sfbCurrentPath');
+
+  fileList.innerHTML = '<div class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary"></div></div>';
+
+  try {
+    let url = `/api/browse?path=${encodeURIComponent(path)}`;
+    if (_sfbFileTypes) url += `&file_types=${encodeURIComponent(_sfbFileTypes)}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    _sfbCurrentPath = data.current_path;
+    pathField.value = _sfbCurrentPath;
+
+    if (!data.items || data.items.length === 0) {
+      fileList.innerHTML = '<div class="text-center py-4 text-secondary">Empty directory</div>';
+      return;
+    }
+
+    fileList.innerHTML = '';
+    _sfbSelectedPath = null;
+    document.getElementById('sfbSelectBtn').disabled = true;
+
+    data.items.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'sfb-item';
+      el.dataset.path = item.path;
+      el.dataset.type = item.type;
+
+      let iconSvg, iconClass;
+      if (item.type === 'parent') {
+        iconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>';
+        iconClass = 'parent';
+      } else if (item.type === 'directory') {
+        iconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+        iconClass = 'dir';
+      } else {
+        iconSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+        iconClass = 'file';
+      }
+
+      let sizeText = '';
+      if (item.type === 'file' && item.size > 0) {
+        const kb = (item.size / 1024).toFixed(1);
+        sizeText = `<span class="sfb-size">${kb} KB</span>`;
+      }
+
+      el.innerHTML = `<span class="sfb-icon ${iconClass}">${iconSvg}</span><span class="sfb-name">${item.name}</span>${sizeText}`;
+
+      if (item.type === 'directory' || item.type === 'parent') {
+        el.addEventListener('click', () => sfbLoadDirectory(item.path));
+      } else {
+        el.addEventListener('click', function() {
+          document.querySelectorAll('.sfb-item.selected').forEach(s => s.classList.remove('selected'));
+          this.classList.add('selected');
+          _sfbSelectedPath = item.path;
+          document.getElementById('sfbSelectBtn').disabled = false;
+        });
+        el.addEventListener('dblclick', function() {
+          _sfbSelectedPath = item.path;
+          sfbConfirmSelection();
+        });
+      }
+
+      fileList.appendChild(el);
+    });
+  } catch (error) {
+    fileList.innerHTML = `<div class="alert alert-danger">Error loading directory: ${error.message}</div>`;
+  }
+}
+
+function sfbConfirmSelection() {
+  if (_sfbSelectedPath && _sfbTargetInputId) {
+    document.getElementById(_sfbTargetInputId).value = _sfbSelectedPath;
+  }
+  const modal = bootstrap.Modal.getInstance(document.getElementById('serverFileBrowserModal'));
+  if (modal) modal.hide();
+}
+
+// Wire up modal buttons
+document.getElementById('sfbSelectBtn').addEventListener('click', sfbConfirmSelection);
+document.getElementById('sfbGoToPath').addEventListener('click', () => {
+  const pathInput = document.getElementById('sfbCurrentPath');
+  if (pathInput && pathInput.value) sfbLoadDirectory(pathInput.value);
+});
+// Allow editing the path field and pressing Enter
+document.getElementById('sfbCurrentPath').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sfbLoadDirectory(e.target.value);
+  }
+});
+// Make path field editable
+document.getElementById('sfbCurrentPath').removeAttribute('readonly');
+
+// ==================== FORM SUBMISSION ====================
+document.getElementById('scheduleForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+
+  try {
+    const taskTypeRadio = document.querySelector('input[name="taskType"]:checked');
+    const scheduleTypeRadio = document.querySelector('input[name="scheduleType"]:checked');
+
+    if (!taskTypeRadio) {
+      showModal('error', 'Please select a task type');
+      return;
+    }
+
+    if (!scheduleTypeRadio) {
+      showModal('error', 'Please select a schedule type');
+      return;
+    }
+
+    const taskType = taskTypeRadio.value;
+    const scheduleType = scheduleTypeRadio.value;
+
+    // Build task configuration
+    const config = buildTaskConfig(taskType);
+    const scheduleConfig = buildScheduleConfig(scheduleType);
+
+    // Build request
+    const data = {
+      name: document.getElementById('name').value,
+      description: document.getElementById('description').value,
+      task_type: taskType,
+      config: config,
+      schedule_type: scheduleType,
+      schedule_config: scheduleConfig,
+      timezone: document.getElementById('timezone').value,
+      allow_concurrent: document.getElementById('allowConcurrent').checked,
+      max_concurrent_runs: parseInt(document.getElementById('maxConcurrentRuns').value) || 1,
+      check_resources: document.getElementById('checkResources').checked,
+      max_cpu_percent: parseFloat(document.getElementById('maxCpu').value),
+      max_memory_percent: parseFloat(document.getElementById('maxMemory').value)
+    };
+
+    // Retry & Resilience
+    data.max_retries = parseInt(document.getElementById('maxRetries').value) || 0;
+    data.retry_delay_seconds = (parseInt(document.getElementById('retryDelay').value) || 5) * 60;
+    data.retry_backoff = document.getElementById('retryBackoff').checked;
+
+    const stallTimeout = document.getElementById('stallTimeout').value;
+    if (stallTimeout) data.stall_timeout_seconds = parseInt(stallTimeout) * 60;
+
+    const misfireGrace = document.getElementById('misfireGrace').value;
+    if (misfireGrace) data.misfire_grace_time = parseInt(misfireGrace) * 60;
+
+    // Optional fields
+    const maxRuns = document.getElementById('maxRuns').value;
+    if (maxRuns) data.max_runs = parseInt(maxRuns);
+
+    const startDateHidden = document.getElementById('startDateHidden').value;
+    if (startDateHidden) data.start_date = startDateHidden;
+
+    const endDateHidden = document.getElementById('endDateHidden').value;
+    if (endDateHidden) data.end_date = endDateHidden;
+
+    // Submit
+    const response = await fetch('/api/schedules', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+      showModal('success', 'Schedule created successfully!');
+      setTimeout(() => {
+        window.location.href = '/schedules/' + result.schedule.id;
+      }, 1500);
+    } else {
+      throw new Error(result.detail || 'Failed to create schedule');
+    }
+  } catch (error) {
+    showModal('error', 'Error creating schedule: ' + error.message);
+  }
+});
+
+function showModal(type, message) {
+  if (type === 'success') {
+    document.getElementById('successMessage').textContent = message;
+    const modal = new bootstrap.Modal(document.getElementById('successModal'));
+    modal.show();
+  } else if (type === 'error') {
+    document.getElementById('errorMessage').textContent = message;
+    const modal = new bootstrap.Modal(document.getElementById('errorModal'));
+    modal.show();
+  }
+}
+
+function buildTaskConfig(taskType) {
+  const config = {};
+
+  if (taskType === 'port_scan') {
+    config.targets = document.getElementById('targets').value.split('\n').map(t => t.trim()).filter(t => t);
+
+    const exclusions = document.getElementById('exclusions')?.value.split('\n').map(t => t.trim()).filter(t => t);
+    if (exclusions && exclusions.length > 0) config.exclusions = exclusions;
+
+    const interface_ = document.getElementById('interface')?.value.trim();
+    if (interface_) config.interface = interface_;
+
+    const discover = [];
+    if (document.getElementById('discoverMasscan')?.checked) discover.push('masscan');
+    if (document.getElementById('discoverNaabu')?.checked) discover.push('naabu');
+    if (discover.length > 0) config.discover = discover;
+
+    const discoverOnly = document.querySelector('input[name="discoverMode"]:checked')?.value === 'discovery-only';
+    config.discover_only = discoverOnly;
+
+    if (!discoverOnly) {
+      const scanType = document.getElementById('scanType')?.value || 'top-ports';
+      config.scan_type = scanType;
+      if (scanType === 'custom') {
+        const ports = document.getElementById('ports')?.value.trim();
+        if (ports) config.ports = ports;
+      }
+
+      const nmapOptions = document.getElementById('nmapOptions')?.value.trim();
+      if (nmapOptions) config.nmap_options = nmapOptions;
+    }
+  } else if (taskType === 'module_scan') {
+    config.module_name = document.getElementById('moduleName').value;
+    config.targets_file = document.getElementById('targetsFile').value.trim();
+    const moduleOutputDir = document.getElementById('moduleOutputDir')?.value.trim();
+    if (moduleOutputDir) config.output_dir = moduleOutputDir;
+    config.module_options = collectScheduleModuleOptions(config.module_name);
+  } else if (taskType === 'credrecon') {
+    // Determine which target input method is active
+    const activeTargetMethod = document.querySelector('.sched-target-method-btn.active')?.dataset?.method || 'manual';
+    const isCredfileMode = activeTargetMethod === 'credfile';
+
+    // Targets
+    if (activeTargetMethod === 'file') {
+      const targetsFilePath = document.getElementById('schedTargetsFilePath')?.value.trim();
+      if (targetsFilePath) config.targets_file = targetsFilePath;
+      config.targets = [];
+    } else if (isCredfileMode) {
+      config.targets = [];  // IPs extracted from credfile by scheduler
+    } else {
+      config.targets = document.getElementById('targets').value.split('\n').map(t => t.trim()).filter(t => t);
+    }
+
+    // Attack mode — credfile overrides when credential file target method is active
+    let attackMode = 'default';
+    if (isCredfileMode) {
+      attackMode = 'credfile';
+    } else {
+      attackMode = document.querySelector('input[name="attackMode"]:checked')?.value || 'default';
+    }
+    config.attack_mode = attackMode;
+
+    // Attack mode specific settings
+    if (attackMode === 'default') {
+      config.use_builtin = document.getElementById('useBuiltinCreds')?.checked ?? true;
+      config.use_external = document.getElementById('useExternalCreds')?.checked ?? false;
+
+      const usernamesFile = document.getElementById('defaultUsernamesFile')?.value.trim();
+      if (usernamesFile) config.usernames_file = usernamesFile;
+
+      const passwordsFile = document.getElementById('defaultPasswordsFile')?.value.trim();
+      if (passwordsFile) config.passwords_file = passwordsFile;
+    } else if (attackMode === 'single') {
+      config.username = document.getElementById('singleUsername')?.value.trim();
+      config.password = document.getElementById('singlePassword')?.value;
+    } else if (attackMode === 'spray') {
+      config.spray_password = document.getElementById('sprayPassword')?.value;
+      config.usernames_file = document.getElementById('sprayUsernamesFile')?.value.trim();
+    } else if (attackMode === 'stuff') {
+      config.stuff_username = document.getElementById('stuffUsername')?.value.trim();
+      config.passwords_file = document.getElementById('stuffPasswordsFile')?.value.trim();
+    } else if (attackMode === 'key') {
+      const sshKeyPath = document.getElementById('sshKeyPath')?.value.trim();
+      if (sshKeyPath) config.ssh_key = sshKeyPath;
+
+      const sshCertPath = document.getElementById('sshCertPath')?.value.trim();
+      if (sshCertPath) config.ssh_cert = sshCertPath;
+
+      const sshKeyPassphrase = document.getElementById('sshKeyPassphrase')?.value;
+      if (sshKeyPassphrase) config.ssh_key_passphrase = sshKeyPassphrase;
+
+      const keyUsernames = document.getElementById('keyAuthUsername')?.value.trim();
+      if (keyUsernames) config.key_usernames = keyUsernames;
+
+      const keyUsernamesFile = document.getElementById('keyAuthUsernamesFile')?.value.trim();
+      if (keyUsernamesFile) config.key_usernames_file = keyUsernamesFile;
+    } else if (attackMode === 'credfile') {
+      // Determine which credfile sub-method is active (paste/upload/path)
+      const activeSubMethod = document.querySelector('.sched-credfile-sub-btn.active')?.dataset?.method || 'paste';
+      if (activeSubMethod === 'paste') {
+        const pasteContent = document.getElementById('schedCredfilePasteInput')?.value?.trim();
+        if (pasteContent) config.credfile_content = pasteContent;
+      } else if (activeSubMethod === 'upload' && schedUploadedCredfileContent) {
+        config.credfile_content = schedUploadedCredfileContent;
+      } else if (activeSubMethod === 'path') {
+        const credfilePath = document.getElementById('credfilePath')?.value.trim();
+        if (credfilePath) config.credfile_path = credfilePath;
+      }
+
+      const credfilePort = document.getElementById('credfilePort')?.value;
+      if (credfilePort) config.port = parseInt(credfilePort);
+
+      const selectedServices = getSchedSelectedServices();
+      if (selectedServices.length === 1 && selectedServices[0] !== 'auto') {
+        config.protocol = selectedServices[0];
+      } else if (selectedServices.length > 1) {
+        config.protocols = selectedServices;
+      }
+    }
+
+    // Scan options — multi-protocol support from picker
+    const schedSelectedProtocols = getSchedSelectedProtocols();
+    if (schedSelectedProtocols.length === 1 && schedSelectedProtocols[0] !== 'auto') {
+      config.protocol = schedSelectedProtocols[0];
+    } else if (schedSelectedProtocols.length > 1) {
+      config.protocols = schedSelectedProtocols;
+    }
+
+    const threads = parseInt(document.getElementById('threads')?.value);
+    if (threads) config.threads = threads;
+
+    const timeout = parseInt(document.getElementById('timeout')?.value);
+    if (timeout) config.timeout = timeout;
+
+    const maxAttempts = document.getElementById('maxAttempts')?.value;
+    if (maxAttempts) config.max_attempts = parseInt(maxAttempts);
+
+    const enableProbing = document.getElementById('enableProbing')?.checked;
+    config.probe = enableProbing !== false;
+
+    // New CredRecon options
+    const jitter = parseFloat(document.getElementById('jitter')?.value);
+    if (jitter > 0) config.jitter = jitter;
+
+    const maxAttemptsPerUser = parseInt(document.getElementById('maxAttemptsPerUser')?.value);
+    if (maxAttemptsPerUser > 0) config.max_attempts_per_user = maxAttemptsPerUser;
+
+    const snmpTier = document.getElementById('snmpTier')?.value;
+    if (snmpTier && snmpTier !== 'default') config.snmp_tier = snmpTier;
+
+    const smbHash = document.getElementById('smbHash')?.value?.trim();
+    if (smbHash) config.smb_hash = smbHash;
+
+    const domain = document.getElementById('domain')?.value?.trim();
+    if (domain) config.domain = domain;
+
+    const enableBadkeys = document.getElementById('enableBadkeys')?.checked;
+    if (enableBadkeys === false) config.badkeys = false;
+  } else if (taskType === 'enrich') {
+    config.iocs = document.getElementById('iocs').value.split('\n').map(t => t.trim()).filter(t => t);
+
+    const sources = Array.from(document.getElementById('sources').selectedOptions).map(o => o.value);
+    if (sources.length > 0) config.sources = sources;
+  }
+
+  return config;
+}
+
+function buildScheduleConfig(scheduleType) {
+  const config = {};
+
+  if (scheduleType === 'interval') {
+    const hours = parseInt(document.getElementById('intervalHours')?.value) || 0;
+    const minutes = parseInt(document.getElementById('intervalMinutes')?.value) || 0;
+    if (hours > 0) config.hours = hours;
+    if (minutes > 0) config.minutes = minutes;
+  } else if (scheduleType === 'cron') {
+    const hour = document.getElementById('cronHour')?.value;
+    const minute = document.getElementById('cronMinute')?.value;
+    const dayOfWeek = document.getElementById('cronDayOfWeek')?.value;
+
+    if (hour) config.hour = hour;
+    if (minute) config.minute = minute;
+    if (dayOfWeek && dayOfWeek !== '*') config.day_of_week = dayOfWeek;
+  } else if (scheduleType === 'date') {
+    // Get the combined datetime from the hidden input (set by Flatpickr)
+    const runDate = document.getElementById('runDate')?.value;
+    if (runDate) {
+      config.run_date = runDate;
+    }
+  }
+
+  return config;
+}
+
+// Workflow info styling
+const workflowInfoStyle = document.createElement('style');
+workflowInfoStyle.textContent = `
+.workflow-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: rgba(13, 110, 253, 0.1);
+  border: 1px solid rgba(13, 110, 253, 0.3);
+  border-radius: 8px;
+  margin-top: 1.5rem;
+}
+
+.workflow-info svg {
+  color: #0d6efd;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+}
+
+.workflow-info strong {
+  color: #60a5fa;
+  font-size: 1rem;
+}
+
+.workflow-info span {
+  color: #9ca3af;
+  font-size: 0.9375rem;
+}
+`;
+document.head.appendChild(workflowInfoStyle);
+
+// ---------------------------------------------------------------------------
+// Module-scan options for the scheduler. Reuses the same /api/module-configs
+// schema as the Run-Module page, so any enumeration module (including the new
+// ones) can be scheduled with its real options.
+// ---------------------------------------------------------------------------
+let scheduleModuleConfigs = {};
+
+async function loadScheduleModuleConfigs() {
+  if (Object.keys(scheduleModuleConfigs).length > 0) {
+    // Already loaded; just (re)render for the current selection.
+    const sel = document.getElementById('moduleName');
+    if (sel) renderScheduleModuleOptions(sel.value);
+    return;
+  }
+  try {
+    const resp = await fetch('/api/module-configs');
+    scheduleModuleConfigs = await resp.json();
+  } catch (e) {
+    scheduleModuleConfigs = {};
+  }
+  const sel = document.getElementById('moduleName');
+  if (sel) renderScheduleModuleOptions(sel.value);
+}
+
+function renderScheduleModuleOptions(moduleName) {
+  const section = document.getElementById('moduleScanOptionsSection');
+  const container = document.getElementById('moduleScanOptions');
+  if (!section || !container) return;
+  container.innerHTML = '';
+  const cfg = moduleName ? scheduleModuleConfigs[moduleName] : null;
+  if (!cfg || !cfg.options || cfg.options.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+  cfg.options.forEach(opt => {
+    const div = document.createElement('div');
+    div.className = 'mb-2';
+    let html = '';
+    if (opt.type === 'checkbox') {
+      html = `<div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="schedopt_${opt.name}" ${opt.default ? 'checked' : ''}>
+        <label class="form-check-label" for="schedopt_${opt.name}">${opt.label}</label></div>
+        <div class="form-text">${opt.help || ''}</div>`;
+    } else if (opt.type === 'select') {
+      const choices = (opt.choices || []).map(c =>
+        `<option value="${c.value}" ${c.value === opt.default ? 'selected' : ''}>${c.label}</option>`).join('');
+      html = `<label class="form-label" for="schedopt_${opt.name}">${opt.label}</label>
+        <select class="form-select" id="schedopt_${opt.name}">${choices}</select>
+        <div class="form-text">${opt.help || ''}</div>`;
+    } else {
+      const t = (opt.type === 'password') ? 'password' : (opt.type === 'number' ? 'number' : 'text');
+      html = `<label class="form-label" for="schedopt_${opt.name}">${opt.label}</label>
+        <input type="${t}" class="form-control" id="schedopt_${opt.name}"
+          placeholder="${opt.default || ''}" ${opt.default && t !== 'number' ? `value="${opt.default}"` : ''}
+          ${opt.min !== undefined ? `min="${opt.min}"` : ''} ${opt.max !== undefined ? `max="${opt.max}"` : ''}>
+        <div class="form-text">${opt.help || ''}</div>`;
+    }
+    div.innerHTML = html;
+    container.appendChild(div);
+  });
+}
+
+function collectScheduleModuleOptions(moduleName) {
+  const out = {};
+  const cfg = moduleName ? scheduleModuleConfigs[moduleName] : null;
+  if (!cfg || !cfg.options) return out;
+  cfg.options.forEach(opt => {
+    const el = document.getElementById(`schedopt_${opt.name}`);
+    if (!el) return;
+    if (opt.type === 'checkbox') {
+      if (el.checked) out[opt.name] = true;
+    } else if (opt.type === 'number') {
+      if (el.value !== '') out[opt.name] = parseFloat(el.value);
+    } else {
+      if (el.value !== '' && el.value !== opt.default) out[opt.name] = el.value;
+    }
+  });
+  return out;
+}
+</script>
+
+{% endblock %}

@@ -1,0 +1,2880 @@
+<!doctype html>
+<html lang="en" class="h-100">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Cygor UI</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <!-- Flatpickr DateTime Picker (base styles only, dark theme handled via custom CSS) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+  <style>
+    :root{
+      --sidebar-width: 220px;
+      --sidebar-buffer: 10px;      /* breathing room when sidebar is visible */
+      --page-gutter: 12px;         /* left margin when sidebar is collapsed */
+      --navbar-height: 40px;       /* tighter top bar */
+      --accent-color: #0d6efd;
+
+      --icon-rail: 16px;
+      --icon-box: 24px;
+      --row-gap: .20rem;
+      --submenu-indent: 2.25rem;
+      --container-side-pad: 1rem;  /* neutralize Bootstrap row negative margins */
+
+      /* =============================================================
+         Cygor Design System tokens — used by .cy-* primitives.
+         OLED-friendly: cards are pure black, defined by border. Nested
+         elements step through grayscale only. Single accent color;
+         semantic colors reserved for state.
+         ============================================================= */
+      --bg-base:       #000000;     /* page */
+      --surface-1:     #000000;     /* card surface (border-defined) */
+      --surface-2:     #0a0a0a;     /* input bg, code chip, nested fills */
+      --surface-3:     #161616;     /* hover/active row */
+
+      --border-subtle: rgba(255,255,255,0.08);
+      --border-strong: rgba(255,255,255,0.16);
+
+      --text-1:        #f0f6fc;     /* primary content */
+      --text-2:        #c9d1d9;     /* body / secondary */
+      --text-3:        #8b949e;     /* muted, helper */
+
+      --accent:        #58a6ff;     /* single brand accent */
+      --accent-soft:   rgba(88,166,255,0.12);
+      --accent-strong: #1f6feb;
+
+      --success:       #3fb950;
+      --warn:          #d29922;
+      --danger:        #f85149;
+
+      --radius-sm:     4px;
+      --radius-md:     6px;
+      --radius-lg:     10px;
+
+      --space-1:       4px;
+      --space-2:       8px;
+      --space-3:       16px;
+      --space-4:       24px;
+      --space-5:       32px;
+
+      --font-mono:     "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+      --fs-xs:         11px;
+      --fs-sm:         12px;
+      --fs-md:         13px;
+      --fs-lg:         15px;
+      --fs-xl:         18px;
+      --fs-2xl:        22px;
+    }
+
+    /* ===== Material Dark Theme - Black & Blue ===== */
+    body {
+      background: #000000;
+      color: #e4e4e7;
+      transition: background-color 0.2s ease, color 0.2s ease;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* ===== Dark Theme Text Visibility Fixes ===== */
+    /*
+     * Comprehensive overrides for Bootstrap's muted/secondary colors
+     * to ensure readability in dark theme mode
+     */
+
+    /* Primary muted text override - visible gray for dark backgrounds */
+    .text-muted {
+      color: #c0c5ca !important;
+    }
+
+    /* Secondary text - lighter for better contrast */
+    .text-secondary {
+      color: #bdc4cb !important;
+    }
+
+    /* Form labels and helper text */
+    .form-label {
+      color: #e9ecef !important;
+    }
+
+    .form-text {
+      color: #bdc4cb !important;
+    }
+
+    /* Small text elements */
+    small,
+    .small {
+      color: inherit;
+    }
+
+    small.text-muted,
+    .text-muted.small,
+    small.form-text,
+    small.text-secondary {
+      color: #c0c5ca !important;
+    }
+
+    /* Placeholder text styling */
+    .placeholder-text,
+    ::placeholder {
+      color: #8b929a !important;
+      opacity: 1;
+    }
+
+    /* Card elements */
+    .card-subtitle {
+      color: #bdc4cb !important;
+    }
+
+    .card-text.text-muted,
+    .card-body .text-muted,
+    .card-footer .text-muted {
+      color: #c0c5ca !important;
+    }
+
+    /* Table text visibility */
+    td .text-muted,
+    th .text-muted,
+    td .text-secondary,
+    th .text-secondary,
+    td.text-muted,
+    td.text-secondary {
+      color: #c0c5ca !important;
+    }
+
+    /* Dropdown menu text */
+    .dropdown-menu .text-muted,
+    .dropdown-menu .text-secondary,
+    .dropdown-item .text-muted,
+    .dropdown-item .text-secondary {
+      color: #bdc4cb !important;
+    }
+
+    /* Alert secondary styling for dark theme */
+    .alert-secondary {
+      background: rgba(108, 117, 125, 0.2) !important;
+      border-color: rgba(156, 163, 175, 0.4) !important;
+      color: #e5e7eb !important;
+    }
+    .alert-secondary small,
+    .alert-secondary strong,
+    .alert-secondary p,
+    .alert-secondary span,
+    .alert-secondary a {
+      color: #f3f4f6 !important;
+    }
+
+    /* List items visibility */
+    ul.text-secondary,
+    ul.text-secondary li,
+    ol.text-secondary,
+    ol.text-secondary li,
+    ul.text-muted,
+    ul.text-muted li {
+      color: #c9cdd1 !important;
+    }
+
+    /* Paragraph text */
+    p.text-secondary,
+    p.text-muted {
+      color: #c8ccd2 !important;
+    }
+
+    /* Span elements */
+    span.text-secondary,
+    span.text-muted {
+      color: #bdc4cb !important;
+    }
+
+    /* Icon visibility when muted */
+    i.text-secondary,
+    i.text-muted {
+      color: #adb5bd !important;
+    }
+
+    /* Definition lists */
+    dt.text-muted,
+    dd.text-muted,
+    dt.text-secondary,
+    dd.text-secondary {
+      color: #c0c5ca !important;
+    }
+
+    /* Badge secondary */
+    .badge.bg-secondary {
+      background-color: rgba(108, 117, 125, 0.3) !important;
+      color: #e9ecef !important;
+    }
+
+    /* Input group text */
+    .input-group-text {
+      color: #e9ecef !important;
+      background-color: rgba(52, 58, 64, 0.8) !important;
+      border-color: rgba(255, 255, 255, 0.15) !important;
+    }
+
+    /* Code blocks with muted styling */
+    code.text-muted,
+    code.text-secondary {
+      color: #adb5bd !important;
+    }
+
+    /* Figure captions */
+    figcaption,
+    .figure-caption {
+      color: #bdc4cb !important;
+    }
+
+    /* Breadcrumb dividers and inactive items */
+    .breadcrumb-item + .breadcrumb-item::before,
+    .breadcrumb-item.active {
+      color: #bdc4cb !important;
+    }
+
+    /* Nav links when muted */
+    .nav-link.text-muted,
+    .nav-link.text-secondary {
+      color: #c0c5ca !important;
+    }
+
+    /* Blockquote footer */
+    .blockquote-footer {
+      color: #bdc4cb !important;
+    }
+
+    /* Lead text when muted */
+    .lead.text-muted {
+      color: #c8ccd2 !important;
+    }
+
+    /* Progress bar labels */
+    .progress-bar + .text-muted,
+    .progress + .text-muted {
+      color: #c0c5ca !important;
+    }
+
+    /* Accordion headers when collapsed */
+    .accordion-button.collapsed {
+      color: #e9ecef !important;
+    }
+
+    /* Tab content muted text */
+    .tab-pane .text-muted,
+    .tab-content .text-muted {
+      color: #c0c5ca !important;
+    }
+
+    /* Modal text — ensure all text inside dark modals is visible */
+    .modal-content.bg-dark .modal-body,
+    .modal-content.bg-dark .modal-body p,
+    .modal-content.bg-dark .modal-body label,
+    .modal-content.bg-dark .modal-body span,
+    .modal-content.bg-dark .modal-body small,
+    .modal-content.bg-dark .modal-body li,
+    .modal-content.bg-dark .modal-body dt,
+    .modal-content.bg-dark .modal-body dd {
+      color: #d1d5db;
+    }
+    .modal-body .text-muted,
+    .modal-footer .text-muted {
+      color: #c0c5ca !important;
+    }
+
+    /* Tooltip and popover text */
+    .tooltip .text-muted,
+    .popover .text-muted {
+      color: #bdc4cb !important;
+    }
+
+    /* Empty state / placeholder content */
+    .empty-state,
+    .no-data,
+    .placeholder-content {
+      color: #bdc4cb !important;
+    }
+
+    /* Disabled state text */
+    .disabled .text-muted,
+    [disabled] .text-muted,
+    .text-muted.disabled {
+      color: #6b7280 !important;
+    }
+
+    /* Timestamp and date displays */
+    .timestamp,
+    .date-display,
+    time.text-muted {
+      color: #c0c5ca !important;
+    }
+
+    /* Help text and hints */
+    .help-text,
+    .hint,
+    .form-control-feedback {
+      color: #bdc4cb !important;
+    }
+
+    /* Footer text */
+    footer .text-muted,
+    .footer .text-muted {
+      color: #bdc4cb !important;
+    }
+
+    /* Dividers with text */
+    .divider-text,
+    .or-divider {
+      color: #adb5bd !important;
+    }
+
+    /* ===== Light Theme Overrides ===== */
+    body.light-theme {
+      background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+      color: #212529;
+    }
+    body.light-theme .top-header {
+      background: rgba(255,255,255,0.95);
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      backdrop-filter: blur(10px);
+    }
+    body.light-theme .top-header .brand {
+      color: #212529;
+    }
+    body.light-theme .top-header .brand:hover {
+      color: #0d6efd;
+    }
+    body.light-theme .sidebar-toggle-btn {
+      background: transparent;
+      border-color: rgba(0,0,0,0.1);
+      color: #212529;
+    }
+    body.light-theme .sidebar-toggle-btn:hover {
+      background: rgba(0,0,0,0.05);
+      border-color: rgba(0,0,0,0.15);
+    }
+    body.light-theme .sidebar {
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(10px);
+      border-right: 1px solid rgba(0,0,0,0.08);
+      box-shadow: 4px 0 24px rgba(0,0,0,0.08);
+    }
+    body.light-theme .sidebar-header {
+      background: rgba(0,0,0,0.02);
+      border-bottom: 1px solid rgba(0,0,0,0.08);
+    }
+    body.light-theme .sidebar-header .brand {
+      color: #212529;
+    }
+    body.light-theme .sidebar-header .brand:hover {
+      color: #0d6efd;
+    }
+    body.light-theme .sidebar-user-info {
+      color: #212529;
+    }
+    body.light-theme .sidebar-user-info > div:first-child {
+      color: #6c757d;
+    }
+    body.light-theme .sidebar-user-info > div:last-child {
+      color: #212529;
+    }
+    body.light-theme .sidebar-user-info .bi-globe {
+      color: #6c757d;
+    }
+    body.light-theme .sidebar-close-btn {
+      color: #6c757d;
+    }
+    body.light-theme .sidebar-close-btn:hover {
+      background: rgba(0,0,0,0.05);
+      color: #212529;
+    }
+    body.light-theme #sidebar .nav > li > a.nav-link { color: #495057 !important; }
+    body.light-theme #sidebar .nav > li > a.nav-link:hover,
+    body.light-theme #sidebar .nav > li > a.nav-link.active,
+    body.light-theme #sidebar .nav > li > a.nav-link[aria-expanded="true"] {
+      color: #0d6efd !important;
+      background-color: rgba(13,110,253,0.08) !important;
+    }
+    body.light-theme .sidebar-divider { border-color: rgba(0,0,0,0.1) !important; }
+    body.light-theme .sidebar-section-title { color: #6c757d !important; }
+    body.light-theme .card.bg-dark,
+    body.light-theme .card.bg-gradient-dark {
+      background: #ffffff !important;
+      color: #212529 !important;
+      border: 1px solid rgba(0,0,0,0.1) !important;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.08) !important;
+    }
+    body.light-theme .card.bg-dark:hover,
+    body.light-theme .card.bg-gradient-dark:hover {
+      box-shadow: 0 4px 8px rgba(0,0,0,0.12) !important;
+    }
+    body.light-theme .card.bg-dark h2,
+    body.light-theme .card.bg-dark h5,
+    body.light-theme .card.bg-dark h6,
+    body.light-theme .card.bg-gradient-dark h2,
+    body.light-theme .card.bg-gradient-dark h5,
+    body.light-theme .card.bg-gradient-dark h6 {
+      color: #212529 !important;
+    }
+    body.light-theme .card-header.bg-dark,
+    body.light-theme .card-header {
+      background: #f8f9fa !important;
+      border-bottom: 1px solid rgba(0,0,0,0.1) !important;
+      color: #212529 !important;
+    }
+    body.light-theme .card-body {
+      color: #212529 !important;
+    }
+    /* Aggressive table-dark overrides for light theme */
+    body.light-theme .table,
+    body.light-theme .table > :not(caption) > * > *,
+    body.light-theme .table-dark,
+    body.light-theme .table-dark > :not(caption) > * > * {
+      background-color: transparent !important;
+      color: #212529 !important;
+      --bs-table-bg: transparent !important;
+      --bs-table-striped-bg: transparent !important;
+      --bs-table-active-bg: transparent !important;
+      --bs-table-hover-bg: rgba(13,110,253,0.05) !important;
+    }
+
+    /* Table wrapper background */
+    body.light-theme .table,
+    body.light-theme .table-dark {
+      background: #ffffff !important;
+      border: 1px solid rgba(0,0,0,0.1) !important;
+    }
+
+    /* Table header - light gray background */
+    body.light-theme .table thead,
+    body.light-theme .table thead th,
+    body.light-theme .table thead td,
+    body.light-theme .table thead tr,
+    body.light-theme .table-dark thead,
+    body.light-theme .table-dark thead th,
+    body.light-theme .table-dark thead td,
+    body.light-theme .table-dark thead tr {
+      background-color: #e9ecef !important;
+      color: #212529 !important;
+      border-color: rgba(0,0,0,0.1) !important;
+      font-weight: 600 !important;
+    }
+
+    /* Table body cells */
+    body.light-theme .table tbody,
+    body.light-theme .table tbody td,
+    body.light-theme .table tbody th,
+    body.light-theme .table-dark tbody,
+    body.light-theme .table-dark tbody td,
+    body.light-theme .table-dark tbody th {
+      color: #212529 !important;
+      border-color: rgba(0,0,0,0.08) !important;
+      background-color: transparent !important;
+    }
+
+    /* Table rows - white background */
+    body.light-theme .table tbody tr,
+    body.light-theme .table-dark tbody tr {
+      background-color: #ffffff !important;
+      border-color: rgba(0,0,0,0.08) !important;
+    }
+
+    /* Striped rows */
+    body.light-theme .table-striped > tbody > tr:nth-of-type(odd) > *,
+    body.light-theme .table-dark.table-striped > tbody > tr:nth-of-type(odd) > * {
+      background-color: transparent !important;
+      color: #212529 !important;
+      --bs-table-accent-bg: #f8f9fa !important;
+    }
+
+    body.light-theme .table-striped tbody tr:nth-of-type(odd),
+    body.light-theme .table-dark.table-striped tbody tr:nth-of-type(odd) {
+      background-color: #f8f9fa !important;
+    }
+
+    body.light-theme .table-striped tbody tr:nth-of-type(even),
+    body.light-theme .table-dark.table-striped tbody tr:nth-of-type(even) {
+      background-color: #ffffff !important;
+    }
+
+    /* Hover state */
+    body.light-theme .table tbody tr:hover,
+    body.light-theme .table tbody tr:hover td,
+    body.light-theme .table tbody tr:hover th,
+    body.light-theme .table-dark tbody tr:hover,
+    body.light-theme .table-dark tbody tr:hover td,
+    body.light-theme .table-dark tbody tr:hover th {
+      background-color: rgba(13,110,253,0.08) !important;
+      color: #212529 !important;
+    }
+
+    /* Links and text inside tables */
+    body.light-theme .table a,
+    body.light-theme .table-dark a {
+      color: #0d6efd !important;
+    }
+
+    body.light-theme .table a:hover,
+    body.light-theme .table-dark a:hover {
+      color: #0a58ca !important;
+    }
+
+    body.light-theme .table .text-white,
+    body.light-theme .table-dark .text-white {
+      color: #212529 !important;
+    }
+
+    body.light-theme .table .btn,
+    body.light-theme .table-dark .btn {
+      color: inherit !important;
+    }
+    body.light-theme .badge.bg-primary {
+      background: #0d6efd !important;
+      color: #ffffff !important;
+    }
+    body.light-theme .badge.bg-success {
+      background: #198754 !important;
+      color: #ffffff !important;
+    }
+    body.light-theme .badge.bg-secondary {
+      background: #6c757d !important;
+      color: #ffffff !important;
+    }
+    body.light-theme .badge.bg-info {
+      background: #0dcaf0 !important;
+      color: #000000 !important;
+    }
+    body.light-theme .btn-outline-info {
+      color: #0dcaf0 !important;
+      border-color: #0dcaf0 !important;
+    }
+    body.light-theme .btn-outline-info:hover {
+      background: #0dcaf0 !important;
+      color: #000000 !important;
+    }
+    body.light-theme .text-light,
+    body.light-theme .text-muted,
+    body.light-theme .text-secondary {
+      color: #6c757d !important;
+    }
+    body.light-theme .small.text-light {
+      color: #6c757d !important;
+    }
+    body.light-theme .form-control,
+    body.light-theme .form-control.bg-dark,
+    body.light-theme .form-select,
+    body.light-theme .form-select.bg-dark {
+      background: #ffffff !important;
+      color: #212529 !important;
+      border-color: rgba(0,0,0,0.2) !important;
+    }
+    body.light-theme .input-group-text,
+    body.light-theme .input-group-text.bg-dark {
+      background: #f8f9fa !important;
+      color: #495057 !important;
+      border-color: rgba(0,0,0,0.2) !important;
+    }
+    body.light-theme .text-light,
+    body.light-theme .text-white {
+      color: #212529 !important;
+    }
+    body.light-theme .text-white-50 {
+      color: #6c757d !important;
+    }
+    body.light-theme .border-secondary {
+      border-color: rgba(0,0,0,0.1) !important;
+    }
+    body.light-theme .badge {
+      color: #ffffff !important;
+    }
+    body.light-theme .badge.bg-secondary {
+      background: #6c757d !important;
+      color: #ffffff !important;
+    }
+    body.light-theme .alert {
+      background: #ffffff !important;
+      border: 1px solid rgba(0,0,0,0.1) !important;
+    }
+    body.light-theme .modal-content {
+      background: #ffffff !important;
+      border-color: rgba(0,0,0,0.1) !important;
+    }
+    body.light-theme .dropdown-menu {
+      background: #ffffff !important;
+      border-color: rgba(0,0,0,0.15) !important;
+    }
+    body.light-theme .dropdown-item {
+      color: #212529 !important;
+    }
+    body.light-theme .dropdown-item:hover {
+      background: #f8f9fa !important;
+    }
+    body.light-theme .fw-semibold,
+    body.light-theme .fw-bold {
+      color: #212529 !important;
+    }
+    body.light-theme code {
+      color: #e83e8c !important;
+      background: #f8f9fa !important;
+    }
+    body.light-theme pre {
+      background: #f8f9fa !important;
+      color: #212529 !important;
+      border: 1px solid rgba(0,0,0,0.1) !important;
+    }
+    /* Ensure all headings are properly colored in light theme */
+    body.light-theme h1,
+    body.light-theme h2,
+    body.light-theme h3,
+    body.light-theme h4,
+    body.light-theme h5,
+    body.light-theme h6 {
+      color: #212529 !important;
+    }
+    /* Stat cards in light theme */
+    body.light-theme .fs-4,
+    body.light-theme .fs-2 {
+      color: inherit !important;
+    }
+    /* Modal dialogs in light theme */
+    body.light-theme .modal-content.bg-dark,
+    body.light-theme .modal-header.bg-dark,
+    body.light-theme .modal-body.bg-dark,
+    body.light-theme .modal-footer.bg-dark {
+      background: #ffffff !important;
+      color: #212529 !important;
+    }
+    body.light-theme .modal-title {
+      color: #212529 !important;
+    }
+    /* Accordion in light theme */
+    body.light-theme .accordion-item,
+    body.light-theme .accordion-item.bg-dark {
+      background: #ffffff !important;
+      color: #212529 !important;
+      border-color: rgba(0,0,0,0.1) !important;
+    }
+    body.light-theme .accordion-button,
+    body.light-theme .accordion-button.bg-dark {
+      background: #f8f9fa !important;
+      color: #212529 !important;
+    }
+    body.light-theme .accordion-button:not(.collapsed) {
+      background: #e9ecef !important;
+      color: #212529 !important;
+    }
+    body.light-theme .accordion-body {
+      background: #ffffff !important;
+      color: #212529 !important;
+    }
+    /* List groups in light theme */
+    body.light-theme .list-group-item,
+    body.light-theme .list-group-item.bg-dark {
+      background: #ffffff !important;
+      color: #212529 !important;
+      border-color: rgba(0,0,0,0.1) !important;
+    }
+    body.light-theme .list-group-item:hover {
+      background: #f8f9fa !important;
+    }
+    /* Text background utilities */
+    body.light-theme .text-bg-dark {
+      background: #e9ecef !important;
+      color: #212529 !important;
+    }
+    /* Ensure all paragraphs and spans are readable */
+    body.light-theme p,
+    body.light-theme span,
+    body.light-theme div {
+      color: inherit !important;
+    }
+    /* Links within cards */
+    body.light-theme .card a {
+      color: #0d6efd !important;
+    }
+    body.light-theme .card a:hover {
+      color: #0a58ca !important;
+    }
+    
+    /* Additional comprehensive overrides for common dark theme classes */
+    body.light-theme .bg-dark,
+    body.light-theme .bg-gradient-dark {
+      background: #ffffff !important;
+      background-image: none !important;
+    }
+    
+    /* Display utilities in light theme */
+    body.light-theme .display-1,
+    body.light-theme .display-2,
+    body.light-theme .display-3,
+    body.light-theme .display-4,
+    body.light-theme .display-5,
+    body.light-theme .display-6 {
+      color: #212529 !important;
+    }
+    
+    /* Shadow adjustments for light theme */
+    body.light-theme .shadow,
+    body.light-theme .shadow-sm,
+    body.light-theme .shadow-lg {
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+    
+    /* Border colors in light theme */
+    body.light-theme .border-success,
+    body.light-theme .border-warning,
+    body.light-theme .border-danger,
+    body.light-theme .border-info {
+      border-color: inherit !important;
+    }
+    
+    /* Stat icon containers */
+    body.light-theme .stat-icon-container {
+      background: rgba(0,0,0,0.05) !important;
+    }
+    
+    /* Text secondary in light theme - make it darker for readability */
+    body.light-theme .text-secondary {
+      color: #495057 !important;
+    }
+    
+    /* Ensure all inline styles with dark colors are overridden */
+    body.light-theme [style*="color: #"],
+    body.light-theme [style*="color:#"] {
+      /* This is handled by more specific rules above */
+    }
+    
+    /* Code blocks and pre elements */
+    body.light-theme code.text-warning,
+    body.light-theme code.text-danger,
+    body.light-theme code.text-success {
+      background: rgba(0,0,0,0.05) !important;
+    }
+    
+    /* Alert boxes */
+    body.light-theme .alert-danger {
+      background: #f8d7da !important;
+      border-color: #f5c2c7 !important;
+      color: #842029 !important;
+    }
+    body.light-theme .alert-success {
+      background: #d1e7dd !important;
+      border-color: #badbcc !important;
+      color: #0f5132 !important;
+    }
+    body.light-theme .alert-warning {
+      background: #fff3cd !important;
+      border-color: #ffecb5 !important;
+      color: #664d03 !important;
+    }
+    body.light-theme .alert-info {
+      background: #cff4fc !important;
+      border-color: #b6effb !important;
+      color: #055160 !important;
+    }
+    
+    /* Workspace Selector in Top Bar - Enhanced visibility */
+    .workspace-selector #workspaceDropdown {
+      font-weight: 500 !important;
+      color: #ffffff !important;
+      border-color: rgba(255, 255, 255, 0.4) !important;
+      background-color: rgba(255, 255, 255, 0.12) !important;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+    
+    .workspace-selector #workspaceDropdown:hover {
+      color: #ffffff !important;
+      border-color: rgba(255, 255, 255, 0.6) !important;
+      background-color: rgba(255, 255, 255, 0.2) !important;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+    
+    .workspace-selector #workspaceDropdown:focus,
+    .workspace-selector #workspaceDropdown.show {
+      color: #ffffff !important;
+      border-color: rgba(255, 255, 255, 0.7) !important;
+      background-color: rgba(255, 255, 255, 0.25) !important;
+      box-shadow: 0 0 0 0.25rem rgba(255, 255, 255, 0.3) !important;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+    
+    body.light-theme .workspace-selector #workspaceDropdown {
+      color: #212529 !important;
+      border-color: rgba(0, 0, 0, 0.25) !important;
+      background-color: rgba(255, 255, 255, 0.95) !important;
+      text-shadow: none;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    body.light-theme .workspace-selector #workspaceDropdown:hover {
+      color: #212529 !important;
+      border-color: rgba(0, 0, 0, 0.35) !important;
+      background-color: #ffffff !important;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+    }
+    
+    body.light-theme .workspace-selector #workspaceDropdown:focus,
+    body.light-theme .workspace-selector #workspaceDropdown.show {
+      color: #212529 !important;
+      border-color: #0d6efd !important;
+      background-color: #ffffff !important;
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+    }
+    
+    .workspace-selector #currentWorkspaceName {
+      font-weight: 500 !important;
+      letter-spacing: 0.02em;
+    }
+    
+    body.light-theme .workspace-selector #currentWorkspaceName {
+      font-weight: 600 !important;
+    }
+    
+    .workspace-selector .dropdown-toggle::after {
+      margin-left: 0.5rem;
+      opacity: 0.9;
+      border-top-color: currentColor;
+    }
+    
+    /* Fix dropdown positioning to prevent cutoff */
+    .workspace-selector .dropdown {
+      position: relative;
+    }
+    
+    .workspace-selector .dropdown-menu {
+      margin-top: 0.5rem !important;
+    }
+    
+    /* Ensure dropdown doesn't get cut off on small screens */
+    @media (max-width: 576px) {
+      .workspace-selector .dropdown-menu {
+        right: 0.5rem !important;
+        left: auto !important;
+        min-width: calc(100vw - 2rem) !important;
+        max-width: calc(100vw - 2rem) !important;
+      }
+    }
+    
+    /* Prevent horizontal overflow */
+    .workspace-selector {
+      position: relative;
+    }
+    
+    /* Ensure dropdown stays within viewport */
+    @media (min-width: 577px) {
+      .workspace-selector .dropdown-menu {
+        right: 0 !important;
+        left: auto !important;
+      }
+    }
+    
+    /* Workspace dropdown item paths - Enhanced visibility */
+    .workspace-selector .workspace-path-text {
+      color: #adb5bd !important;
+      font-weight: 400;
+      opacity: 0.9;
+      font-size: 0.8rem !important;
+      font-family: 'Courier New', monospace !important;
+    }
+    
+    .workspace-selector .dropdown-item.active .workspace-path-text,
+    .workspace-selector .dropdown-item:hover .workspace-path-text {
+      color: #cbd5e0 !important;
+      opacity: 1;
+    }
+    
+    body.light-theme .workspace-selector .workspace-path-text {
+      color: #495057 !important;
+      opacity: 0.85;
+    }
+    
+    body.light-theme .workspace-selector .dropdown-item.active .workspace-path-text,
+    body.light-theme .workspace-selector .dropdown-item:hover .workspace-path-text {
+      color: #212529 !important;
+      opacity: 1;
+    }
+    
+    /* Nav tabs in light theme */
+    body.light-theme .nav-tabs .nav-link {
+      color: #495057 !important;
+      border-color: rgba(0,0,0,0.1) !important;
+    }
+    body.light-theme .nav-tabs .nav-link.active {
+      background: #ffffff !important;
+      color: #0d6efd !important;
+      border-color: rgba(0,0,0,0.1) rgba(0,0,0,0.1) #ffffff !important;
+    }
+    
+    /* Progress bars */
+    body.light-theme .progress {
+      background: #e9ecef !important;
+    }
+    
+    /* Pagination */
+    body.light-theme .page-link {
+      background: #ffffff !important;
+      color: #0d6efd !important;
+      border-color: rgba(0,0,0,0.1) !important;
+    }
+    body.light-theme .page-link:hover {
+      background: #f8f9fa !important;
+      color: #0a58ca !important;
+    }
+    body.light-theme .page-item.active .page-link {
+      background: #0d6efd !important;
+      border-color: #0d6efd !important;
+      color: #ffffff !important;
+    }
+    
+    /* Terminal/console output areas */
+    body.light-theme .bg-black,
+    body.light-theme [style*="background: #000"],
+    body.light-theme [style*="background:#000"] {
+      background: #f8f9fa !important;
+      color: #212529 !important;
+      border-color: rgba(0,0,0,0.15) !important;
+    }
+    
+    /* Inline style color overrides for light theme */
+    body.light-theme [style*="color: #c9d1d9"],
+    body.light-theme [style*="color:#c9d1d9"] {
+      color: #495057 !important;
+    }
+    body.light-theme [style*="color: #e6edf3"],
+    body.light-theme [style*="color:#e6edf3"] {
+      color: #212529 !important;
+    }
+    body.light-theme [style*="color: #8b949e"],
+    body.light-theme [style*="color:#8b949e"] {
+      color: #6c757d !important;
+    }
+    body.light-theme [style*="color: #58a6ff"],
+    body.light-theme [style*="color:#58a6ff"] {
+      color: #0d6efd !important;
+    }
+    body.light-theme [style*="color: #adb5bd"],
+    body.light-theme [style*="color:#adb5bd"] {
+      color: #6c757d !important;
+    }
+    
+    /* Background color overrides for light theme */
+    body.light-theme [style*="background: rgba(0,0,0"],
+    body.light-theme [style*="background:rgba(0,0,0"] {
+      /* These will be handled by more specific rules */
+    }
+    body.light-theme [style*="background: rgba(0,0,0,0.3)"],
+    body.light-theme [style*="background:rgba(0,0,0,0.3)"] {
+      background: rgba(0,0,0,0.05) !important;
+    }
+    body.light-theme [style*="border: 1px solid #333"],
+    body.light-theme [style*="border:1px solid #333"] {
+      border-color: rgba(0,0,0,0.15) !important;
+    }
+    
+    /* Text light class override */
+    body.light-theme .text-light {
+      color: #212529 !important;
+    }
+    
+    /* Code elements with inline styles */
+    body.light-theme code.text-light {
+      color: #212529 !important;
+      background: rgba(0,0,0,0.05) !important;
+    }
+    
+    /* Chart popup buttons and legends */
+    body.light-theme .chart-popup-btn {
+      background: rgba(0,0,0,0.08) !important;
+      border-color: rgba(0,0,0,0.15) !important;
+      color: #212529 !important;
+    }
+    body.light-theme .chart-popup-btn:hover {
+      background: rgba(0,0,0,0.12) !important;
+      color: #212529 !important;
+    }
+    body.light-theme .custom-legend {
+      background: rgba(0,0,0,0.05) !important;
+      color: #212529 !important;
+      border-color: rgba(0,0,0,0.1) !important;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+    body.light-theme .custom-legend .legend-text {
+      color: #212529 !important;
+    }
+    
+    /* Compact card styles in light theme */
+    body.light-theme .compact h2 {
+      color: #212529 !important;
+    }
+    body.light-theme .compact h6 {
+      color: #6c757d !important;
+    }
+    
+    /* Additional inline style overrides */
+    body.light-theme [style*="color: #ffffff"],
+    body.light-theme [style*="color:#ffffff"],
+    body.light-theme [style*="color: #fff"],
+    body.light-theme [style*="color:#fff"] {
+      color: #212529 !important;
+    }
+    
+    /* Background rgba overrides */
+    body.light-theme [style*="background: rgba(0,0,0,0.18)"],
+    body.light-theme [style*="background:rgba(0,0,0,0.18)"] {
+      background: rgba(0,0,0,0.05) !important;
+    }
+    body.light-theme [style*="background: rgba(0,0,0,0.35)"],
+    body.light-theme [style*="background:rgba(0,0,0,0.35)"] {
+      background: rgba(0,0,0,0.08) !important;
+    }
+    body.light-theme [style*="background: rgba(255,255,255,0.04)"],
+    body.light-theme [style*="background:rgba(255,255,255,0.04)"] {
+      background: rgba(0,0,0,0.05) !important;
+    }
+    body.light-theme [style*="background: rgba(255,255,255,0.06)"],
+    body.light-theme [style*="background:rgba(255,255,255,0.06)"] {
+      background: rgba(0,0,0,0.1) !important;
+    }
+    
+    /* Border color overrides */
+    body.light-theme [style*="border: 1px solid rgba(255,255,255"],
+    body.light-theme [style*="border:1px solid rgba(255,255,255"] {
+      border-color: rgba(0,0,0,0.1) !important;
+    }
+    body.light-theme [style*="border-color: rgba(255,255,255"],
+    body.light-theme [style*="border-color:rgba(255,255,255"] {
+      border-color: rgba(0,0,0,0.1) !important;
+    }
+
+    /* ===== Top Header Bar ===== */
+    .top-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 44px;
+      background: #0a0a0a;
+      border-bottom: 1px solid #18181b;
+      z-index: 1200;
+      display: flex;
+      align-items: center;
+      padding: 0 0.75rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    .sidebar-toggle-btn {
+      background: transparent;
+      border: 1px solid #18181b;
+      color: #ffffff;
+      width: 32px;
+      height: 32px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-right: 0.75rem;
+      position: relative;
+      z-index: 1300;
+      pointer-events: auto;
+    }
+    .sidebar-toggle-btn:hover {
+      background: #18181b;
+      border-color: #27272a;
+    }
+
+    .top-header .brand {
+      font-weight: 700;
+      color: #ffffff;
+      font-size: 1rem;
+      letter-spacing: 0.02em;
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+    .top-header .brand:hover {
+      color: #3b82f6;
+    }
+
+    .logout-btn {
+      background: transparent;
+      border: 1px solid #dc3545;
+      color: #dc3545;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.8125rem;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+    }
+    .logout-btn:hover {
+      background: #dc3545;
+      color: #ffffff;
+      border-color: #dc3545;
+    }
+    body.light-theme .logout-btn {
+      border-color: #dc3545;
+      color: #dc3545;
+    }
+    body.light-theme .logout-btn:hover {
+      background: #dc3545;
+      color: #ffffff;
+    }
+
+    /* Sync icon animation */
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .syncing {
+      animation: spin 1s linear infinite;
+    }
+
+    /* Toast styling for dark theme */
+    .toast {
+      background: #0a0a0a !important;
+      border: 1px solid #18181b !important;
+      color: #e4e4e7 !important;
+    }
+    .toast-header {
+      background: #0f0f0f !important;
+      border-bottom: 1px solid #18181b !important;
+      color: #e4e4e7 !important;
+    }
+    body.light-theme .toast {
+      background: #ffffff !important;
+      border: 1px solid rgba(0,0,0,0.1) !important;
+      color: #212529 !important;
+    }
+    body.light-theme .toast-header {
+      background: #f8f9fa !important;
+      border-bottom: 1px solid rgba(0,0,0,0.1) !important;
+      color: #212529 !important;
+    }
+
+    /* ===== Floating Material Sidebar ===== */
+    .sidebar {
+      position: fixed;
+      top: 44px;
+      left: 0;
+      width: var(--sidebar-width);
+      height: calc(100vh - 44px);
+      background: #0a0a0a;
+      border-right: 1px solid #18181b;
+      padding: 0;
+      transition: transform 0.2s ease;
+      z-index: 1100;
+      overflow-y: auto;
+      box-shadow: 4px 0 24px rgba(0,0,0,0.4);
+    }
+    .sidebar.collapsed { transform: translateX(-100%); }
+
+    /* Sidebar header with brand and close button */
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #18181b;
+      background: #0f0f0f;
+      min-height: 48px;
+    }
+    .sidebar-user-info {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sidebar-header .brand {
+      font-weight: 700;
+      color: #ffffff;
+      font-size: 1.125rem;
+      letter-spacing: 0.02em;
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+    .sidebar-header .brand:hover {
+      color: #3b82f6;
+    }
+    .sidebar-close-btn {
+      background: transparent;
+      border: none;
+      color: #71717a;
+      font-size: 1.5rem;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      transition: all 0.15s ease;
+    }
+    .sidebar-close-btn:hover {
+      background: #18181b;
+      color: #ffffff;
+    }
+
+    /* Sidebar navigation container */
+    .sidebar-nav {
+      padding: 0.75rem 0;
+    }
+
+    /* Backdrop overlay when sidebar is open */
+    .sidebar-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1050;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s ease, visibility 0.2s ease;
+    }
+    .sidebar-backdrop.show {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    /* Custom scrollbar for sidebar */
+    .sidebar::-webkit-scrollbar {
+      width: 4px;
+    }
+    .sidebar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .sidebar::-webkit-scrollbar-thumb {
+      background: #18181b;
+      border-radius: 2px;
+    }
+    .sidebar::-webkit-scrollbar-thumb:hover {
+      background: #27272a;
+    }
+
+    .sidebar .nav.flex-column{ display:flex; flex-direction:column; row-gap:var(--row-gap); padding:0 !important; margin:0 !important; list-style:none; }
+    .sidebar .nav.flex-column > li{ margin:0 !important; padding:0 !important; }
+
+    /* Material Sidebar Navigation Links */
+    #sidebar .nav > li > a.nav-link {
+      position: relative !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 0.75rem !important;
+      width: 100% !important;
+      padding: 0.5rem 0.75rem 0.5rem calc(var(--icon-rail) + var(--icon-box) + 8px) !important;
+      color: #71717a !important;
+      background: transparent !important;
+      border: none !important;
+      border-radius: 4px !important;
+      margin: 0 0.5rem !important;
+      width: calc(100% - 1rem) !important;
+      font-size: 0.8125rem !important;
+      font-weight: 500 !important;
+      line-height: 1.4 !important;
+      text-align: left !important;
+      transition: all 0.15s ease !important;
+    }
+    #sidebar .nav > li > a.nav-link:hover,
+    #sidebar .nav > li > a.nav-link.active,
+    #sidebar .nav > li > a.nav-link[aria-expanded="true"] {
+      color: #ffffff !important;
+      background: #18181b !important;
+    }
+    #sidebar .nav > li > a.nav-link::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      height: 70%;
+      width: 2px;
+      background: #3b82f6;
+      border-radius: 0 2px 2px 0;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    #sidebar .nav > li > a.nav-link:hover::before,
+    #sidebar .nav > li > a.nav-link.active::before,
+    #sidebar .nav > li > a.nav-link[aria-expanded="true"]::before {
+      opacity: 1;
+    }
+
+    #sidebar .nav > li > a.nav-link .nav-icon{
+      position:absolute !important; left:var(--icon-rail) !important; top:50% !important; transform:translateY(-50%) !important;
+      width:var(--icon-box) !important; height:var(--icon-box) !important;
+      display:flex !important; align-items:center !important; justify-content:flex-start !important;
+    }
+    #sidebar .nav > li > a.nav-link .nav-icon i{
+      width:var(--icon-box) !important; height:var(--icon-box) !important;
+      font-size:1.05rem !important; line-height:1 !important; transform:translateY(1px) !important; text-align:left !important;
+    }
+    #sidebar .nav > li > a.nav-link .nav-label{ flex:1 1 auto !important; display:flex !important; align-items:center !important; min-width:0 !important; }
+    #sidebar .nav > li > a.nav-link .nav-chevron{ margin-left:auto !important; display:flex !important; align-items:center !important; }
+    .rotate-chevron{ transition:transform .25s ease; }
+    #sidebar .nav > li > a.nav-link[aria-expanded="true"] .rotate-chevron{ transform:rotate(90deg); }
+
+    #sidebar .collapse .nav-link{ padding-left: calc(var(--submenu-indent) + var(--icon-box) + 8px) !important; }
+    #sidebar .collapse .nav-link .nav-icon{ left: var(--submenu-indent) !important; }
+
+    /* Modern Sidebar Section Dividers & Titles */
+    .sidebar-divider {
+      border: none;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      margin: 0.75rem 1rem;
+      opacity: 0.6;
+    }
+    .sidebar-section-title {
+      padding: 0.75rem 1rem 0.375rem 1rem;
+      font-size: 0.625rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #6b7280;
+    }
+
+    /* ===== Content (with top padding for fixed header) ===== */
+    .content{
+      margin: 0;
+      padding: calc(44px + 1rem) 1rem 1.5rem 1rem !important;
+      min-height: 100vh;
+      transition: padding-left .3s ease;
+    }
+
+    /* neutralize Bootstrap's row negative margins at the left/right edges */
+    .content > .container-fluid:first-child,
+    .content > .container:first-child{
+      padding-left: var(--container-side-pad) !important;
+      padding-right: var(--container-side-pad) !important;
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .content > *:first-child,
+    .content .row:first-child,
+    .content .card:first-child{ margin-top: 0 !important; }
+
+    /* ===== Ultra-wide tiers =====
+       Grow sidebar + content side padding proportionally on big monitors so
+       the chrome doesn't look like a sliver next to a 2300px content area.
+       Body font-size is intentionally untouched (already 13px). */
+    @media (min-width: 2000px) {
+      :root { --sidebar-width: 240px; }
+      .content { padding-left: 1.25rem !important; padding-right: 1.25rem !important; }
+      .content > .container-fluid:first-child,
+      .content > .container:first-child {
+        padding-left: 1.25rem !important;
+        padding-right: 1.25rem !important;
+      }
+    }
+    @media (min-width: 2400px) {
+      :root { --sidebar-width: 260px; }
+      .content { padding-left: 1.5rem !important; padding-right: 1.5rem !important; }
+      .content > .container-fluid:first-child,
+      .content > .container:first-child {
+        padding-left: 1.5rem !important;
+        padding-right: 1.5rem !important;
+      }
+    }
+
+    /* ===== Material Card Styling ===== */
+    .card.bg-dark, .card.bg-gradient-dark {
+      background: #0a0a0a !important;
+      color: #e4e4e7 !important;
+      border: 1px solid #18181b !important;
+      border-radius: 6px !important;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+      transition: all 0.15s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card.bg-dark:hover {
+      border-color: #27272a !important;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.4) !important;
+    }
+
+    .card.bg-dark h2, .card.bg-dark h5, .card.bg-dark h6,
+    .card.bg-gradient-dark h2, .card.bg-gradient-dark h5, .card.bg-gradient-dark h6 {
+      color: #ffffff !important;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .card .text-secondary {
+      color: #bdc4cb !important;
+    }
+
+    .card-header.bg-dark {
+      background: #0f0f0f !important;
+      border-bottom: 1px solid #18181b !important;
+      border-radius: 6px 6px 0 0 !important;
+      padding: 0.625rem 1rem;
+    }
+
+    /* ===== Modern Table Styling ===== */
+    .table {
+      background: transparent !important;
+      color: #f8f9fa !important;
+      border-radius: 4px !important;
+      overflow: hidden;
+    }
+    .table thead th, .table thead td {
+      background: rgba(255,255,255,0.03) !important;
+      color: #f8f9fa !important;
+      border-color: rgba(255,255,255,0.08) !important;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      padding: 0.5rem 0.625rem;
+    }
+    .table tbody td {
+      background: transparent !important;
+      color: #f8f9fa !important;
+      border-color: rgba(255,255,255,0.05) !important;
+      padding: 0.5rem 0.625rem;
+    }
+    .table tbody tr {
+      transition: background-color 0.15s ease;
+    }
+    .table tbody tr:hover {
+      background: rgba(255,255,255,0.03) !important;
+    }
+
+    /* ===== Material Buttons ===== */
+    .btn {
+      border-radius: 4px !important;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      transition: all 0.15s ease;
+      border-width: 1px;
+      font-size: 0.8125rem;
+    }
+
+    /* Button groups - ensure square corners */
+    .btn-group .btn {
+      border-radius: 0 !important;
+    }
+
+    .btn-group .btn:first-child {
+      border-top-left-radius: 4px !important;
+      border-bottom-left-radius: 4px !important;
+    }
+
+    .btn-group .btn:last-child {
+      border-top-right-radius: 4px !important;
+      border-bottom-right-radius: 4px !important;
+    }
+
+    .btn-group .btn:only-child {
+      border-radius: 4px !important;
+    }
+
+    .btn-primary {
+      background: #3b82f6;
+      border: 1px solid #3b82f6;
+      color: #ffffff;
+      box-shadow: 0 1px 3px rgba(59,130,246,0.3);
+    }
+
+    .btn-primary:hover {
+      background: #2563eb;
+      border-color: #2563eb;
+      box-shadow: 0 2px 6px rgba(59,130,246,0.4);
+    }
+
+    .btn-success {
+      background: #10b981;
+      border: 1px solid #10b981;
+      color: #ffffff;
+      box-shadow: 0 1px 3px rgba(16,185,129,0.3);
+    }
+
+    .btn-success:hover {
+      background: #059669;
+      border-color: #059669;
+      box-shadow: 0 2px 6px rgba(16,185,129,0.4);
+    }
+
+    .btn-outline-light {
+      background: transparent;
+      border-color: #3f3f46;
+      color: #e4e4e7;
+    }
+
+    .btn-outline-light:hover {
+      background: #18181b;
+      border-color: #52525b;
+      color: #ffffff;
+    }
+
+    .btn-outline-secondary {
+      background: transparent;
+      border-color: #3f3f46;
+      color: #a1a1aa;
+    }
+
+    .btn-outline-secondary:hover {
+      background: #18181b;
+      border-color: #52525b;
+      color: #e4e4e7;
+    }
+
+    .btn-outline-primary {
+      background: transparent;
+      border-color: #3b82f6;
+      color: #60a5fa;
+    }
+
+    .btn-outline-primary:hover {
+      background: rgba(59,130,246,0.1);
+      border-color: #60a5fa;
+      color: #93c5fd;
+    }
+
+    .btn-outline-danger {
+      background: transparent;
+      border-color: #ef4444;
+      color: #f87171;
+    }
+
+    .btn-outline-danger:hover {
+      background: rgba(239,68,68,0.1);
+      border-color: #f87171;
+      color: #fca5a5;
+    }
+
+    .btn-outline-warning {
+      background: transparent;
+      border-color: #f59e0b;
+      color: #fbbf24;
+    }
+
+    .btn-outline-warning:hover {
+      background: rgba(245,158,11,0.1);
+      border-color: #fbbf24;
+      color: #fcd34d;
+    }
+
+    /* ===== Material Form Controls ===== */
+    .form-control, .form-select, textarea.form-control {
+      background: #18181b !important;
+      border: 1px solid #27272a !important;
+      border-radius: 4px !important;
+      color: #e4e4e7 !important;
+      transition: all 0.15s ease;
+      font-size: 0.8125rem;
+      padding: 0.375rem 0.625rem;
+    }
+
+    /* Form check inputs (checkboxes, radio buttons) */
+    .form-check-input {
+      background-color: #18181b !important;
+      border: 1px solid #27272a !important;
+      border-radius: 3px !important;
+    }
+
+    .form-check-input:checked {
+      background-color: #3b82f6 !important;
+      border-color: #3b82f6 !important;
+    }
+
+    .form-check-input:focus {
+      border-color: #3b82f6 !important;
+      box-shadow: 0 0 0 2px rgba(59,130,246,0.15) !important;
+    }
+
+    .form-control:focus, .form-select:focus {
+      background: #18181b !important;
+      border-color: #3b82f6 !important;
+      box-shadow: 0 0 0 2px rgba(59,130,246,0.15) !important;
+      color: #ffffff !important;
+      outline: none !important;
+    }
+
+    .form-control::placeholder {
+      color: #52525b !important;
+    }
+
+    .form-control.form-control-lg,
+    .input-group-lg > .form-control,
+    .input-group-lg > .form-select {
+      font-size: 0.875rem !important;
+      padding: 0.5rem 0.75rem !important;
+      border-radius: 4px !important;
+    }
+
+    .input-group-text,
+    .input-group-text.bg-dark {
+      background: #18181b !important;
+      border: 1px solid #27272a !important;
+      border-radius: 4px !important;
+      color: #71717a !important;
+    }
+
+    /* Ensure input groups don't have rounded corners */
+    .input-group .form-control,
+    .input-group .btn,
+    .input-group .input-group-text,
+    .input-group-lg .form-control,
+    .input-group-lg .btn,
+    .input-group-lg .input-group-text {
+      border-radius: 0 !important;
+    }
+
+    .input-group .form-control:first-child,
+    .input-group .input-group-text:first-child,
+    .input-group-lg .form-control:first-child,
+    .input-group-lg .input-group-text:first-child {
+      border-top-left-radius: 4px !important;
+      border-bottom-left-radius: 4px !important;
+    }
+
+    .input-group .form-control:last-child,
+    .input-group .btn:last-child,
+    .input-group-lg .form-control:last-child,
+    .input-group-lg .btn:last-child {
+      border-top-right-radius: 4px !important;
+      border-bottom-right-radius: 4px !important;
+    }
+
+    /* Additional specificity for input-group-lg */
+    .input-group-lg > .input-group-text:first-child {
+      border-top-left-radius: 4px !important;
+      border-bottom-left-radius: 4px !important;
+      border-top-right-radius: 0 !important;
+      border-bottom-right-radius: 0 !important;
+    }
+
+    .input-group-lg > .form-control:not(:first-child):not(:last-child) {
+      border-radius: 0 !important;
+    }
+
+    .input-group-lg > .btn:last-child:not(:first-child) {
+      border-top-left-radius: 0 !important;
+      border-bottom-left-radius: 0 !important;
+      border-top-right-radius: 4px !important;
+      border-bottom-right-radius: 4px !important;
+    }
+
+    /* ===== Material Progress Bars ===== */
+    .progress {
+      background: #18181b !important;
+      border: 1px solid #27272a;
+      border-radius: 4px;
+      height: 6px;
+      overflow: hidden;
+    }
+
+    .progress .progress-bar {
+      border-radius: 4px;
+      background: #3b82f6;
+      transition: width 0.3s ease;
+    }
+
+    .progress .progress-bar.bg-danger {
+      background: #ef4444;
+    }
+
+    .progress .progress-bar.bg-success {
+      background: #10b981;
+    }
+
+    .progress .progress-bar.bg-warning {
+      background: #f59e0b;
+    }
+
+    /* ===== Material Badges ===== */
+    .badge {
+      border-radius: 4px;
+      font-weight: 600;
+      padding: 0.35em 0.65em;
+      letter-spacing: 0.02em;
+      font-size: 0.75rem;
+    }
+
+    .badge.bg-primary {
+      background: #3b82f6 !important;
+      color: #ffffff;
+    }
+
+    .badge.bg-success {
+      background: #10b981 !important;
+      color: #ffffff;
+    }
+
+    .badge.bg-danger {
+      background: #ef4444 !important;
+      color: #ffffff;
+    }
+
+    .badge.bg-warning {
+      background: #f59e0b !important;
+      color: #000000;
+    }
+
+    .badge.bg-secondary {
+      background: #52525b !important;
+      color: #ffffff;
+    }
+
+    /* ===== Square Everything - Override Bootstrap Defaults ===== */
+    .input-group,
+    .input-group-lg,
+    .input-group-sm {
+      border-radius: 4px !important;
+    }
+
+    .input-group > :not(:first-child):not(.dropdown-menu):not(.valid-tooltip):not(.valid-feedback):not(.invalid-tooltip):not(.invalid-feedback),
+    .input-group-lg > :not(:first-child):not(.dropdown-menu):not(.valid-tooltip):not(.valid-feedback):not(.invalid-tooltip):not(.invalid-feedback) {
+      margin-left: 0 !important;
+      border-top-left-radius: 0 !important;
+      border-bottom-left-radius: 0 !important;
+    }
+
+    .input-group:not(.has-validation) > :not(:last-child):not(.dropdown-toggle):not(.dropdown-menu):not(.form-floating),
+    .input-group-lg:not(.has-validation) > :not(:last-child):not(.dropdown-toggle):not(.dropdown-menu):not(.form-floating) {
+      border-top-right-radius: 0 !important;
+      border-bottom-right-radius: 0 !important;
+    }
+
+    .input-group > .form-control:first-child,
+    .input-group > .form-select:first-child,
+    .input-group > .input-group-text:first-child,
+    .input-group-lg > .form-control:first-child,
+    .input-group-lg > .form-select:first-child,
+    .input-group-lg > .input-group-text:first-child {
+      border-top-left-radius: 4px !important;
+      border-bottom-left-radius: 4px !important;
+      border-top-right-radius: 0 !important;
+      border-bottom-right-radius: 0 !important;
+    }
+
+    .input-group > .btn:last-child,
+    .input-group > .form-control:last-child,
+    .input-group > .form-select:last-child,
+    .input-group-lg > .btn:last-child,
+    .input-group-lg > .form-control:last-child,
+    .input-group-lg > .form-select:last-child {
+      border-top-right-radius: 4px !important;
+      border-bottom-right-radius: 4px !important;
+      border-top-left-radius: 0 !important;
+      border-bottom-left-radius: 0 !important;
+    }
+
+    .input-group-text {
+      background: #18181b !important;
+      border: 1px solid #27272a !important;
+      border-radius: 4px !important;
+      color: #71717a !important;
+    }
+
+    /* Override any remaining rounded corners */
+    .rounded { border-radius: 4px !important; }
+    .rounded-pill { border-radius: 4px !important; }
+    .rounded-circle { border-radius: 4px !important; }
+    .rounded-0 { border-radius: 0 !important; }
+    .rounded-1 { border-radius: 4px !important; }
+    .rounded-2 { border-radius: 4px !important; }
+    .rounded-3 { border-radius: 4px !important; }
+    .rounded-4 { border-radius: 4px !important; }
+    .rounded-5 { border-radius: 4px !important; }
+
+    /* Override rounded top/bottom/start/end */
+    .rounded-top { border-top-left-radius: 4px !important; border-top-right-radius: 4px !important; }
+    .rounded-bottom { border-bottom-left-radius: 4px !important; border-bottom-right-radius: 4px !important; }
+    .rounded-start { border-top-left-radius: 4px !important; border-bottom-left-radius: 4px !important; }
+    .rounded-end { border-top-right-radius: 4px !important; border-bottom-right-radius: 4px !important; }
+
+    /* Table styling consistency */
+    .table {
+      border-radius: 4px !important;
+    }
+
+    /* Modal styling */
+    .modal-content {
+      background: #0a0a0a !important;
+      border: 1px solid #18181b !important;
+      border-radius: 6px !important;
+    }
+
+    .modal-header {
+      border-bottom: 1px solid #18181b !important;
+    }
+
+    .modal-footer {
+      border-top: 1px solid #18181b !important;
+    }
+
+    /* Dropdown styling */
+    .dropdown-menu {
+      background: #0a0a0a !important;
+      border: 1px solid #18181b !important;
+      border-radius: 4px !important;
+    }
+
+    .dropdown-item {
+      color: #e4e4e7 !important;
+    }
+
+    .dropdown-item:hover {
+      background: #18181b !important;
+      color: #ffffff !important;
+    }
+
+    /* Alert styling */
+    .alert {
+      border-radius: 4px !important;
+      background: #0a0a0a !important;
+      border: 1px solid #27272a !important;
+    }
+
+    .alert-info {
+      background: rgba(59,130,246,0.1) !important;
+      border-color: #3b82f6 !important;
+      color: #60a5fa !important;
+    }
+
+    .alert-success {
+      background: rgba(16,185,129,0.1) !important;
+      border-color: #10b981 !important;
+      color: #34d399 !important;
+    }
+
+    .alert-danger {
+      background: rgba(239,68,68,0.1) !important;
+      border-color: #ef4444 !important;
+      color: #f87171 !important;
+    }
+
+    .alert-warning {
+      background: rgba(245,158,11,0.1) !important;
+      border-color: #f59e0b !important;
+      color: #fbbf24 !important;
+    }
+  </style>
+  <!-- Shared component styles -->
+  <link rel="stylesheet" href="/static/css/cygor-components.css">
+</head>
+<body class="d-flex flex-column h-100">
+
+  <!-- Top Header Bar -->
+  <header class="top-header">
+    <button type="button" id="sidebarToggle" class="sidebar-toggle-btn" title="Open menu" aria-label="Open menu">
+      <i class="bi bi-list"></i>
+    </button>
+    <a href="/" class="brand">Cygor</a>
+
+    <div style="margin-left: auto; display: flex; align-items: center; gap: 0.75rem; margin-right: 1rem;">
+      <!-- Help Menu -->
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="helpDropdown" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.9rem; padding: 0.4rem 0.75rem; font-weight: 500;" title="Help & Documentation">
+          <i class="bi bi-question-circle me-1"></i>Help
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end bg-dark border-secondary" aria-labelledby="helpDropdown" style="min-width: 280px;">
+          <li><h6 class="dropdown-header text-light"><i class="bi bi-question-circle me-2"></i>Help & Documentation</h6></li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <a class="dropdown-item text-light" href="/docs">
+              <i class="bi bi-book me-2"></i>Documentation
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item text-light" href="/docs/Plugin-Development">
+              <i class="bi bi-puzzle me-2"></i>Plugin Development Guide
+            </a>
+          </li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <a class="dropdown-item text-light" href="https://github.com/tjnull/cygor" target="_blank" rel="noopener noreferrer">
+              <i class="bi bi-github me-2"></i>GitHub Repository
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item text-light" href="https://github.com/tjnull/cygor/issues" target="_blank" rel="noopener noreferrer">
+              <i class="bi bi-bug me-2"></i>Report Issue
+            </a>
+          </li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <a class="dropdown-item text-light" href="/search">
+              <i class="bi bi-search me-2"></i>Search Help
+            </a>
+          </li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <div class="dropdown-item-text text-muted" style="font-size: 0.85rem;">
+              <i class="bi bi-info-circle me-2"></i>Cygor Web UI
+            </div>
+          </li>
+        </ul>
+      </div>
+      <!-- Workspace Selector -->
+      <div class="workspace-selector">
+        <div class="dropdown">
+          <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="workspaceDropdown" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.9rem; padding: 0.4rem 0.9rem; font-weight: 500;">
+            <span id="currentWorkspaceName">Current Workspace: Loading...</span>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end bg-dark border-secondary" aria-labelledby="workspaceDropdown" id="workspaceDropdownMenu" style="min-width: 320px; max-width: 400px; max-height: 500px; overflow-y: auto;" data-bs-popper-config='{"placement":"bottom-end","modifiers":[{"name":"preventOverflow","options":{"boundary":"viewport"}}]}'>
+            <li><h6 class="dropdown-header text-light"><i class="bi bi-folder me-2"></i>Workspaces</h6></li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+              <div class="px-3 py-2">
+                <button class="btn btn-primary btn-sm w-100 mb-2" onclick="if(typeof window.showAddWorkspaceModal === 'function') { window.showAddWorkspaceModal(); } else { window.location.href='/settings#workspacesTab&addWorkspace'; }">
+                  <i class="bi bi-plus-circle me-2"></i>Create Workspace
+                </button>
+                <a href="/settings#workspacesTab" class="btn btn-outline-secondary btn-sm w-100" onclick="window.location.href='/settings#workspacesTab'; return false;">
+                  <i class="bi bi-gear me-2"></i>Manage Workspaces
+                </a>
+              </div>
+            </li>
+            <li><hr class="dropdown-divider"></li>
+            <li id="workspaceListItems"><div class="dropdown-item-text text-muted">Loading...</div></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Sidebar Backdrop -->
+  <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+
+  <!-- Floating Sidebar -->
+  <nav id="sidebar" class="sidebar collapsed">
+    <!-- Sidebar Header -->
+    <div class="sidebar-header">
+      {% if request.state.auth_enabled and request.state.current_user %}
+      <div class="sidebar-user-info" style="flex: 1; margin-right: 0.5rem;">
+        <div style="font-size: 0.75rem; color: #71717a; margin-bottom: 0.25rem;">Logged in as</div>
+        <div style="font-size: 0.875rem; font-weight: 600; color: #ffffff; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="bi bi-person-circle" style="font-size: 1rem;"></i>
+          <span>{{ request.state.current_user.get('username', 'User') }}</span>
+          {% if request.state.current_user.get('role') == 'admin' %}
+          <span class="badge" style="background: #dc3545; color: #ffffff; font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 3px;">Admin</span>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div class="sidebar-user-info" style="flex: 1; margin-right: 0.5rem;">
+        <div style="font-size: 0.75rem; color: #71717a; margin-bottom: 0.25rem;">Access Mode</div>
+        <div style="font-size: 0.875rem; font-weight: 600; color: #71717a; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="bi bi-globe" style="font-size: 1rem;"></i>
+          <span>Public Access</span>
+        </div>
+      </div>
+      {% endif %}
+      <button id="sidebarClose" class="sidebar-close-btn" title="Close menu" aria-label="Close menu">
+        <i class="bi bi-x"></i>
+      </button>
+    </div>
+
+    <!-- Sidebar Navigation -->
+    <div class="sidebar-nav">
+      <ul class="nav flex-column">
+        <!-- Overview Section -->
+        <div class="sidebar-section-title">Overview</div>
+      <li>
+        <a href="/" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-speedometer2"></i></div>
+          <div class="nav-label">Dashboard</div>
+        </a>
+      </li>
+      <li>
+        <a href="/search" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-search"></i></div>
+          <div class="nav-label">Search</div>
+        </a>
+      </li>
+
+      <hr class="sidebar-divider">
+
+      <!-- Scanning Section -->
+      <div class="sidebar-section-title">Scanner</div>
+      <li>
+        <a href="/tasks" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-play-circle"></i></div>
+          <div class="nav-label">Tasks</div>
+        </a>
+      </li>
+      <li>
+        <a href="/schedules" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-calendar3"></i></div>
+          <div class="nav-label">Schedules</div>
+        </a>
+      </li>
+
+      <hr class="sidebar-divider">
+
+      <!-- Results Section -->
+      <div class="sidebar-section-title">Results</div>
+      <li>
+        <a href="/hosts" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-hdd-network"></i></div>
+          <div class="nav-label">Hosts</div>
+        </a>
+      </li>
+      <li>
+        <a href="/services" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-diagram-3"></i></div>
+          <div class="nav-label">Services</div>
+        </a>
+      </li>
+      <li>
+        <a href="/credrecon/results" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-key"></i></div>
+          <div class="nav-label">Credentials</div>
+        </a>
+      </li>
+      <li>
+        <a href="/enrichment" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-globe-americas"></i></div>
+          <div class="nav-label">Enrichment</div>
+        </a>
+      </li>
+
+      <hr class="sidebar-divider">
+
+      <!-- Enumeration Section: only modules with data in the active workspace.
+           Visibility is computed server-side (request.state.* set in main.py);
+           the whole section is hidden when the workspace has no enum results. -->
+      {% if request.state.show_screenshots or request.state.show_network_shares or request.state.sidebar_modules %}
+      {% set _module_icons = {
+        "dnsexplorer": "bi-signpost-split",
+        "rpcexplorer": "bi-diagram-2",
+        "smtpexplorer": "bi-envelope",
+        "ftpexplorer": "bi-folder2-open",
+        "dbprobe": "bi-database",
+        "ldapexplorer": "bi-person-badge",
+        "snmpexplorer": "bi-router",
+        "webenum": "bi-binoculars"
+      } %}
+      <div class="sidebar-section-title">Enumeration Results</div>
+      {% if request.state.show_screenshots %}
+      <li>
+        <a href="/modules/screenshots" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-images"></i></div>
+          <div class="nav-label">Screenshots</div>
+        </a>
+      </li>
+      {% endif %}
+      {% if request.state.show_network_shares %}
+      <li>
+        <a href="/modules/network-shares" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-hdd-network"></i></div>
+          <div class="nav-label">Network Shares</div>
+        </a>
+      </li>
+      {% endif %}
+      {% for m in request.state.sidebar_modules %}
+      <li>
+        <a href="/modules/{{ m.slug }}" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi {{ _module_icons.get(m.slug, 'bi-search') }}"></i></div>
+          <div class="nav-label">{{ m.name }}</div>
+        </a>
+      </li>
+      {% endfor %}
+
+      <hr class="sidebar-divider">
+      {% endif %}
+
+      <!-- Settings Section -->
+      <div class="sidebar-section-title">Settings</div>
+      <li>
+        <a href="/settings" class="nav-link text-white">
+          <div class="nav-icon"><i class="bi bi-gear"></i></div>
+          <div class="nav-label">Settings</div>
+        </a>
+      </li>
+      <li>
+        <a href="#" class="nav-link text-white" id="themeToggle">
+          <div class="nav-icon"><i class="bi bi-moon-stars" id="themeIcon"></i></div>
+          <div class="nav-label">
+            <span id="themeLabel">Dark Mode</span>
+          </div>
+        </a>
+      </li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Toast Container -->
+  <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 9999;">
+    <div id="syncToast" class="toast border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true" style="min-width: 450px; max-width: 500px;">
+      <div class="toast-header border-0 pb-2" id="toastHeader" style="background: transparent;">
+        <i class="me-2" id="toastIcon" style="font-size: 1.4rem;"></i>
+        <strong class="me-auto" id="toastTitle" style="font-size: 1.15rem;">Database Sync</strong>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+      <div class="toast-body pt-0" id="toastBody" style="font-size: 1rem; line-height: 1.6; padding-left: 3rem;">
+        Syncing database...
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <main id="mainContent" class="content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Clipboard helper (fallback for self-signed HTTPS) -->
+  <script src="/static/js/clipboard.js"></script>
+  <!-- Shared utilities (escapeHtml, date formatting, timer) -->
+  <script src="/static/js/cygor-utils.js"></script>
+  <script src="/static/js/cygor-datetime.js"></script>
+  <script src="/static/js/cygor-terminal.js"></script>
+  <!-- Global toast notifications -->
+  <script>
+  (function() {
+    // Inject toast CSS
+    var style = document.createElement('style');
+    style.textContent = [
+      '#cygor-toast-container {',
+      '  position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 11000;',
+      '  display: flex; flex-direction: column-reverse; gap: 0.5rem;',
+      '  pointer-events: none;',
+      '}',
+      '.cygor-toast {',
+      '  pointer-events: auto;',
+      '  display: flex; align-items: center; gap: 0.75rem;',
+      '  padding: 0.85rem 1.25rem;',
+      '  min-width: 280px; max-width: 420px;',
+      '  background: #0a0a0a;',
+      '  border: 1px solid #27272a;',
+      '  border-radius: 8px;',
+      '  box-shadow: 0 8px 24px rgba(0,0,0,0.5);',
+      '  color: #e4e4e7; font-size: 0.92rem;',
+      '  animation: cygorToastIn 0.3s ease-out;',
+      '}',
+      '.cygor-toast.removing { animation: cygorToastOut 0.3s ease-in forwards; }',
+      '.cygor-toast-success { border-left: 4px solid #22c55e; }',
+      '.cygor-toast-danger  { border-left: 4px solid #ef4444; }',
+      '.cygor-toast-warning { border-left: 4px solid #f59e0b; }',
+      '.cygor-toast-info    { border-left: 4px solid #3b82f6; }',
+      '.cygor-toast i { font-size: 1.3rem; flex-shrink: 0; }',
+      '.cygor-toast .toast-close {',
+      '  background: none; border: none; color: #71717a; cursor: pointer;',
+      '  font-size: 1.1rem; padding: 0; margin-left: auto; line-height: 1;',
+      '}',
+      '.cygor-toast .toast-close:hover { color: #a1a1aa; }',
+      'body.light-theme .cygor-toast {',
+      '  background: #ffffff; border-color: #e5e7eb; color: #1f2937;',
+      '  box-shadow: 0 8px 24px rgba(0,0,0,0.12);',
+      '}',
+      'body.light-theme .cygor-toast .toast-close { color: #9ca3af; }',
+      'body.light-theme .cygor-toast .toast-close:hover { color: #6b7280; }',
+      '@keyframes cygorToastIn { from { opacity:0; transform: translateX(100%); } to { opacity:1; transform: translateX(0); } }',
+      '@keyframes cygorToastOut { from { opacity:1; transform: translateX(0); } to { opacity:0; transform: translateX(100%); } }'
+    ].join('\n');
+    document.head.appendChild(style);
+
+    // Icon + color map
+    var cfg = {
+      success: { icon: 'bi-check-circle-fill', color: '#22c55e' },
+      danger:  { icon: 'bi-x-circle-fill',     color: '#ef4444' },
+      error:   { icon: 'bi-x-circle-fill',     color: '#ef4444' },
+      warning: { icon: 'bi-exclamation-triangle-fill', color: '#f59e0b' },
+      info:    { icon: 'bi-info-circle-fill',   color: '#3b82f6' }
+    };
+
+    window.showToast = function(message, type) {
+      type = type || 'info';
+      // Normalize: 'error' → 'danger' for CSS class
+      var cssType = type === 'error' ? 'danger' : type;
+      var c = cfg[type] || cfg.info;
+
+      // Get or create container
+      var container = document.getElementById('cygor-toast-container');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'cygor-toast-container';
+        document.body.appendChild(container);
+      }
+
+      var toast = document.createElement('div');
+      toast.className = 'cygor-toast cygor-toast-' + cssType;
+      toast.innerHTML =
+        '<i class="bi ' + c.icon + '" style="color:' + c.color + ';"></i>' +
+        '<span>' + message + '</span>' +
+        '<button class="toast-close" onclick="this.parentElement.classList.add(\'removing\');setTimeout(function(){this.remove()}.bind(this.parentElement),300)">&times;</button>';
+      container.appendChild(toast);
+
+      // Auto-remove after 4s
+      setTimeout(function() {
+        if (toast.parentElement) {
+          toast.classList.add('removing');
+          setTimeout(function() { toast.remove(); }, 300);
+        }
+      }, 4000);
+    };
+  })();
+  </script>
+  <script>
+    // Floating sidebar toggle behavior
+    window.addEventListener('DOMContentLoaded', function() {
+      console.log('DOM loaded, initializing sidebar...');
+      
+      const sidebarToggle = document.getElementById("sidebarToggle");
+      const sidebarClose = document.getElementById("sidebarClose");
+      const sidebar = document.getElementById("sidebar");
+      const backdrop = document.getElementById("sidebarBackdrop");
+
+      console.log('Elements:', {
+        sidebarToggle: !!sidebarToggle,
+        sidebarClose: !!sidebarClose,
+        sidebar: !!sidebar,
+        backdrop: !!backdrop
+      });
+
+      if (!sidebarToggle || !sidebarClose || !sidebar || !backdrop) {
+        console.error("Sidebar elements not found!");
+        return;
+      }
+
+      // Open sidebar
+      function openSidebar() {
+        console.log("Opening sidebar - removing collapsed class");
+        sidebar.classList.remove("collapsed");
+        backdrop.classList.add("show");
+        console.log("Sidebar classes:", sidebar.className);
+        console.log("Backdrop classes:", backdrop.className);
+      }
+
+      // Close sidebar
+      function closeSidebar() {
+        console.log("Closing sidebar - adding collapsed class");
+        sidebar.classList.add("collapsed");
+        backdrop.classList.remove("show");
+      }
+
+      // Toggle button - direct onclick handler
+      sidebarToggle.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log("TOGGLE BUTTON CLICKED!");
+        console.log("Sidebar has collapsed class:", sidebar.classList.contains("collapsed"));
+        
+        if (sidebar.classList.contains("collapsed")) {
+          openSidebar();
+        } else {
+          closeSidebar();
+        }
+        return false;
+      };
+
+      // Also add event listener as backup
+      sidebarToggle.addEventListener("click", function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log("Toggle click event listener fired");
+        if (sidebar.classList.contains("collapsed")) {
+          openSidebar();
+        } else {
+          closeSidebar();
+        }
+      }, true); // Use capture phase
+
+      // Close button
+      sidebarClose.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeSidebar();
+      };
+
+      // Click backdrop to close
+      backdrop.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeSidebar();
+      };
+
+      // Close sidebar when clicking outside (but not on the toggle button)
+      document.addEventListener("click", function(e) {
+        // Don't close if clicking on toggle button or its children
+        if (sidebarToggle.contains(e.target)) {
+          return;
+        }
+        // Don't close if clicking inside sidebar
+        if (sidebar.contains(e.target)) {
+          return;
+        }
+        // Don't close if clicking on backdrop (handled separately)
+        if (backdrop.contains(e.target)) {
+          return;
+        }
+        // Only close if sidebar is open
+        if (!sidebar.classList.contains("collapsed")) {
+          closeSidebar();
+        }
+      });
+      
+      console.log("Sidebar initialization complete");
+    });
+
+    // Theme switching with localStorage persistence
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = document.getElementById('themeIcon');
+    const themeLabel = document.getElementById('themeLabel');
+    const body = document.body;
+
+    // Load saved theme or default to dark
+    const savedTheme = localStorage.getItem('cygor-theme') || 'dark';
+    if (savedTheme === 'light') {
+      body.classList.add('light-theme');
+      updateThemeUI('light');
+    }
+
+    // Theme toggle click handler
+    themeToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+
+      if (body.classList.contains('light-theme')) {
+        // Switch to dark
+        body.classList.remove('light-theme');
+        localStorage.setItem('cygor-theme', 'dark');
+        updateThemeUI('dark');
+      } else {
+        // Switch to light
+        body.classList.add('light-theme');
+        localStorage.setItem('cygor-theme', 'light');
+        updateThemeUI('light');
+      }
+
+      // Update Chart.js defaults if available
+      if (typeof window.updateChartDefaults === 'function') {
+        window.updateChartDefaults();
+      }
+
+      // Refresh all charts if available
+      if (typeof window.refreshCharts === 'function') {
+        window.refreshCharts();
+      }
+    });
+
+    // Fix modal aria-hidden accessibility issue
+    document.addEventListener('DOMContentLoaded', function() {
+      // Fix all modals to properly manage aria-hidden attribute
+      document.querySelectorAll('.modal').forEach(function(modal) {
+        // Remove aria-hidden when modal is shown
+        modal.addEventListener('show.bs.modal', function() {
+          this.removeAttribute('aria-hidden');
+        });
+        
+        // Ensure aria-hidden is removed when modal is fully shown
+        modal.addEventListener('shown.bs.modal', function() {
+          this.removeAttribute('aria-hidden');
+        });
+        
+        // Set aria-hidden when modal is hidden
+        modal.addEventListener('hidden.bs.modal', function() {
+          this.setAttribute('aria-hidden', 'true');
+        });
+      });
+      
+      // Also intercept Bootstrap Modal.show() calls to fix aria-hidden
+      const originalModalShow = bootstrap.Modal.prototype.show;
+      bootstrap.Modal.prototype.show = function() {
+        const modalElement = this._element;
+        if (modalElement) {
+          modalElement.removeAttribute('aria-hidden');
+        }
+        return originalModalShow.call(this);
+      };
+    });
+
+    function updateThemeUI(theme) {
+      if (theme === 'light') {
+        themeIcon.className = 'bi bi-sun-fill';
+        themeLabel.textContent = 'Light Mode';
+      } else {
+        themeIcon.className = 'bi bi-moon-stars';
+        themeLabel.textContent = 'Dark Mode';
+      }
+    }
+
+    // Database sync functionality - redirect to settings page
+    const syncDatabaseBtn = document.getElementById('syncDatabaseBtn');
+    if (syncDatabaseBtn) {
+      syncDatabaseBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.location.href = '/sync-status';
+      });
+    }
+
+    // Workspace selector functionality (header)
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    async function loadWorkspaceSelector() {
+      try {
+        const response = await fetch('/api/workspaces/current');
+        const data = await response.json();
+        
+        const nameSpan = document.getElementById('currentWorkspaceName');
+        if (nameSpan) {
+          if (data.active && data.workspace) {
+            nameSpan.textContent = `Current Workspace: ${data.active}`;
+            nameSpan.title = data.workspace.path;
+          } else {
+            nameSpan.textContent = 'Current Workspace: None';
+            nameSpan.title = 'No active workspace set';
+          }
+        }
+        
+        // Load workspace list for dropdown
+        const listResponse = await fetch('/api/workspaces');
+        const listData = await listResponse.json();
+        
+        const listContainer = document.getElementById('workspaceListItems');
+        if (listContainer && listData.workspaces) {
+          if (listData.workspaces.length === 0) {
+            listContainer.innerHTML = '<div class="dropdown-item-text text-muted">No workspaces</div>';
+          } else {
+            let html = '';
+            // Add "Clear Active" option if there's an active workspace
+            if (listData.active) {
+              html += `
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                  <a class="dropdown-item text-light" href="#" 
+                     onclick="clearActiveWorkspace(); return false;"
+                     style="padding: 0.75rem 1rem;">
+                    <div class="d-flex align-items-center">
+                      <i class="bi bi-x-circle me-2 text-warning"></i>
+                      <span>Clear Active Workspace</span>
+                    </div>
+                  </a>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+              `;
+            }
+            listData.workspaces.forEach(ws => {
+              const activeIcon = ws.active ? '<i class="bi bi-check-circle-fill text-success me-2"></i>' : '<i class="bi bi-circle me-2 text-muted"></i>';
+              const escapedNameForJs = JSON.stringify(ws.name);
+              const escapedNameForHtml = escapeHtml(escapedNameForJs).slice(1, -1);
+              html += `
+                <li>
+                  <div class="dropdown-item text-light ${ws.active ? 'active bg-success bg-opacity-10' : ''}"
+                       style="padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <a href="#"
+                       onclick="switchWorkspaceFromHeader(&quot;${escapedNameForHtml}&quot;); return false;"
+                       style="flex: 1; text-decoration: none; color: inherit; display: flex; align-items: center;">
+                      <div style="min-width: 20px;">${activeIcon}</div>
+                      <div class="flex-grow-1">
+                        <div style="font-weight: ${ws.active ? '600' : '400'}; font-size: 0.9rem;">${escapeHtml(ws.name)}</div>
+                        <small class="workspace-path-text" style="font-size: 0.8rem; display: block; margin-top: 0.25rem; font-family: 'Courier New', monospace;">${escapeHtml(ws.path.length > 50 ? ws.path.substring(0, 50) + '...' : ws.path)}</small>
+                      </div>
+                    </a>
+                    ${!ws.active ? `
+                    <button class="btn btn-sm btn-outline-danger"
+                            onclick="event.stopPropagation(); removeWorkspaceFromHeader(&quot;${escapedNameForHtml}&quot;); return false;"
+                            title="Delete workspace"
+                            style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
+                      <i class="bi bi-trash-fill"></i>
+                    </button>
+                    ` : ''}
+                  </div>
+                </li>
+              `;
+            });
+            listContainer.innerHTML = html;
+          }
+        }
+      } catch (error) {
+        console.error('Error loading workspace selector:', error);
+        const nameSpan = document.getElementById('currentWorkspaceName');
+        if (nameSpan) {
+          nameSpan.textContent = 'Current Workspace: Error';
+        }
+      }
+    }
+    
+    // Show alert using styled modal
+    function showAlert(message, type = 'info') {
+      const modalId = 'cygorAlertModal';
+      const existingModal = document.getElementById(modalId);
+      if (existingModal) {
+        existingModal.remove();
+      }
+      
+      const iconMap = {
+        'success': 'bi-check-circle-fill text-success',
+        'danger': 'bi-exclamation-triangle-fill text-danger',
+        'warning': 'bi-exclamation-circle-fill text-warning',
+        'info': 'bi-info-circle-fill text-info'
+      };
+      
+      const modalHtml = `
+        <div class="modal fade" id="${modalId}" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-light">
+              <div class="modal-header border-secondary">
+                <h5 class="modal-title">
+                  <i class="bi ${iconMap[type] || iconMap.info} me-2"></i>
+                  ${type.charAt(0).toUpperCase() + type.slice(1)}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                <p class="mb-0">${escapeHtml(message)}</p>
+              </div>
+              <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">OK</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+      const modalElement = document.getElementById(modalId);
+      const modal = new bootstrap.Modal(modalElement);
+      modal.show();
+      
+      modalElement.addEventListener('hidden.bs.modal', function() {
+        modalElement.remove();
+      });
+    }
+    
+    // Show modal with custom HTML body content
+    function showModal(title, htmlContent, type = 'info', size = '') {
+      const modalId = 'cygorHtmlModal';
+      const existingModal = document.getElementById(modalId);
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      const iconMap = {
+        'success': 'bi-check-circle-fill text-success',
+        'danger': 'bi-exclamation-triangle-fill text-danger',
+        'warning': 'bi-exclamation-circle-fill text-warning',
+        'info': 'bi-info-circle-fill text-info'
+      };
+
+      const sizeClass = size ? ` modal-${size}` : '';
+      const modalHtml = `
+        <div class="modal fade" id="${modalId}" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered${sizeClass}">
+            <div class="modal-content bg-dark text-light">
+              <div class="modal-header border-secondary">
+                <h5 class="modal-title">
+                  <i class="bi ${iconMap[type] || iconMap.info} me-2"></i>
+                  ${escapeHtml(title)}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                ${htmlContent}
+              </div>
+              <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+      const modalElement = document.getElementById(modalId);
+      const modal = new bootstrap.Modal(modalElement);
+      modal.show();
+
+      modalElement.addEventListener('hidden.bs.modal', function() {
+        modalElement.remove();
+      });
+    }
+
+    // Show confirmation modal
+    function showConfirm(title, message, onConfirm, type = 'warning') {
+      const modalId = 'cygorConfirmModal';
+      const existingModal = document.getElementById(modalId);
+      if (existingModal) {
+        existingModal.remove();
+      }
+      
+      const iconMap = {
+        'success': 'bi-check-circle-fill text-success',
+        'danger': 'bi-exclamation-triangle-fill text-danger',
+        'warning': 'bi-exclamation-circle-fill text-warning',
+        'info': 'bi-info-circle-fill text-info'
+      };
+      
+      const modalHtml = `
+        <div class="modal fade" id="${modalId}" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-light">
+              <div class="modal-header border-secondary">
+                <h5 class="modal-title">
+                  <i class="bi ${iconMap[type] || iconMap.warning} me-2"></i>
+                  ${escapeHtml(title)}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                <p class="mb-0">${escapeHtml(message)}</p>
+              </div>
+              <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-${type === 'danger' ? 'danger' : 'primary'}" id="confirmBtn">
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+      const modalElement = document.getElementById(modalId);
+      const modal = new bootstrap.Modal(modalElement);
+      modal.show();
+      
+      document.getElementById('confirmBtn').addEventListener('click', function() {
+        modal.hide();
+        if (onConfirm) onConfirm();
+      });
+      
+      modalElement.addEventListener('hidden.bs.modal', function() {
+        modalElement.remove();
+      });
+    }
+    
+    // Show prompt modal with input field
+    function showPrompt(title, defaultValue, onSubmit, onCancel) {
+      const modalId = 'cygorPromptModal';
+      const existingModal = document.getElementById(modalId);
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      const modalHtml = `
+        <div class="modal fade" id="${modalId}" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-light">
+              <div class="modal-header border-secondary">
+                <h5 class="modal-title">
+                  <i class="bi bi-pencil-square text-info me-2"></i>
+                  ${escapeHtml(title)}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                <input type="text" class="form-control bg-darker text-light border-secondary" id="cygorPromptInput"
+                  value="${escapeHtml(defaultValue || '')}" autocomplete="off">
+              </div>
+              <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="promptSubmitBtn">OK</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+      const modalElement = document.getElementById(modalId);
+      const modal = new bootstrap.Modal(modalElement);
+      const input = document.getElementById('cygorPromptInput');
+
+      modal.show();
+      modalElement.addEventListener('shown.bs.modal', function() {
+        input.focus();
+        input.select();
+      });
+
+      let submitted = false;
+
+      function submit() {
+        if (submitted) return;
+        submitted = true;
+        const value = input.value;
+        modal.hide();
+        if (onSubmit) onSubmit(value);
+      }
+
+      document.getElementById('promptSubmitBtn').addEventListener('click', submit);
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); submit(); }
+      });
+
+      modalElement.addEventListener('hidden.bs.modal', function() {
+        if (!submitted && onCancel) onCancel();
+        modalElement.remove();
+      });
+    }
+
+    async function switchWorkspaceFromHeader(name) {
+      showConfirm(
+        'Switch Workspace',
+        `Switch to workspace "${escapeHtml(name)}"? The web UI will need to be restarted for changes to take effect.`,
+        async () => {
+          try {
+            const response = await fetch('/api/workspaces/switch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name_or_path: name })
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+              throw new Error(data.error || 'Failed to switch workspace');
+            }
+            
+            showAlert(`Switched to workspace: ${name}\n\nPlease restart the web UI for changes to take effect.`, 'success');
+            loadWorkspaceSelector();
+          } catch (error) {
+            showAlert('Error: ' + error.message, 'danger');
+          }
+        },
+        'info'
+      );
+    }
+    
+    async function clearActiveWorkspace() {
+      showConfirm(
+        'Clear Active Workspace',
+        'Clear the active workspace? You will need to select a workspace before using Cygor features.',
+        async () => {
+          try {
+            const response = await fetch('/api/workspaces/clear', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+              throw new Error(data.error || 'Failed to clear active workspace');
+            }
+            
+            showAlert('Active workspace cleared. Please restart the web UI for changes to take effect.', 'success');
+            loadWorkspaceSelector();
+          } catch (error) {
+            showAlert('Error: ' + error.message, 'danger');
+          }
+        },
+        'warning'
+      );
+    }
+    
+    async function removeWorkspaceFromHeader(name) {
+      const modalHtml = `
+        <div class="modal fade" id="removeWorkspaceModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-light">
+              <div class="modal-header border-secondary">
+                <h5 class="modal-title"><i class="bi bi-trash-fill me-2 text-danger"></i>Remove Workspace</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                <p class="mb-2">Remove workspace <strong>"${escapeHtml(name)}"</strong> from registry?</p>
+                <div class="alert alert-info" role="alert">
+                  <i class="bi bi-info-circle-fill me-2"></i>
+                  This will not delete the workspace files, only remove it from the registry.
+                </div>
+              </div>
+              <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmRemoveBtn">
+                  <i class="bi bi-trash-fill me-1"></i>Remove
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      const existingModal = document.getElementById('removeWorkspaceModal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+      
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+      const modalElement = document.getElementById('removeWorkspaceModal');
+      const modal = new bootstrap.Modal(modalElement);
+      modal.show();
+      
+      document.getElementById('confirmRemoveBtn').addEventListener('click', async function() {
+        modal.hide();
+        
+        try {
+          const response = await fetch(`/api/workspaces/${encodeURIComponent(name)}`, {
+            method: 'DELETE'
+          });
+          
+          const data = await response.json();
+          
+          if (!response.ok) {
+            throw new Error(data.error || 'Failed to remove workspace');
+          }
+          
+          showAlert(data.message || `Workspace removed: ${name}`, 'success');
+          loadWorkspaceSelector();
+        } catch (error) {
+          showAlert('Error: ' + error.message, 'danger');
+        }
+      });
+      
+      modalElement.addEventListener('hidden.bs.modal', function() {
+        modalElement.remove();
+      });
+    }
+    
+    // Load workspace selector on page load
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function() {
+        loadWorkspaceSelector();
+      });
+    } else {
+      loadWorkspaceSelector();
+    }
+    
+    // Refresh workspace selector when dropdown is opened
+    const workspaceDropdown = document.getElementById('workspaceDropdown');
+    if (workspaceDropdown) {
+      workspaceDropdown.addEventListener('show.bs.dropdown', loadWorkspaceSelector);
+
+      // Fix dropdown positioning to prevent cutoff
+      workspaceDropdown.addEventListener('shown.bs.dropdown', function() {
+        const dropdownMenu = document.getElementById('workspaceDropdownMenu');
+        if (dropdownMenu) {
+          const rect = dropdownMenu.getBoundingClientRect();
+          const viewportWidth = window.innerWidth;
+          const viewportHeight = window.innerHeight;
+
+          // Check if dropdown is cut off on the right
+          if (rect.right > viewportWidth) {
+            const overflow = rect.right - viewportWidth;
+            dropdownMenu.style.transform = `translateX(-${overflow + 10}px)`;
+          }
+
+          // Check if dropdown is cut off on the bottom
+          if (rect.bottom > viewportHeight) {
+            const overflow = rect.bottom - viewportHeight;
+            dropdownMenu.style.transform = (dropdownMenu.style.transform || '') + ` translateY(-${overflow + 10}px)`;
+          }
+
+          // Check if dropdown is cut off on the left (shouldn't happen, but just in case)
+          if (rect.left < 0) {
+            dropdownMenu.style.transform = `translateX(${Math.abs(rect.left) + 10}px)`;
+          }
+        }
+      });
+    }
+
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,103 @@
+name: cygor-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: cygor-postgres-dev
+    hostname: cygor-postgres-dev
+    
+    environment:
+      POSTGRES_USER: cygor
+      POSTGRES_PASSWORD: cygorpass
+      POSTGRES_DB: cygor
+      PGDATA: /var/lib/postgresql/data/pgdata
+    
+    volumes:
+      # Persist PostgreSQL data
+      - cygor-postgres-dev-data:/var/lib/postgresql/data
+    
+    ports:
+      # Expose PostgreSQL port (optional, for external access)
+      # Uses POSTGRES_HOST_PORT env var if set, otherwise defaults to 5434
+      # The internal port (5432) remains the same - cygor connects via service name
+      - "${POSTGRES_HOST_PORT:-5434}:5432"
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cygor -d cygor"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "2.0"
+
+    restart: unless-stopped
+
+  cygor:
+    build: .
+    image: cygor:latest
+
+    container_name: cygor-dev
+    hostname: cygor-dev
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    ports:
+      - 8080:8080
+
+    volumes:
+      # Mount source code for development (hot-reload)
+      - ./cygor:/opt/cygor/cygor
+      # Mount results directory for scan outputs, credrecon results, and database
+      - ${CYGOR_RESULTS_PATH:-./results}:/opt/cygor/results
+      # Mount .cygor directory for authentication tokens, JWT secrets, and SSO config
+      # This persists authentication data across container restarts
+      - ${CYGOR_CONFIG_PATH:-./cygor-config}:/root/.cygor
+
+    environment:
+      # Set results directory for all modules (credrecon, smbexplorer, etc.)
+      - CYGOR_RESULTS_DIR=/opt/cygor/results
+      - CYGOR_WORKSPACE=/opt/cygor/results
+      # Use PostgreSQL service
+      - CYGOR_DB_URL=postgresql+psycopg_async://cygor:cygorpass@postgres:5432/cygor
+      # Optional: Enable authentication (requires login to access web interface)
+      # When enabled, an access token will be generated and displayed on first startup
+      # The token is stored in /root/.cygor/web_token.txt (mounted as cygor-config volume)
+      - CYGOR_AUTH_LOGIN=${CYGOR_AUTH_LOGIN:-0}
+      # Optional: Enable debug mode for development
+      # - CYGOR_DEBUG=1
+      # Optional: Set verbosity level (0=normal, 1=verbose, 2=debug)
+      # - CYGOR_VERBOSE=1
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+          cpus: "4.0"
+
+    command: >
+      sh -c "
+      if [ \"$$CYGOR_AUTH_LOGIN\" = \"1\" ]; then
+        cygor web start --host 0.0.0.0 --port 8080 --load-dir /opt/cygor/results --auth-login
+      else
+        cygor web start --host 0.0.0.0 --port 8080 --load-dir /opt/cygor/results
+      fi
+      "
+
+    restart: unless-stopped
+
+volumes:
+  cygor-postgres-dev-data:
+    driver: local

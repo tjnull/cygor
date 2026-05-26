@@ -1,0 +1,2007 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+/* Search-page locals: anything generic (cards, chips, kbd, code) is in
+   cygor-components.css under .cy-*. The rules below are layouts the
+   primitives don't cover yet: the search input shell + autocomplete
+   dropdown + result-card hover state. */
+
+.input-group .dropdown { display: flex; }
+.input-group .dropdown .export-btn {
+  border-radius: 0 6px 6px 0;
+  height: 100%;
+}
+
+.results-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.results-card:hover {
+  border-color: rgba(13, 110, 253, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.results-card .card-header {
+  background: rgba(13, 110, 253, 0.1) !important;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.08) !important;
+  transition: all 0.2s ease;
+}
+
+.results-card .card-header:hover {
+  background: rgba(13, 110, 253, 0.15) !important;
+}
+
+/* Results Tabs Styling */
+.nav-tabs {
+  background: rgba(13, 110, 253, 0.05);
+}
+
+.nav-tabs .nav-link {
+  color: #8b949e;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 1rem 1.5rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.nav-tabs .nav-link:hover {
+  color: #e6edf3;
+  background: rgba(13, 110, 253, 0.1);
+  border-bottom-color: rgba(13, 110, 253, 0.3);
+}
+
+.nav-tabs .nav-link.active {
+  color: #e6edf3;
+  background: rgba(13, 110, 253, 0.15);
+  border-bottom-color: #0d6efd;
+}
+
+.nav-tabs .nav-link .badge {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+}
+
+/* Tab content styling */
+.tab-content {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Light theme tabs */
+body.light-theme .nav-tabs {
+  background: #f8f9fa;
+}
+
+body.light-theme .nav-tabs .nav-link {
+  color: #6c757d;
+}
+
+body.light-theme .nav-tabs .nav-link:hover {
+  color: #212529;
+  background: #e9ecef;
+}
+
+body.light-theme .nav-tabs .nav-link.active {
+  color: #0d6efd;
+  background: #ffffff;
+  border-bottom-color: #0d6efd;
+}
+
+.result-item {
+  padding: 1.25rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s ease;
+}
+
+.result-item:hover {
+  background: rgba(13, 110, 253, 0.08);
+  transform: translateX(4px);
+}
+
+.result-item:last-child {
+  border-bottom: none;
+}
+
+.result-item a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.result-item .text-light {
+  color: #e6edf3 !important;
+  font-weight: 600;
+}
+
+.result-item .badge {
+  font-weight: 600;
+  padding: 0.375rem 0.75rem;
+}
+
+/* Stats Badge Styling */
+.stats-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.75rem;
+  background: rgba(13, 110, 253, 0.15);
+  border: 1px solid rgba(13, 110, 253, 0.3);
+  border-radius: 6px;
+  color: #0d6efd;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.export-dropdown {
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 0.5rem;
+}
+
+.export-btn {
+  background: #238636;
+  border-color: #238636;
+  color: #ffffff;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+}
+
+.export-btn:hover {
+  background: #2ea043;
+  border-color: #2ea043;
+  color: #ffffff;
+}
+
+.stats-badge {
+  background: #1f6feb;
+  color: #ffffff;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* Light theme overrides */
+body.light-theme .search-hero {
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+  border-color: #dee2e6;
+}
+
+body.light-theme .search-input-lg {
+  background: #ffffff;
+  color: #212529;
+  border-color: #dee2e6;
+}
+
+body.light-theme .search-input-lg:focus {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+  background: #ffffff;
+}
+
+body.light-theme .filter-chip {
+  background: #ffffff;
+  border-color: #dee2e6;
+  color: #212529;
+}
+
+body.light-theme .filter-chip:hover {
+  background: #f8f9fa;
+  border-color: #0d6efd;
+}
+
+body.light-theme .filter-chip.active {
+  background: #0d6efd;
+  border-color: #0d6efd;
+  color: #ffffff;
+}
+
+body.light-theme .results-card {
+  background: #ffffff;
+  border-color: #dee2e6;
+}
+
+body.light-theme .results-card:hover {
+  border-color: #adb5bd;
+}
+
+body.light-theme .result-item {
+  border-bottom-color: #e9ecef;
+}
+
+body.light-theme .result-item:hover {
+  background: #f8f9fa;
+}
+
+body.light-theme .card.bg-dark {
+  background: #ffffff !important;
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme .card-header {
+  background: #f8f9fa !important;
+  border-bottom-color: #dee2e6 !important;
+}
+
+body.light-theme h1,
+body.light-theme h2,
+body.light-theme h3,
+body.light-theme h4,
+body.light-theme h5,
+body.light-theme .text-light {
+  color: #212529 !important;
+}
+
+body.light-theme .export-dropdown {
+  background: #ffffff;
+  border-color: #dee2e6;
+}
+
+body.light-theme .alert-info {
+  background: #cfe2ff !important;
+  color: #084298 !important;
+  border-color: #b6d4fe !important;
+}
+
+body.light-theme .btn-link.text-info {
+  color: #0d6efd !important;
+}
+
+body.light-theme .card.bg-dark.border-secondary {
+  background: #ffffff !important;
+  border-color: #dee2e6 !important;
+}
+
+body.light-theme .card.bg-dark.border-secondary .card-body {
+  background: #ffffff !important;
+}
+
+body.light-theme .card.bg-dark.border-secondary code {
+  background: #f8f9fa !important;
+  color: #0d6efd !important;
+}
+
+body.light-theme .card.bg-dark.border-secondary .rounded {
+  background: #f8f9fa !important;
+  border-color: #dee2e6 !important;
+}
+</style>
+
+<style>
+/* Filter Checkbox List Styling */
+.filter-checkbox-list {
+  max-height: 250px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.filter-checkbox-item {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 0.5rem;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  margin-bottom: 0.5rem;
+  background: transparent;
+}
+
+.filter-checkbox-item:hover {
+  background: rgba(13, 110, 253, 0.1);
+  transform: translateX(4px);
+}
+
+.filter-checkbox-item input[type="checkbox"] {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  accent-color: #0d6efd;
+}
+
+.filter-checkbox-item:last-child {
+  margin-bottom: 0;
+}
+
+.filter-checkbox-item span {
+  font-weight: 500;
+  color: #e6edf3;
+}
+
+/* Autocomplete Styling */
+.autocomplete-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.autocomplete-suggestion {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  border-bottom: 1px solid #21262d;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.autocomplete-suggestion:hover,
+.autocomplete-suggestion.active {
+  background: #1f6feb;
+  color: #ffffff;
+}
+
+.autocomplete-suggestion:last-child {
+  border-bottom: none;
+}
+
+.autocomplete-suggestion .ac-body { min-width: 0; flex: 1; }
+
+.autocomplete-suggestion-title {
+  font-weight: 600;
+  margin-bottom: 0.1rem;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.autocomplete-suggestion-desc {
+  font-size: 0.78rem;
+  opacity: 0.75;
+}
+
+/* Kind badge — distinguishes a real host hit from a service hit from
+   a static syntax cheat-sheet entry. */
+.autocomplete-suggestion .ac-kind {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.18rem 0.4rem;
+  border-radius: 3px;
+  flex-shrink: 0;
+  width: 38px;
+  text-align: center;
+}
+.ac-kind-host { background: rgba(63, 185, 80, 0.18); color: #3fb950; }
+.ac-kind-svc  { background: rgba(88, 166, 255, 0.18); color: #58a6ff; }
+.ac-kind-syn  { background: rgba(210, 153, 34, 0.18); color: #d29922; }
+/* On hover/active row (blue bg) keep the badge readable */
+.autocomplete-suggestion:hover .ac-kind,
+.autocomplete-suggestion.active .ac-kind {
+  background: rgba(255,255,255,0.2);
+  color: #ffffff;
+}
+
+.autocomplete-suggestion kbd {
+  background: #0d1117;
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  margin-left: 0.5rem;
+}
+
+/* Cap search form filter cells on ultra-wide displays so 2-up
+   col-md-6 inputs don't stretch to 1000px+. (Legacy advanced filters
+   collapse still uses .row.g-3.) */
+@media (min-width: 1900px) {
+  form .row.g-3 > [class*="col-md-"],
+  form .row.g-2 > [class*="col-md-"] {
+    max-width: 480px;
+  }
+  form .row.g-3 > .col-md-12,
+  form .row.g-2 > .col-md-12 {
+    max-width: 100%;
+  }
+}
+
+/* ============================================================
+   Page-specific layout primitives, built on .cy-* foundation
+   ============================================================ */
+
+/* Command bar: input shell + primary action + overflow row */
+.cy-cmd-bar {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+.cy-input-shell {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-3);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  position: relative;
+}
+.cy-input-shell:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.cy-input-shell > i { color: var(--text-3); }
+.cy-input-shell > input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  outline: none;
+  font-size: var(--fs-md);
+  padding: 8px 0;
+  font-family: inherit;
+  min-width: 0;
+}
+.cy-input-shell > input::placeholder { color: var(--text-3); }
+
+/* Filter row: chips + labeled input groups + advanced toggle */
+.cy-filter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  margin-top: var(--space-3);
+}
+.cy-filter-group {
+  display: flex; align-items: center; gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.cy-filter-label {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  margin-right: var(--space-1);
+}
+.cy-port-input { width: 90px; }
+
+/* Chips made interactive: wrap a hidden checkbox so the whole pill
+   toggles. Active state is driven by :has() to avoid JS. */
+.cy-chip:has(> input[type="checkbox"]:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text-1);
+}
+
+/* Workbench grid: syntax reference (2fr) + saved searches (1fr) */
+.cy-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+@media (min-width: 1100px) {
+  .cy-workbench { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+}
+
+.cy-syntax-cols {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+@media (min-width: 800px)  { .cy-syntax-cols { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1500px) { .cy-syntax-cols { grid-template-columns: repeat(3, 1fr); } }
+.cy-syntax-group-title {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0 0 var(--space-2) 0;
+}
+.cy-syntax-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.cy-syntax-list li {
+  display: grid;
+  grid-template-columns: minmax(160px, max-content) 1fr;
+  gap: var(--space-3);
+  align-items: center;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.cy-syntax-desc { color: var(--text-3); font-size: var(--fs-sm); }
+</style>
+
+<div class="container-fluid py-3">
+  <!-- Page header (cy-page-header primitive) -->
+  <div class="cy-page-header">
+    <h1><i class="bi bi-search"></i>Search</h1>
+    <span class="cy-page-subtitle">Search and export scan data</span>
+  </div>
+
+  <!-- Retrieval Engine card -->
+  <div class="cy-card mb-3">
+    <div class="cy-card-header">
+      <div class="cy-card-title"><i class="bi bi-funnel-fill"></i>Retrieval Engine</div>
+      <div class="d-flex align-items-center gap-2" style="font-size: var(--fs-xs); color: var(--text-3);">
+        <span><kbd class="cy-kbd">Ctrl</kbd>/<kbd class="cy-kbd">⌘</kbd>+<kbd class="cy-kbd">K</kbd> focus</span>
+        <span><kbd class="cy-kbd">Ctrl</kbd>+<kbd class="cy-kbd">↵</kbd> search</span>
+        <span><kbd class="cy-kbd">Tab</kbd> autocomplete</span>
+      </div>
+    </div>
+    <div class="cy-card-body">
+      <form method="get" action="/search" id="searchForm">
+        <!-- Command bar: search input + primary action + overflow menu -->
+        <div class="cy-cmd-bar">
+          <div class="cy-input-shell">
+            <i class="bi bi-search"></i>
+            <input
+              type="text"
+              name="q"
+              id="searchQuery"
+              placeholder="Search hosts, services, banners, script output…"
+              value="{{ query or '' }}"
+              autofocus
+            >
+          </div>
+          <button class="cy-btn cy-btn-primary" type="submit">
+            <i class="bi bi-search"></i>Search
+          </button>
+          <button class="cy-btn" type="button" onclick="showSaveSearchModal()" title="Save this search">
+            <i class="bi bi-bookmark-plus"></i>Save
+          </button>
+          <div class="dropdown">
+            <button class="cy-btn dropdown-toggle" type="button" data-bs-toggle="dropdown">
+              <i class="bi bi-download"></i>Export
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="#" onclick="exportResults('json'); return false;"><i class="bi bi-filetype-json me-2"></i>JSON</a></li>
+              <li><a class="dropdown-item" href="#" onclick="exportResults('csv'); return false;"><i class="bi bi-filetype-csv me-2"></i>CSV</a></li>
+              <li><a class="dropdown-item" href="#" onclick="exportResults('xml'); return false;"><i class="bi bi-file-earmark-code me-2"></i>XML</a></li>
+              <li><a class="dropdown-item" href="#" onclick="exportResults('txt'); return false;"><i class="bi bi-filetype-txt me-2"></i>Plain Text</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" href="#" onclick="copyToClipboard(); return false;"><i class="bi bi-clipboard me-2"></i>Copy to Clipboard</a></li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Filter row: chips + port range + sort + advanced toggle on one line -->
+        <div class="cy-filter-row">
+          <div class="cy-filter-group">
+            <span class="cy-filter-label">Filter</span>
+            <label class="cy-chip"><input type="checkbox" name="filter" value="hosts" hidden {% if 'hosts' in (filters or []) %}checked{% endif %}><i class="bi bi-hdd-network"></i><span>Hosts</span></label>
+            <label class="cy-chip"><input type="checkbox" name="filter" value="services" hidden {% if 'services' in (filters or []) %}checked{% endif %}><i class="bi bi-diagram-3"></i><span>Services</span></label>
+            <label class="cy-chip"><input type="checkbox" name="filter" value="scripts" hidden {% if 'scripts' in (filters or []) %}checked{% endif %}><i class="bi bi-file-code"></i><span>Scripts</span></label>
+            <label class="cy-chip"><input type="checkbox" name="filter" value="banners" hidden {% if 'banners' in (filters or []) %}checked{% endif %}><i class="bi bi-terminal"></i><span>Banners</span></label>
+          </div>
+          <div class="cy-filter-group">
+            <span class="cy-filter-label">Ports</span>
+            <input type="number" name="port_min" id="portMinInput" class="cy-input cy-port-input" placeholder="Min" value="{{ port_min or '' }}" min="1" max="65535">
+            <span style="color: var(--text-3); font-size: var(--fs-xs);">to</span>
+            <input type="number" name="port_max" id="portMaxInput" class="cy-input cy-port-input" placeholder="Max" value="{{ port_max or '' }}" min="1" max="65535">
+          </div>
+          <div class="cy-filter-group">
+            <span class="cy-filter-label">Sort</span>
+            <select name="sort" class="cy-input" style="width: auto; min-width: 160px;">
+              <option value="relevance" {% if sort == 'relevance' %}selected{% endif %}>Relevance</option>
+              <option value="ip_asc" {% if sort == 'ip_asc' %}selected{% endif %}>IP (A–Z)</option>
+              <option value="ip_desc" {% if sort == 'ip_desc' %}selected{% endif %}>IP (Z–A)</option>
+              <option value="port_asc" {% if sort == 'port_asc' %}selected{% endif %}>Port (Low–High)</option>
+              <option value="port_desc" {% if sort == 'port_desc' %}selected{% endif %}>Port (High–Low)</option>
+            </select>
+          </div>
+          <button class="cy-btn cy-btn-ghost" type="button" data-bs-toggle="collapse" data-bs-target="#advancedFilters" aria-expanded="false" style="margin-left: auto;">
+            <i class="bi bi-sliders"></i>Advanced
+          </button>
+        </div>
+
+      <!-- Advanced Filters Section (Collapsible) -->
+      <div class="collapse" id="advancedFilters">
+        <div class="card bg-dark border-secondary mb-3">
+          <div class="card-body">
+            <div class="row g-3">
+              <!-- Service Multi-Select -->
+              <div class="col-md-12">
+                <label class="form-label text-light fw-semibold">
+                  <i class="bi bi-diagram-3 me-1"></i>Services
+                </label>
+                <div class="service-filter-container">
+                  <div class="input-group mb-2">
+                    <span class="input-group-text bg-dark border-secondary">
+                      <i class="bi bi-search text-secondary"></i>
+                    </span>
+                    <input type="text" id="serviceSearch" class="form-control bg-dark text-light border-secondary" placeholder="Filter services...">
+                  </div>
+                  <div id="serviceList" class="filter-checkbox-list">
+                    <label class="filter-checkbox-item">
+                      <input type="checkbox" name="service_filter" value="http" class="form-check-input">
+                      <span class="ms-2">HTTP</span>
+                    </label>
+                    <label class="filter-checkbox-item">
+                      <input type="checkbox" name="service_filter" value="https" class="form-check-input">
+                      <span class="ms-2">HTTPS</span>
+                    </label>
+                    <label class="filter-checkbox-item">
+                      <input type="checkbox" name="service_filter" value="ssh" class="form-check-input">
+                      <span class="ms-2">SSH</span>
+                    </label>
+                    <label class="filter-checkbox-item">
+                      <input type="checkbox" name="service_filter" value="ftp" class="form-check-input">
+                      <span class="ms-2">FTP</span>
+                    </label>
+                    <label class="filter-checkbox-item">
+                      <input type="checkbox" name="service_filter" value="smb" class="form-check-input">
+                      <span class="ms-2">SMB</span>
+                    </label>
+                    <label class="filter-checkbox-item">
+                      <input type="checkbox" name="service_filter" value="rdp" class="form-check-input">
+                      <span class="ms-2">RDP</span>
+                    </label>
+                    <label class="filter-checkbox-item">
+                      <input type="checkbox" name="service_filter" value="mysql" class="form-check-input">
+                      <span class="ms-2">MySQL</span>
+                    </label>
+                    <label class="filter-checkbox-item">
+                      <input type="checkbox" name="service_filter" value="postgres" class="form-check-input">
+                      <span class="ms-2">PostgreSQL</span>
+                    </label>
+                    <label class="filter-checkbox-item">
+                      <input type="checkbox" name="service_filter" value="mssql" class="form-check-input">
+                      <span class="ms-2">MSSQL</span>
+                    </label>
+                    <label class="filter-checkbox-item">
+                      <input type="checkbox" name="service_filter" value="dns" class="form-check-input">
+                      <span class="ms-2">DNS</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Protocol Multi-Select -->
+              <div class="col-md-6">
+                <label class="form-label text-light fw-semibold">
+                  <i class="bi bi-layers me-1"></i>Protocols
+                </label>
+                <div class="filter-checkbox-list">
+                  <label class="filter-checkbox-item">
+                    <input type="checkbox" name="protocol_filter" value="tcp" class="form-check-input">
+                    <span class="ms-2">TCP</span>
+                  </label>
+                  <label class="filter-checkbox-item">
+                    <input type="checkbox" name="protocol_filter" value="udp" class="form-check-input">
+                    <span class="ms-2">UDP</span>
+                  </label>
+                </div>
+
+                <label class="form-label text-light fw-semibold mt-3">
+                  <i class="bi bi-hdd-network me-1"></i>OS Type
+                </label>
+                <div class="filter-checkbox-list">
+                  <label class="filter-checkbox-item">
+                    <input type="checkbox" name="os_filter" value="windows" class="form-check-input">
+                    <span class="ms-2">Windows</span>
+                  </label>
+                  <label class="filter-checkbox-item">
+                    <input type="checkbox" name="os_filter" value="linux" class="form-check-input">
+                    <span class="ms-2">Linux</span>
+                  </label>
+                  <label class="filter-checkbox-item">
+                    <input type="checkbox" name="os_filter" value="macos" class="form-check-input">
+                    <span class="ms-2">macOS</span>
+                  </label>
+                  <label class="filter-checkbox-item">
+                    <input type="checkbox" name="os_filter" value="bsd" class="form-check-input">
+                    <span class="ms-2">BSD/Unix</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+    </div>
+  </div>
+
+  {% if not query %}
+  <!-- Empty-state workbench: syntax reference (left, 2fr) +
+       saved searches (right, 1fr). Hidden once a query is active so
+       results get the full width. -->
+  <div class="cy-workbench">
+    <div class="cy-card">
+      <div class="cy-card-header">
+        <div class="cy-card-title"><i class="bi bi-code-slash"></i>Search Syntax</div>
+      </div>
+      <div class="cy-card-body">
+        <div class="cy-syntax-cols">
+          <div class="cy-syntax-group">
+            <h4 class="cy-syntax-group-title">Basic</h4>
+            <ul class="cy-syntax-list">
+              <li><code class="cy-code">192.168.1</code><span class="cy-syntax-desc">Find hosts in subnet</span></li>
+              <li><code class="cy-code">ssh</code><span class="cy-syntax-desc">SSH services</span></li>
+              <li><code class="cy-code">Apache</code><span class="cy-syntax-desc">Apache servers</span></li>
+              <li><code class="cy-code">SSL</code><span class="cy-syntax-desc">SSL/TLS info</span></li>
+            </ul>
+          </div>
+          <div class="cy-syntax-group">
+            <h4 class="cy-syntax-group-title">Field filters</h4>
+            <ul class="cy-syntax-list">
+              <li><code class="cy-code">ip:192.168.1.0/24</code><span class="cy-syntax-desc">CIDR</span></li>
+              <li><code class="cy-code">port:22</code><span class="cy-syntax-desc">Specific port</span></li>
+              <li><code class="cy-code">port:80-443</code><span class="cy-syntax-desc">Port range</span></li>
+              <li><code class="cy-code">service:http</code><span class="cy-syntax-desc">Service name</span></li>
+              <li><code class="cy-code">os:Windows</code><span class="cy-syntax-desc">OS detection</span></li>
+              <li><code class="cy-code">banner:"OpenSSH"</code><span class="cy-syntax-desc">Quoted phrase</span></li>
+            </ul>
+          </div>
+          <div class="cy-syntax-group">
+            <h4 class="cy-syntax-group-title">Operators</h4>
+            <ul class="cy-syntax-list">
+              <li><code class="cy-code">ssh AND port:22</code><span class="cy-syntax-desc">Both match</span></li>
+              <li><code class="cy-code">http OR https</code><span class="cy-syntax-desc">Either match</span></li>
+              <li><code class="cy-code">NOT port:22</code><span class="cy-syntax-desc">Exclude</span></li>
+              <li><code class="cy-code">banner:/Apache.*2\.4/</code><span class="cy-syntax-desc">Regex</span></li>
+              <li><code class="cy-code">ip:10.0.0.0/8 AND port:80-443</code><span class="cy-syntax-desc">Combined</span></li>
+              <li><code class="cy-code">os:Windows AND service:rdp</code><span class="cy-syntax-desc">Win + RDP</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cy-card">
+      <div class="cy-card-header">
+        <div class="cy-card-title"><i class="bi bi-bookmarks-fill"></i>Saved Searches</div>
+      </div>
+      <div class="cy-card-body cy-card-body--flush">
+        <div id="savedSearchesList">
+          <div class="cy-empty">
+            <i class="bi bi-hourglass-split me-2"></i>Loading saved searches…
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if query %}
+    <!-- Results Header -->
+    <div class="alert alert-info border-0 mb-4 d-flex justify-content-between align-items-center">
+      <div>
+        <i class="bi bi-info-circle me-2"></i>
+        Showing results for: <strong>"{{ query }}"</strong>
+        <span class="ms-3">
+          <span class="stats-badge">{{ hosts_total }} hosts</span>
+          <span class="stats-badge ms-2">{{ ports_total }} services</span>
+          <span class="stats-badge ms-2">{{ scripts_total }} scripts</span>
+        </span>
+      </div>
+      <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#columnCustomizationModal">
+        <i class="bi bi-layout-three-columns me-1"></i>Customize Columns
+      </button>
+    </div>
+
+    <!-- Results Tabs -->
+    <div class="card bg-dark results-card">
+      <!-- Tab Navigation -->
+      <div class="card-header bg-dark border-secondary p-0">
+        <ul class="nav nav-tabs border-0" id="resultsTab" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="hosts-tab" data-bs-toggle="tab" data-bs-target="#hosts-pane" type="button" role="tab" aria-controls="hosts-pane" aria-selected="true">
+              <i class="bi bi-hdd-network me-2 text-info"></i>Hosts
+              <span class="badge bg-info ms-2">{{ hosts_total }}</span>
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="services-tab" data-bs-toggle="tab" data-bs-target="#services-pane" type="button" role="tab" aria-controls="services-pane" aria-selected="false">
+              <i class="bi bi-diagram-3-fill me-2 text-success"></i>Services
+              <span class="badge bg-success ms-2">{{ ports_total }}</span>
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="banners-tab" data-bs-toggle="tab" data-bs-target="#banners-pane" type="button" role="tab" aria-controls="banners-pane" aria-selected="false">
+              <i class="bi bi-terminal me-2 text-danger"></i>Banners
+              <span class="badge bg-danger ms-2">{{ ports_total }}</span>
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="scripts-tab" data-bs-toggle="tab" data-bs-target="#scripts-pane" type="button" role="tab" aria-controls="scripts-pane" aria-selected="false">
+              <i class="bi bi-file-code-fill me-2 text-warning"></i>Script Output
+              <span class="badge bg-warning text-dark ms-2">{{ scripts_total }}</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="tab-content" id="resultsTabContent">
+        <!-- Hosts Tab Pane -->
+        <div class="tab-pane fade show active" id="hosts-pane" role="tabpanel" aria-labelledby="hosts-tab">
+          <div class="card-body p-0" style="max-height: 600px; overflow-y: auto;">
+            {% if hosts %}
+              <div id="hostsResults">
+                {% for h in hosts %}
+                  <div class="result-item" data-type="host" data-ip="{{ h.address }}" data-hostname="{{ h.hostname or '' }}">
+                    <a href="/hosts/{{ h.id }}" class="text-decoration-none">
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-hdd-network-fill text-info me-3 fs-5"></i>
+                        <div class="flex-grow-1">
+                          <div class="text-light fw-semibold mb-1" style="font-size: 1.05rem;">{{ h.address }}</div>
+                          {% if h.hostname %}
+                            <div class="text-secondary small">
+                              <i class="bi bi-globe2 me-1"></i>{{ h.hostname }}
+                            </div>
+                          {% endif %}
+                          <div class="text-secondary small mt-1">
+                            <span class="badge bg-secondary">{{ h.ports|length if h.ports else 0 }} ports</span>
+                          </div>
+                        </div>
+                        <i class="bi bi-chevron-right text-secondary"></i>
+                      </div>
+                    </a>
+                  </div>
+                {% endfor %}
+              </div>
+
+              {% if hosts_pages > 1 %}
+                <div class="p-3 border-top border-secondary">
+                  {% from "pagination.html" import render_pagination %}
+                  {{ render_pagination(page, hosts_pages, per_page, '/search', True) }}
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="text-center text-secondary py-5">
+                <i class="bi bi-inbox fs-1 mb-3 d-block"></i>
+                <div>No matching hosts found</div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Services Tab Pane -->
+        <div class="tab-pane fade" id="services-pane" role="tabpanel" aria-labelledby="services-tab">
+          <div class="card-body p-0" style="max-height: 600px; overflow-y: auto;">
+            {% if ports %}
+              <div id="servicesResults">
+                {% for p in ports %}
+                  <div class="result-item" data-type="service" data-ip="{{ p.host.address }}" data-port="{{ p.port }}" data-service="{{ p.service or 'unknown' }}" data-banner="{{ p.banner or '' }}">
+                    <div class="d-flex align-items-start">
+                      <i class="bi bi-diagram-3-fill text-success me-3 fs-5 mt-1"></i>
+                      <div class="flex-grow-1">
+                        <div class="mb-2">
+                          <a href="/hosts/{{ p.host.id }}" class="text-info text-decoration-none fw-semibold">
+                            {{ p.host.address }}
+                          </a>
+                          <span class="text-secondary mx-1">:</span>
+                          <span class="badge bg-primary" style="font-size: 0.9rem; padding: 0.4rem 0.75rem;">{{ p.port }}/{{ p.protocol or 'tcp' }}</span>
+                        </div>
+                        <div class="mb-2">
+                          <span class="badge bg-success">{{ p.service or "unknown" }}</span>
+                          {% if p.banner %}
+                            <span class="badge bg-secondary ms-1">has banner</span>
+                          {% endif %}
+                        </div>
+                        {% if p.banner %}
+                          <div class="text-secondary font-monospace small p-2 rounded" style="background: #0d1117; border: 1px solid #30363d; word-break: break-all;">
+                            {{ p.banner[:150] }}{% if p.banner|length > 150 %}<span class="text-warning">...</span>{% endif %}
+                          </div>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+
+              {% if ports_pages > 1 %}
+                <div class="p-3 border-top border-secondary">
+                  {% from "pagination.html" import render_pagination %}
+                  {{ render_pagination(page, ports_pages, per_page, '/search', True) }}
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="text-center text-secondary py-5">
+                <i class="bi bi-inbox fs-1 mb-3 d-block"></i>
+                <div>No matching services found</div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Banners Tab Pane -->
+        <div class="tab-pane fade" id="banners-pane" role="tabpanel" aria-labelledby="banners-tab">
+          <div class="card-body p-0" style="max-height: 600px; overflow-y: auto;">
+            {% if ports %}
+              <div id="bannersResults">
+                {% for p in ports %}
+                  {% if p.banner %}
+                  <div class="result-item" data-type="banner" data-ip="{{ p.host.address }}" data-port="{{ p.port }}" data-banner="{{ p.banner }}">
+                    <div class="d-flex align-items-start">
+                      <i class="bi bi-terminal-fill text-danger me-3 fs-5 mt-1"></i>
+                      <div class="flex-grow-1">
+                        <div class="mb-2">
+                          <a href="/hosts/{{ p.host.id }}" class="text-info text-decoration-none fw-semibold">
+                            {{ p.host.address }}
+                          </a>
+                          <span class="text-secondary mx-1">:</span>
+                          <span class="badge bg-primary" style="font-size: 0.9rem; padding: 0.4rem 0.75rem;">{{ p.port }}/{{ p.protocol or 'tcp' }}</span>
+                        </div>
+                        {% if p.service %}
+                        <div class="mb-2">
+                          <span class="badge bg-success">{{ p.service }}</span>
+                        </div>
+                        {% endif %}
+                        <div class="text-light font-monospace small p-2 rounded" style="background: #0d1117; border: 1px solid #30363d; word-break: break-all; line-height: 1.5;">
+                          {{ p.banner[:200] }}{% if p.banner|length > 200 %}<span class="text-warning">...</span>{% endif %}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+
+              {% if ports_pages > 1 %}
+                <div class="p-3 border-top border-secondary">
+                  {% from "pagination.html" import render_pagination %}
+                  {{ render_pagination(page, ports_pages, per_page, '/search', True) }}
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="text-center text-secondary py-5">
+                <i class="bi bi-inbox fs-1 mb-3 d-block"></i>
+                <div>No banners found</div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Script Output Tab Pane -->
+        <div class="tab-pane fade" id="scripts-pane" role="tabpanel" aria-labelledby="scripts-tab">
+          <div class="card-body p-0" style="max-height: 600px; overflow-y: auto;">
+            {% if scripts %}
+              <div id="scriptsResults">
+                {% for s in scripts %}
+                  <div class="result-item" data-type="script" data-name="{{ s.name }}" data-output="{{ s.output[:200] }}">
+                    <div class="d-flex align-items-start">
+                      <i class="bi bi-file-code-fill text-warning me-3 fs-5 mt-1"></i>
+                      <div class="flex-grow-1">
+                        <div class="mb-2">
+                          <span class="badge bg-warning text-dark fw-semibold" style="font-size: 0.9rem;">{{ s.name }}</span>
+                        </div>
+                        <div class="text-light font-monospace small p-2 rounded" style="background: #0d1117; border: 1px solid #30363d; white-space: pre-wrap; word-break: break-word; line-height: 1.5;">{{ s.output[:250] }}{% if s.output|length > 250 %}<span class="text-warning">...</span>{% endif %}</div>
+                      </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+
+              {% if scripts_pages > 1 %}
+                <div class="p-3 border-top border-secondary">
+                  {% from "pagination.html" import render_pagination %}
+                  {{ render_pagination(page, scripts_pages, per_page, '/search', True) }}
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="text-center text-secondary py-5">
+                <i class="bi bi-inbox fs-1 mb-3 d-block"></i>
+                <div>No matching script output found</div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="text-center text-secondary py-5">
+  {% endif %}
+</div>
+
+<script>
+// Check if there are results and disable export button if not
+document.addEventListener('DOMContentLoaded', function() {
+  const hasResults = document.querySelectorAll('[data-type]').length > 0;
+  const exportBtn = document.querySelector('.export-btn');
+
+  if (exportBtn && !hasResults) {
+    exportBtn.disabled = true;
+    exportBtn.title = 'No results to export - perform a search first';
+  }
+});
+
+// Auto-switch tab when filters change
+document.querySelectorAll('.filter-chip input').forEach(checkbox => {
+  checkbox.addEventListener('change', function() {
+    // Update chip appearance
+    const chip = this.closest('.filter-chip');
+    if (this.checked) {
+      chip.classList.add('active');
+
+      // Switch to the corresponding tab
+      const filterValue = this.value;
+      const tabMap = {
+        'hosts': 'hosts-tab',
+        'services': 'services-tab',
+        'banners': 'banners-tab',
+        'scripts': 'scripts-tab'
+      };
+
+      const tabId = tabMap[filterValue];
+      if (tabId) {
+        const tabTrigger = document.getElementById(tabId);
+        if (tabTrigger) {
+          const tab = new bootstrap.Tab(tabTrigger);
+          tab.show();
+        }
+      }
+    } else {
+      chip.classList.remove('active');
+    }
+  });
+});
+
+// Initialize active chips on page load
+document.querySelectorAll('.filter-chip input:checked').forEach(checkbox => {
+  checkbox.closest('.filter-chip').classList.add('active');
+});
+
+// Export functionality - Updated to use server-side export API
+function exportResults(format) {
+  const query = '{{ query|e }}';
+  const filters = Array.from(document.querySelectorAll('input[name="filter"]:checked')).map(cb => cb.value);
+  const portMin = document.querySelector('input[name="port_min"]').value;
+  const portMax = document.querySelector('input[name="port_max"]').value;
+
+  // Build query parameters for export API
+  const params = new URLSearchParams();
+  if (query) params.append('q', query);
+  filters.forEach(f => params.append('filter', f));
+  if (portMin) params.append('port_min', portMin);
+  if (portMax) params.append('port_max', portMax);
+
+  // Map format (txt -> csv for plain text)
+  const exportFormat = format === 'txt' ? 'csv' : format;
+  params.append('format', exportFormat);
+
+  // Use server-side export endpoint
+  const exportUrl = `/api/search/export?${params.toString()}`;
+
+  // Create temporary link and trigger download
+  const a = document.createElement('a');
+  a.href = exportUrl;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  showToast(`${format.toUpperCase()} export started...`, 'success');
+}
+
+function downloadJSON(data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cygor-search-results-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('JSON export downloaded successfully!', 'success');
+}
+
+function downloadCSV(data) {
+  let csv = '';
+
+  // Hosts CSV
+  if (data.results.hosts.length > 0) {
+    csv += 'HOSTS\nIP Address,Hostname\n';
+    data.results.hosts.forEach(h => {
+      csv += `${h.ip},"${h.hostname || ''}"\n`;
+    });
+    csv += '\n';
+  }
+
+  // Services CSV
+  if (data.results.services.length > 0) {
+    csv += 'SERVICES\nIP Address,Port,Service,Banner\n';
+    data.results.services.forEach(s => {
+      csv += `${s.ip},${s.port},"${s.service}","${(s.banner || '').replace(/"/g, '""')}"\n`;
+    });
+    csv += '\n';
+  }
+
+  // Scripts CSV
+  if (data.results.scripts.length > 0) {
+    csv += 'SCRIPTS\nScript Name,Output\n';
+    data.results.scripts.forEach(s => {
+      csv += `"${s.name}","${s.output.replace(/"/g, '""')}"\n`;
+    });
+  }
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cygor-search-results-${Date.now()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV export downloaded successfully!', 'success');
+}
+
+function downloadXML(data) {
+  function escapeXML(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  xml += '<cygor_search_results>\n';
+  xml += `  <query>${escapeXML(data.query)}</query>\n`;
+  xml += `  <timestamp>${data.timestamp}</timestamp>\n`;
+  xml += '  <filters>\n';
+  data.filters.forEach(f => {
+    xml += `    <filter>${escapeXML(f)}</filter>\n`;
+  });
+  xml += '  </filters>\n';
+
+  // Hosts
+  if (data.results.hosts.length > 0) {
+    xml += '  <hosts>\n';
+    data.results.hosts.forEach(h => {
+      xml += '    <host>\n';
+      xml += `      <ip>${escapeXML(h.ip)}</ip>\n`;
+      if (h.hostname) xml += `      <hostname>${escapeXML(h.hostname)}</hostname>\n`;
+      xml += '    </host>\n';
+    });
+    xml += '  </hosts>\n';
+  }
+
+  // Services
+  if (data.results.services.length > 0) {
+    xml += '  <services>\n';
+    data.results.services.forEach(s => {
+      xml += '    <service>\n';
+      xml += `      <ip>${escapeXML(s.ip)}</ip>\n`;
+      xml += `      <port>${escapeXML(s.port)}</port>\n`;
+      xml += `      <service_name>${escapeXML(s.service)}</service_name>\n`;
+      if (s.banner) xml += `      <banner>${escapeXML(s.banner)}</banner>\n`;
+      xml += '    </service>\n';
+    });
+    xml += '  </services>\n';
+  }
+
+  // Scripts
+  if (data.results.scripts.length > 0) {
+    xml += '  <scripts>\n';
+    data.results.scripts.forEach(s => {
+      xml += '    <script>\n';
+      xml += `      <name>${escapeXML(s.name)}</name>\n`;
+      xml += `      <output><![CDATA[${s.output}]]></output>\n`;
+      xml += '    </' + 'script>\n';
+    });
+    xml += '  </scripts>\n';
+  }
+
+  xml += '</cygor_search_results>';
+
+  const blob = new Blob([xml], { type: 'application/xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cygor-search-results-${Date.now()}.xml`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('XML export downloaded successfully!', 'success');
+}
+
+function downloadText(data) {
+  let text = `Cygor Search Results\n`;
+  text += `Query: "${data.query}"\n`;
+  text += `Generated: ${new Date(data.timestamp).toLocaleString()}\n`;
+  text += `${'='.repeat(60)}\n\n`;
+
+  if (data.results.hosts.length > 0) {
+    text += `HOSTS (${data.results.hosts.length})\n${'-'.repeat(60)}\n`;
+    data.results.hosts.forEach(h => {
+      text += `IP: ${h.ip}\n`;
+      if (h.hostname) text += `Hostname: ${h.hostname}\n`;
+      text += '\n';
+    });
+    text += '\n';
+  }
+
+  if (data.results.services.length > 0) {
+    text += `SERVICES (${data.results.services.length})\n${'-'.repeat(60)}\n`;
+    data.results.services.forEach(s => {
+      text += `${s.ip}:${s.port} - ${s.service}\n`;
+      if (s.banner) text += `Banner: ${s.banner}\n`;
+      text += '\n';
+    });
+    text += '\n';
+  }
+
+  if (data.results.scripts.length > 0) {
+    text += `SCRIPTS (${data.results.scripts.length})\n${'-'.repeat(60)}\n`;
+    data.results.scripts.forEach(s => {
+      text += `Script: ${s.name}\n`;
+      text += `Output: ${s.output}\n`;
+      text += '\n';
+    });
+  }
+
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cygor-search-results-${Date.now()}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Text export downloaded successfully!', 'success');
+}
+
+function copyToClipboard() {
+  const query = '{{ query|e }}';
+  let text = `Search Results for: "${query}"\n\n`;
+
+  // Copy hosts
+  const hosts = Array.from(document.querySelectorAll('[data-type="host"]'));
+  if (hosts.length > 0) {
+    text += `HOSTS (${hosts.length}):\n`;
+    hosts.forEach(el => {
+      text += `  ${el.dataset.ip}`;
+      if (el.dataset.hostname) text += ` (${el.dataset.hostname})`;
+      text += '\n';
+    });
+    text += '\n';
+  }
+
+  // Copy services
+  const services = Array.from(document.querySelectorAll('[data-type="service"]'));
+  if (services.length > 0) {
+    text += `SERVICES (${services.length}):\n`;
+    services.forEach(el => {
+      text += `  ${el.dataset.ip}:${el.dataset.port} - ${el.dataset.service}\n`;
+    });
+    text += '\n';
+  }
+
+  copyText(text).then(() => {
+    showToast('Results copied to clipboard!', 'success');
+  }).catch(err => {
+    console.error('Failed to copy:', err);
+    showToast('Failed to copy to clipboard', 'error');
+  });
+}
+
+
+// ===== Service Search Filter =====
+
+const serviceSearch = document.getElementById('serviceSearch');
+if (serviceSearch) {
+  serviceSearch.addEventListener('input', function() {
+    const searchTerm = this.value.toLowerCase();
+    const serviceItems = document.querySelectorAll('#serviceList .filter-checkbox-item');
+
+    serviceItems.forEach(item => {
+      const text = item.textContent.toLowerCase();
+      if (text.includes(searchTerm)) {
+        item.style.display = 'flex';
+      } else {
+        item.style.display = 'none';
+      }
+    });
+  });
+}
+
+// ===== Search Query Autocomplete =====
+//
+// Mixes live backend matches (real hosts + service names from
+// /api/search/suggest) with a static cheat-sheet of field operators
+// so the dropdown is useful both for "show me hosts containing X" and
+// for "remind me what filters exist". The backend call is debounced.
+
+const searchInput = document.getElementById('searchQuery');
+
+// Static syntax cheat-sheet — surfaced when the typed token starts with
+// a known field prefix (ip:, port:, etc.) or when no live results match.
+const SYNTAX_HINTS = [
+  { title: 'ip:192.168.1.0/24', desc: 'CIDR notation', kind: 'syntax' },
+  { title: 'port:22', desc: 'Specific port', kind: 'syntax' },
+  { title: 'port:80-443', desc: 'Port range', kind: 'syntax' },
+  { title: 'service:http', desc: 'Service name', kind: 'syntax' },
+  { title: 'banner:"OpenSSH"', desc: 'Banner phrase', kind: 'syntax' },
+  { title: 'os:Windows', desc: 'OS detection', kind: 'syntax' },
+  { title: 'hostname:example.com', desc: 'Hostname match', kind: 'syntax' },
+  { title: 'AND', desc: 'Boolean AND', kind: 'syntax' },
+  { title: 'OR', desc: 'Boolean OR', kind: 'syntax' },
+  { title: 'NOT', desc: 'Boolean NOT', kind: 'syntax' },
+];
+
+let currentSuggestionIndex = -1;
+let autocompleteContainer = null;
+let suggestDebounce = null;
+let suggestAbort = null;
+
+searchInput.addEventListener('input', function() {
+  const value = this.value;
+  const cursorPos = this.selectionStart;
+  const beforeCursor = value.substring(0, cursorPos);
+  const lastWord = beforeCursor.split(/\s+/).pop();
+
+  if (lastWord.length < 2) {
+    hideAutocomplete();
+    return;
+  }
+
+  // Filter the static cheat-sheet immediately so the dropdown is never
+  // empty while the network roundtrip is in flight.
+  const syntaxMatches = SYNTAX_HINTS.filter(item =>
+    item.title.toLowerCase().includes(lastWord.toLowerCase()) ||
+    item.desc.toLowerCase().includes(lastWord.toLowerCase())
+  );
+
+  // Render syntax-only first so the user sees something instantly.
+  if (syntaxMatches.length > 0) {
+    showAutocomplete(syntaxMatches, lastWord);
+  }
+
+  // Debounced backend call for real hosts/services.
+  if (suggestDebounce) clearTimeout(suggestDebounce);
+  suggestDebounce = setTimeout(() => fetchLiveSuggestions(lastWord, syntaxMatches), 150);
+});
+
+async function fetchLiveSuggestions(term, syntaxMatches) {
+  if (suggestAbort) suggestAbort.abort();
+  suggestAbort = new AbortController();
+  try {
+    const url = `/api/search/suggest?q=${encodeURIComponent(term)}&limit=8`;
+    const resp = await fetch(url, { signal: suggestAbort.signal });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const live = data.suggestions || [];
+
+    // If the user has moved past this word, drop the result.
+    const cursorPos = searchInput.selectionStart;
+    const lastWord = searchInput.value.substring(0, cursorPos).split(/\s+/).pop();
+    if (lastWord.toLowerCase() !== term.toLowerCase()) return;
+
+    // Live results first; cap syntax hints so the dropdown stays short.
+    const merged = [...live, ...syntaxMatches.slice(0, Math.max(0, 8 - live.length))];
+    if (merged.length === 0) {
+      hideAutocomplete();
+      return;
+    }
+    showAutocomplete(merged, term);
+  } catch (e) {
+    if (e.name !== 'AbortError') console.warn('suggest:', e);
+  }
+}
+
+function showAutocomplete(suggestions, searchTerm) {
+  hideAutocomplete();
+
+  autocompleteContainer = document.createElement('div');
+  autocompleteContainer.className = 'autocomplete-suggestions';
+
+  suggestions.slice(0, 8).forEach((suggestion, index) => {
+    const div = document.createElement('div');
+    div.className = 'autocomplete-suggestion';
+    const kindBadge = suggestion.kind === 'host'
+      ? '<span class="ac-kind ac-kind-host">HOST</span>'
+      : suggestion.kind === 'service'
+        ? '<span class="ac-kind ac-kind-svc">SVC</span>'
+        : '<span class="ac-kind ac-kind-syn">SYN</span>';
+    div.innerHTML = `
+      ${kindBadge}
+      <div class="ac-body">
+        <div class="autocomplete-suggestion-title">${escapeHtml(suggestion.title)}</div>
+        <div class="autocomplete-suggestion-desc">${escapeHtml(suggestion.desc)}</div>
+      </div>
+    `;
+
+    div.addEventListener('click', () => {
+      insertSuggestion(suggestion.value || suggestion.title, searchTerm);
+    });
+
+    autocompleteContainer.appendChild(div);
+  });
+
+  const wrapper = searchInput.closest('.input-group');
+  wrapper.style.position = 'relative';
+  wrapper.appendChild(autocompleteContainer);
+
+  currentSuggestionIndex = -1;
+}
+
+function hideAutocomplete() {
+  if (autocompleteContainer) {
+    autocompleteContainer.remove();
+    autocompleteContainer = null;
+  }
+  currentSuggestionIndex = -1;
+}
+
+function insertSuggestion(suggestion, searchTerm) {
+  const value = searchInput.value;
+  const cursorPos = searchInput.selectionStart;
+
+  // Find the start of the current word
+  const beforeCursor = value.substring(0, cursorPos);
+  const wordStart = beforeCursor.lastIndexOf(searchTerm);
+
+  // Replace the current word with the suggestion
+  const newValue = value.substring(0, wordStart) + suggestion + value.substring(cursorPos);
+  searchInput.value = newValue;
+
+  // Set cursor position after the inserted suggestion
+  const newCursorPos = wordStart + suggestion.length;
+  searchInput.setSelectionRange(newCursorPos, newCursorPos);
+  searchInput.focus();
+
+  hideAutocomplete();
+}
+
+// Hide autocomplete when clicking outside
+document.addEventListener('click', function(e) {
+  if (!searchInput.contains(e.target) && !autocompleteContainer?.contains(e.target)) {
+    hideAutocomplete();
+  }
+});
+
+// ===== Keyboard Shortcuts =====
+
+document.addEventListener('keydown', function(e) {
+  // Ctrl/Cmd + K: Focus search
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    searchInput.focus();
+    searchInput.select();
+  }
+
+  // Ctrl/Cmd + Enter: Submit search
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('searchForm').submit();
+  }
+
+  // Ctrl/Cmd + S: Save search
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    showSaveSearchModal();
+  }
+
+  // Escape: Clear search or hide autocomplete
+  if (e.key === 'Escape') {
+    if (autocompleteContainer) {
+      hideAutocomplete();
+    } else if (document.activeElement === searchInput) {
+      searchInput.blur();
+    }
+  }
+
+  // Arrow keys for autocomplete navigation
+  if (autocompleteContainer && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+    e.preventDefault();
+    const suggestions = autocompleteContainer.querySelectorAll('.autocomplete-suggestion');
+
+    // Remove current active class
+    suggestions.forEach(s => s.classList.remove('active'));
+
+    if (e.key === 'ArrowDown') {
+      currentSuggestionIndex = Math.min(currentSuggestionIndex + 1, suggestions.length - 1);
+    } else {
+      currentSuggestionIndex = Math.max(currentSuggestionIndex - 1, 0);
+    }
+
+    suggestions[currentSuggestionIndex]?.classList.add('active');
+    suggestions[currentSuggestionIndex]?.scrollIntoView({ block: 'nearest' });
+  }
+
+  // Enter to select autocomplete suggestion
+  if (autocompleteContainer && e.key === 'Enter' && currentSuggestionIndex >= 0) {
+    e.preventDefault();
+    const suggestions = autocompleteContainer.querySelectorAll('.autocomplete-suggestion');
+    const activeSuggestion = suggestions[currentSuggestionIndex];
+    if (activeSuggestion) {
+      activeSuggestion.click();
+    }
+  }
+
+  // Tab: Accept first autocomplete suggestion
+  if (autocompleteContainer && e.key === 'Tab') {
+    e.preventDefault();
+    const firstSuggestion = autocompleteContainer.querySelector('.autocomplete-suggestion');
+    if (firstSuggestion) {
+      firstSuggestion.click();
+    }
+  }
+});
+
+// Display keyboard shortcuts hint on page load
+document.addEventListener('DOMContentLoaded', function() {
+  // Add keyboard shortcuts indicator
+  const searchWrapper = searchInput.closest('.input-group');
+  const shortcutsHint = document.createElement('div');
+  shortcutsHint.className = 'text-secondary small mt-2';
+  shortcutsHint.innerHTML = `
+    <i class="bi bi-keyboard me-1"></i>
+    <kbd>Ctrl/⌘ + K</kbd> Focus |
+    <kbd>Ctrl/⌘ + Enter</kbd> Search |
+    <kbd>Ctrl/⌘ + S</kbd> Save |
+    <kbd>Tab</kbd> Autocomplete
+  `;
+  searchWrapper.parentNode.insertBefore(shortcutsHint, searchWrapper.nextSibling);
+});
+
+// ===== Saved Searches Functionality =====
+
+// Load saved searches on page load (the workbench card is always
+// visible now when no query is active; it populates itself below).
+document.addEventListener('DOMContentLoaded', function() {
+  if (document.getElementById('savedSearchesList')) {
+    loadSavedSearches();
+  }
+});
+
+async function loadSavedSearches() {
+  const container = document.getElementById('savedSearchesList');
+  container.innerHTML = '<div class="col-12 text-center text-secondary"><i class="bi bi-hourglass-split me-2"></i>Loading saved searches...</div>';
+
+  try {
+    const response = await fetch('/api/search/saved');
+    const data = await response.json();
+
+    if (data.saved_searches && data.saved_searches.length > 0) {
+      container.innerHTML = '';
+      data.saved_searches.forEach(search => {
+        const searchCard = createSavedSearchCard(search);
+        container.appendChild(searchCard);
+      });
+    } else {
+      container.innerHTML = `
+        <div class="col-12 text-center text-secondary py-4">
+          <i class="bi bi-bookmark-x me-2"></i>No saved searches yet.
+          <br><small>Run a search and click the "Save" button to save it for later!</small>
+        </div>
+      `;
+    }
+  } catch (error) {
+    console.error('Failed to load saved searches:', error);
+    container.innerHTML = `
+      <div class="col-12 text-center text-danger">
+        <i class="bi bi-exclamation-triangle me-2"></i>Failed to load saved searches
+      </div>
+    `;
+  }
+}
+
+function createSavedSearchCard(search) {
+  const col = document.createElement('div');
+  col.className = 'col-md-6 col-lg-4';
+
+  const lastUsed = search.last_used ? new Date(search.last_used).toLocaleDateString() : 'Never';
+  const created = new Date(search.created_at).toLocaleDateString();
+
+  col.innerHTML = `
+    <div class="card bg-dark border-secondary h-100">
+      <div class="card-body d-flex flex-column">
+        <h6 class="card-title text-light mb-2">
+          <i class="bi bi-bookmark-fill me-2 text-warning"></i>${escapeHtml(search.name)}
+        </h6>
+        ${search.description ? `<p class="card-text text-secondary small mb-2">${escapeHtml(search.description)}</p>` : ''}
+        <div class="mb-2">
+          <code class="text-info bg-black px-2 py-1 rounded small">${escapeHtml(search.query)}</code>
+        </div>
+        <div class="text-secondary small mb-3">
+          <div><i class="bi bi-clock me-1"></i>Created: ${created}</div>
+          <div><i class="bi bi-arrow-repeat me-1"></i>Last used: ${lastUsed}</div>
+          <div><i class="bi bi-bar-chart me-1"></i>Used: ${search.use_count} times</div>
+        </div>
+        <div class="mt-auto d-flex gap-2">
+          <button class="btn btn-sm btn-primary flex-grow-1" onclick="loadSavedSearch(${search.id}, '${escapeHtml(search.query).replace(/'/g, "\\'")}')">
+            <i class="bi bi-play-fill me-1"></i>Load
+          </button>
+          <button class="btn btn-sm btn-danger" onclick="deleteSavedSearch(${search.id})">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return col;
+}
+
+/* escapeHtml now in global cygor-utils.js */
+
+function loadSavedSearch(id, query) {
+  // Set the query in the search box
+  document.getElementById('searchQuery').value = query;
+
+  // Submit the search form
+  document.getElementById('searchForm').submit();
+
+  showToast('Loaded saved search!', 'success');
+}
+
+function deleteSavedSearch(id) {
+  showConfirm('Delete Saved Search', 'Are you sure you want to delete this saved search?', async () => {
+    try {
+      const response = await fetch(`/api/search/saved/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        showToast('Saved search deleted successfully!', 'success');
+        loadSavedSearches(); // Reload the list
+      } else {
+        showToast('Failed to delete saved search', 'error');
+      }
+    } catch (error) {
+      console.error('Failed to delete saved search:', error);
+      showToast('Failed to delete saved search', 'error');
+    }
+  }, 'danger');
+}
+
+function showSaveSearchModal() {
+  const query = document.getElementById('searchQuery').value.trim();
+
+  if (!query) {
+    showToast('Please enter a search query first', 'error');
+    return;
+  }
+
+  // Get current filters
+  const filters = Array.from(document.querySelectorAll('input[name="filter"]:checked')).map(cb => cb.value);
+  const portMin = document.querySelector('input[name="port_min"]').value;
+  const portMax = document.querySelector('input[name="port_max"]').value;
+  const sort = document.querySelector('select[name="sort"]').value;
+
+  // Build filters JSON
+  const filtersObj = {
+    filters: filters,
+    port_min: portMin,
+    port_max: portMax,
+    sort: sort
+  };
+
+  // Create modal HTML
+  const modalHtml = `
+    <div class="modal fade" id="saveSearchModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content bg-dark text-light">
+          <div class="modal-header border-secondary">
+            <h5 class="modal-title">
+              <i class="bi bi-bookmark-plus me-2"></i>Save Search
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label for="searchName" class="form-label">Search Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control bg-dark text-light border-secondary" id="searchName" maxlength="100" required>
+            </div>
+            <div class="mb-3">
+              <label for="searchDescription" class="form-label">Description (optional)</label>
+              <textarea class="form-control bg-dark text-light border-secondary" id="searchDescription" rows="2" maxlength="500"></textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Query</label>
+              <input type="text" class="form-control bg-dark text-light border-secondary" value="${escapeHtml(query)}" readonly>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="shareSearch">
+              <label class="form-check-label" for="shareSearch">
+                Share with other users
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer border-secondary">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-success" id="saveSearchButton">
+              <i class="bi bi-save me-2"></i>Save Search
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Remove any existing modal
+  const existingModal = document.getElementById('saveSearchModal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+
+  // Add modal to page
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+  // Add click handler to save button (avoids quote escaping issues)
+  document.getElementById('saveSearchButton').addEventListener('click', function() {
+    saveSearch(query, filtersObj);
+  });
+
+  // Show modal
+  const modal = new bootstrap.Modal(document.getElementById('saveSearchModal'));
+  modal.show();
+
+  // Clean up after modal is hidden
+  document.getElementById('saveSearchModal').addEventListener('hidden.bs.modal', function() {
+    this.remove();
+  });
+}
+
+async function saveSearch(query, filtersObj) {
+  const name = document.getElementById('searchName').value.trim();
+  const description = document.getElementById('searchDescription').value.trim();
+  const isShared = document.getElementById('shareSearch').checked;
+
+  if (!name) {
+    showToast('Please enter a name for this search', 'error');
+    return;
+  }
+
+  try {
+    // Build query parameters (FastAPI expects Query params, not body)
+    const params = new URLSearchParams({
+      name: name,
+      query: query,
+      is_shared: isShared
+    });
+
+    if (description) {
+      params.append('description', description);
+    }
+
+    // Stringify the filters object
+    if (filtersObj && Object.keys(filtersObj).length > 0) {
+      const filtersJson = JSON.stringify(filtersObj);
+      if (filtersJson !== '{}') {
+        params.append('filters', filtersJson);
+      }
+    }
+
+    // Send as query parameters in URL
+    const response = await fetch(`/api/search/save?${params.toString()}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
+
+    if (response.ok) {
+      showToast('Search saved successfully!', 'success');
+
+      // Close modal
+      const modal = bootstrap.Modal.getInstance(document.getElementById('saveSearchModal'));
+      modal.hide();
+
+      // Reload saved searches
+      loadSavedSearches();
+    } else {
+      const error = await response.json();
+      showToast(error.detail || 'Failed to save search', 'error');
+    }
+  } catch (error) {
+    console.error('Failed to save search:', error);
+    showToast('Failed to save search', 'error');
+  }
+}
+
+// ===== Column Customization =====
+
+// Load column preferences from localStorage
+function loadColumnPreferences() {
+  const prefs = JSON.parse(localStorage.getItem('cygor_column_prefs') || '{}');
+
+  // Apply visibility
+  if (prefs.showHosts === false) document.getElementById('hostsColumn')?.classList.add('d-none');
+  if (prefs.showServices === false) document.getElementById('servicesColumn')?.classList.add('d-none');
+  if (prefs.showScripts === false) document.getElementById('scriptsColumn')?.classList.add('d-none');
+
+  // Apply layout
+  if (prefs.layout) applyLayout(prefs.layout);
+
+  // Update modal checkboxes
+  if (prefs.showHosts !== undefined) document.getElementById('showHostsColumn').checked = prefs.showHosts;
+  if (prefs.showServices !== undefined) document.getElementById('showServicesColumn').checked = prefs.showServices;
+  if (prefs.showScripts !== undefined) document.getElementById('showScriptsColumn').checked = prefs.showScripts;
+  if (prefs.layout) document.getElementById('layoutPreset').value = prefs.layout;
+}
+
+function applyLayout(layout) {
+  const hostsCol = document.getElementById('hostsColumn');
+  const servicesCol = document.getElementById('servicesColumn');
+  const scriptsCol = document.getElementById('scriptsColumn');
+
+  if (!hostsCol || !servicesCol || !scriptsCol) return;
+
+  // Remove all existing col classes
+  [hostsCol, servicesCol, scriptsCol].forEach(col => {
+    col.className = col.className.replace(/col-lg-\d+/g, '').trim() + ' results-column';
+  });
+
+  // Apply new layout
+  switch(layout) {
+    case 'equal':
+      hostsCol.classList.add('col-lg-4');
+      servicesCol.classList.add('col-lg-4');
+      scriptsCol.classList.add('col-lg-4');
+      break;
+    case 'hostsLarge':
+      hostsCol.classList.add('col-lg-6');
+      servicesCol.classList.add('col-lg-3');
+      scriptsCol.classList.add('col-lg-3');
+      break;
+    case 'servicesLarge':
+      hostsCol.classList.add('col-lg-3');
+      servicesCol.classList.add('col-lg-6');
+      scriptsCol.classList.add('col-lg-3');
+      break;
+    case 'scriptsLarge':
+      hostsCol.classList.add('col-lg-3');
+      servicesCol.classList.add('col-lg-3');
+      scriptsCol.classList.add('col-lg-6');
+      break;
+    case 'twoColumn':
+      hostsCol.classList.add('col-lg-6');
+      servicesCol.classList.add('col-lg-6');
+      scriptsCol.classList.add('d-none');
+      break;
+    case 'singleColumn':
+      hostsCol.classList.add('col-lg-12');
+      servicesCol.classList.add('d-none');
+      scriptsCol.classList.add('d-none');
+      break;
+  }
+}
+
+function applyColumnCustomization() {
+  const showHosts = document.getElementById('showHostsColumn').checked;
+  const showServices = document.getElementById('showServicesColumn').checked;
+  const showScripts = document.getElementById('showScriptsColumn').checked;
+  const layout = document.getElementById('layoutPreset').value;
+
+  // Save preferences
+  const prefs = {
+    showHosts,
+    showServices,
+    showScripts,
+    layout
+  };
+  localStorage.setItem('cygor_column_prefs', JSON.stringify(prefs));
+
+  // Apply visibility
+  const hostsCol = document.getElementById('hostsColumn');
+  const servicesCol = document.getElementById('servicesColumn');
+  const scriptsCol = document.getElementById('scriptsColumn');
+
+  if (hostsCol) hostsCol.classList.toggle('d-none', !showHosts);
+  if (servicesCol) servicesCol.classList.toggle('d-none', !showServices);
+  if (scriptsCol) scriptsCol.classList.toggle('d-none', !showScripts);
+
+  // Apply layout
+  applyLayout(layout);
+
+  showToast('Column preferences saved!', 'success');
+}
+
+function resetColumnCustomization() {
+  localStorage.removeItem('cygor_column_prefs');
+
+  // Reset checkboxes
+  document.getElementById('showHostsColumn').checked = true;
+  document.getElementById('showServicesColumn').checked = true;
+  document.getElementById('showScriptsColumn').checked = true;
+  document.getElementById('layoutPreset').value = 'equal';
+
+  // Reset display
+  const hostsCol = document.getElementById('hostsColumn');
+  const servicesCol = document.getElementById('servicesColumn');
+  const scriptsCol = document.getElementById('scriptsColumn');
+
+  if (hostsCol) hostsCol.classList.remove('d-none');
+  if (servicesCol) servicesCol.classList.remove('d-none');
+  if (scriptsCol) scriptsCol.classList.remove('d-none');
+
+  applyLayout('equal');
+
+  showToast('Column preferences reset to default', 'success');
+}
+
+// Load preferences on page load
+document.addEventListener('DOMContentLoaded', function() {
+  loadColumnPreferences();
+});
+</script>
+
+<!-- Column Customization Modal -->
+<div class="modal fade" id="columnCustomizationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content bg-dark text-light">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title">
+          <i class="bi bi-layout-three-columns me-2"></i>Customize Results Display
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-3">Choose which columns to display and their layout:</p>
+
+        <!-- Column Visibility -->
+        <div class="mb-4">
+          <h6 class="text-light mb-3">Column Visibility</h6>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="showHostsColumn" checked>
+            <label class="form-check-label" for="showHostsColumn">
+              <i class="bi bi-hdd-network me-2 text-info"></i>Show Hosts
+            </label>
+          </div>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="showServicesColumn" checked>
+            <label class="form-check-label" for="showServicesColumn">
+              <i class="bi bi-diagram-3 me-2 text-success"></i>Show Services
+            </label>
+          </div>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="showScriptsColumn" checked>
+            <label class="form-check-label" for="showScriptsColumn">
+              <i class="bi bi-file-code me-2 text-warning"></i>Show Scripts
+            </label>
+          </div>
+        </div>
+
+        <!-- Column Layout -->
+        <div class="mb-4">
+          <h6 class="text-light mb-3">Column Width</h6>
+          <div class="mb-3">
+            <label class="form-label">Layout Preset</label>
+            <select id="layoutPreset" class="form-select bg-dark text-light border-secondary">
+              <option value="equal">Equal Width (4-4-4)</option>
+              <option value="hostsLarge">Hosts Focused (6-3-3)</option>
+              <option value="servicesLarge">Services Focused (3-6-3)</option>
+              <option value="scriptsLarge">Scripts Focused (3-3-6)</option>
+              <option value="twoColumn">Two Column (6-6)</option>
+              <option value="singleColumn">Single Column (12)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Results Per Page -->
+        <div class="mb-3">
+          <h6 class="text-light mb-3">Results Per Page</h6>
+          <select id="resultsPerPage" class="form-select bg-dark text-light border-secondary">
+            <option value="10">10 results</option>
+            <option value="25" selected>25 results</option>
+            <option value="50">50 results</option>
+            <option value="100">100 results</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-secondary" onclick="resetColumnCustomization()">Reset to Default</button>
+        <button type="button" class="btn btn-primary" onclick="applyColumnCustomization()" data-bs-dismiss="modal">
+          <i class="bi bi-check2 me-2"></i>Apply Changes
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

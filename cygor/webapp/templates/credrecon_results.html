@@ -1,0 +1,3419 @@
+{% extends "base.html" %}
+
+{% block title %}Credential Reconnaissance Results{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="cy-page-header">
+    <h1><i class="bi bi-key-fill"></i>Credential Reconnaissance Results</h1>
+    <span class="cy-page-subtitle">Authentication test results across all hosts</span>
+    <div class="cy-page-actions">
+      <div class="credrecon-view-toggle" role="group" aria-label="View Toggle">
+        <button type="button" class="credrecon-view-btn active" id="viewTableBtn" onclick="switchView('table')">
+          <i class="bi bi-table"></i> Table
+        </button>
+        <button type="button" class="credrecon-view-btn" id="viewDashboardBtn" onclick="switchView('dashboard')">
+          <i class="bi bi-grid-3x3-gap-fill"></i> PWNboard
+        </button>
+      </div>
+      <a href="/credrecon" class="cy-btn"><i class="bi bi-arrow-left"></i>Dashboard</a>
+      <a href="/credrecon/new" class="cy-btn cy-btn-primary"><i class="bi bi-play-circle"></i>New Scan</a>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      <!-- Summary Stats — horizontal cy-stat-tile -->
+      <div class="cy-stat-row cy-cols-4 mb-3">
+        <div class="cy-stat-tile">
+          <div class="cy-stat-tile-icon cy-stat-tile-icon--success"><i class="bi bi-unlock-fill"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value">{{ successful_count }}</div>
+            <div class="cy-stat-tile-label">Successful</div>
+          </div>
+        </div>
+        <div class="cy-stat-tile">
+          <div class="cy-stat-tile-icon"><i class="bi bi-lock-fill"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value">{{ failed_count }}</div>
+            <div class="cy-stat-tile-label">Failed</div>
+          </div>
+        </div>
+        <div class="cy-stat-tile">
+          <div class="cy-stat-tile-icon cy-stat-tile-icon--warn"><i class="bi bi-exclamation-triangle"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value">{{ errors_count }}</div>
+            <div class="cy-stat-tile-label">Errors</div>
+          </div>
+        </div>
+        <div class="cy-stat-tile">
+          <div class="cy-stat-tile-icon"><i class="bi bi-clipboard-data"></i></div>
+          <div class="cy-stat-tile-meta">
+            <div class="cy-stat-tile-value">{{ total }}</div>
+            <div class="cy-stat-tile-label">Total Tests</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dashboard View — PWNboard-style host grid (hidden by default) -->
+      <div id="dashboardView" style="display: none;">
+        <!-- Toolbar -->
+        <div class="pwn-toolbar">
+          <!-- Left: Tabs -->
+          <ul class="nav pwn-toolbar-tabs" id="pwnboardTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active pwn-tab" id="pwn-creds-tab" data-bs-toggle="tab"
+                      data-bs-target="#pwnCredsPane" type="button" role="tab"
+                      onclick="switchPwnTab('creds')">
+                Credentials <span class="badge bg-success ms-1" id="pwnCredsBadge">0</span>
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link pwn-tab" id="pwn-keys-tab" data-bs-toggle="tab"
+                      data-bs-target="#pwnKeysPane" type="button" role="tab"
+                      onclick="switchPwnTab('keys')">
+                Keys <span class="badge bg-success ms-1" id="pwnKeysBadge">0</span>
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link pwn-tab" id="pwn-all-tab" data-bs-toggle="tab"
+                      data-bs-target="#pwnAllPane" type="button" role="tab"
+                      onclick="switchPwnTab('all')">
+                All <span class="badge bg-info ms-1" id="pwnAllBadge">0</span>
+              </button>
+            </li>
+          </ul>
+          <!-- Center: Search -->
+          <div class="pwn-toolbar-search">
+            <i class="bi bi-search pwn-search-icon"></i>
+            <input type="text" id="pwnboardSearch" placeholder="Filter hosts..."
+                   oninput="filterPwnboard()" autocomplete="off" spellcheck="false">
+            <button type="button" id="pwnboardSearchClear" style="display:none;" onclick="clearPwnboardSearch()">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          <!-- Service Filter -->
+          <div class="pwn-service-filter">
+            <select id="pwnServiceFilter" onchange="filterPwnboard()" title="Filter by service/protocol">
+              <option value="">All Services</option>
+            </select>
+          </div>
+          <!-- Right: Group + Legend -->
+          <div class="d-flex align-items-center gap-3">
+            <button class="pwn-toolbar-btn" id="pwnSelectModeBtn" onclick="togglePwnSelectMode()" title="Select hosts to group into a column">
+              <i class="bi bi-columns-gap me-1"></i>Group
+            </button>
+            <button class="pwn-toolbar-btn pwn-toolbar-btn-primary" id="pwnGroupCreateBtn" style="display:none;" onclick="showGroupModal()">
+              <i class="bi bi-plus-lg me-1"></i>Create Group (<span id="pwnGroupCount">0</span>)
+            </button>
+            <div class="pwn-legend">
+              <span class="pwn-legend-swatch pwn-success" title="Credentials Worked"></span>
+              <span class="pwn-legend-swatch pwn-failed" title="Failed"></span>
+              <span class="pwn-legend-swatch pwn-error" title="Error"></span>
+              <span class="pwn-legend-swatch pwn-untested" title="No Results"></span>
+            </div>
+          </div>
+        </div>
+        <!-- Tab panes -->
+        <div class="tab-content">
+          <div class="tab-pane fade show active" id="pwnCredsPane" role="tabpanel">
+            <div id="pwnboardGroupsCreds"></div>
+            <div id="pwnboardGridCreds" class="pwn-grid"></div>
+            <div id="pwnboardEmptyCreds" class="text-center py-5" style="display: none;">
+              <i class="bi bi-key text-muted display-4"></i>
+              <p class="text-muted mt-3">No credential-based results to display</p>
+            </div>
+          </div>
+          <div class="tab-pane fade" id="pwnKeysPane" role="tabpanel">
+            <div id="pwnboardGroupsKeys"></div>
+            <div id="pwnboardGridKeys" class="pwn-grid"></div>
+            <div id="pwnboardEmptyKeys" class="text-center py-5" style="display: none;">
+              <i class="bi bi-shield-lock text-muted display-4"></i>
+              <p class="text-muted mt-3">No key-based results to display</p>
+            </div>
+          </div>
+          <div class="tab-pane fade" id="pwnAllPane" role="tabpanel">
+            <div id="pwnboardGroupsAll"></div>
+            <div id="pwnboardGridAll" class="pwn-grid"></div>
+            <div id="pwnboardEmptyAll" class="text-center py-5" style="display: none;">
+              <i class="bi bi-grid-3x3-gap text-muted display-4"></i>
+              <p class="text-muted mt-3">No credential check data to display</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table View (shown by default) -->
+      <div id="tableView">
+      <!-- Loading indicator for async data fetch -->
+      <div id="tableDataLoading" class="text-center py-5">
+        <div class="spinner-border text-info" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-3 text-secondary">Loading results...</p>
+      </div>
+
+      <!-- Successful Logins (Critical Findings) -->
+      <div class="card bg-dark border-0 mb-4" id="successfulSection" style="display:none;">
+        <div class="card-header bg-dark border-bottom border-success py-3">
+          <div class="d-flex align-items-center mb-3">
+            <i class="bi bi-shield-exclamation text-success me-2 fs-5"></i>
+            <span class="fw-semibold fs-5">Successful Logins</span>
+            <span class="badge bg-success ms-2 fs-6" id="successfulCountBadge">0</span>
+          </div>
+
+          <!-- Credentials / Keys Tabs -->
+          <ul class="nav nav-tabs border-0" id="resultsTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active results-tab" id="creds-tab" data-bs-toggle="tab" data-bs-target="#credsPane" type="button" role="tab">
+                <i class="bi bi-key me-1"></i>Credentials
+                <span class="badge bg-success ms-1" id="credsCountBadge">0</span>
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link results-tab" id="keys-tab" data-bs-toggle="tab" data-bs-target="#keysPane" type="button" role="tab">
+                <i class="bi bi-shield-lock me-1"></i>Keys
+                <span class="badge bg-success ms-1" id="keysCountBadge">0</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <div class="card-body p-0">
+          <div class="tab-content">
+            <!-- ==================== CREDENTIALS TAB ==================== -->
+            <div class="tab-pane fade show active" id="credsPane" role="tabpanel">
+              <!-- Credentials toolbar -->
+              <div class="px-3 py-2 border-bottom border-dark">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <div class="input-group input-group-sm" style="max-width: 320px;">
+                    <span class="input-group-text bg-dark border-secondary text-secondary">
+                      <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text" class="form-control bg-dark border-secondary text-light"
+                           id="credsSearchInput" placeholder="Search target, username, password..."
+                           onkeyup="filterTable('creds')">
+                    <button class="btn btn-outline-secondary" type="button" onclick="clearTableSearch('creds')">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </div>
+                  <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="credsExpandBtn" onclick="toggleTableHistory('creds')">
+                      <i class="bi bi-arrows-expand me-1"></i>Expand All
+                    </button>
+                  <div class="dropdown">
+                    <button type="button" class="btn btn-outline-success btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                      <i class="bi bi-download me-1"></i>Export Credentials
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark">
+                      <li><h6 class="dropdown-header">Credentials Only</h6></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportTableResults('creds', 'csv'); return false;">
+                        <i class="bi bi-filetype-csv me-2"></i>CSV (All)
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportTableResults('creds', 'json'); return false;">
+                        <i class="bi bi-filetype-json me-2"></i>JSON (All)
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportTableResults('creds', 'xml'); return false;">
+                        <i class="bi bi-filetype-xml me-2"></i>XML (All)
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportTableResults('creds', 'csv', true); return false;">
+                        <i class="bi bi-filetype-csv me-2"></i>CSV (Unique Only)
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportTableResults('creds', 'json', true); return false;">
+                        <i class="bi bi-filetype-json me-2"></i>JSON (Unique Only)
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportTableResults('creds', 'xml', true); return false;">
+                        <i class="bi bi-filetype-xml me-2"></i>XML (Unique Only)
+                      </a></li>
+                      <li><hr class="dropdown-divider"></li>
+                      <li><h6 class="dropdown-header">Combined (Credentials + Keys + Failed)</h6></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportCombinedResults('csv'); return false;">
+                        <i class="bi bi-filetype-csv me-2"></i>CSV — All Combined
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportCombinedResults('json'); return false;">
+                        <i class="bi bi-filetype-json me-2"></i>JSON — All Combined
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportCombinedResults('xml'); return false;">
+                        <i class="bi bi-filetype-xml me-2"></i>XML — All Combined
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportCombinedResults('csv', true); return false;">
+                        <i class="bi bi-filetype-csv me-2"></i>CSV — Unique Combined
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportCombinedResults('json', true); return false;">
+                        <i class="bi bi-filetype-json me-2"></i>JSON — Unique Combined
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportCombinedResults('xml', true); return false;">
+                        <i class="bi bi-filetype-xml me-2"></i>XML — Unique Combined
+                      </a></li>
+                    </ul>
+                  </div>
+                </div>
+                </div>
+                <div class="d-flex gap-1 flex-wrap" id="credsProtocolFilters">
+                  <button class="btn btn-sm filter-btn active" data-filter="all" onclick="filterTableByProtocol('creds', 'all')">
+                    <i class="bi bi-grid-3x3-gap me-1"></i>All
+                  </button>
+                </div>
+              </div>
+              <!-- Credentials table -->
+              <div class="table-responsive" id="credsTableContainer">
+                <table class="table table-dark table-hover success-table align-middle mb-0">
+                  <thead>
+                    <tr class="border-bottom border-secondary">
+                      <th class="ps-3" style="width: 40px;"></th>
+                      <th>Target</th>
+                      <th>Port</th>
+                      <th>Protocol</th>
+                      <th>Username</th>
+                      <th>Password</th>
+                      <th>Details</th>
+                      <th>Timestamp</th>
+                      <th class="pe-3">Attempts</th>
+                    </tr>
+                  </thead>
+                  <tbody id="credsTableBody"></tbody>
+                </table>
+              </div>
+              <div id="credsNoResults" class="text-center py-4" style="display: none;">
+                <i class="bi bi-search text-muted fs-1"></i>
+                <p class="text-muted mt-2 mb-0">No credential results match your search criteria</p>
+                <button class="btn btn-outline-secondary btn-sm mt-2" onclick="clearTableSearch('creds')">Clear Filters</button>
+              </div>
+              <div id="credsEmpty" class="text-center py-4" style="display: none;">
+                <i class="bi bi-inbox text-muted fs-3"></i>
+                <p class="text-muted mt-2 mb-0">No password-based credential logins found</p>
+              </div>
+            </div>
+
+            <!-- ==================== KEYS TAB ==================== -->
+            <div class="tab-pane fade" id="keysPane" role="tabpanel">
+              <!-- Keys toolbar -->
+              <div class="px-3 py-2 border-bottom border-dark">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <div class="input-group input-group-sm" style="max-width: 320px;">
+                    <span class="input-group-text bg-dark border-secondary text-secondary">
+                      <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text" class="form-control bg-dark border-secondary text-light"
+                           id="keysSearchInput" placeholder="Search target, username, key file..."
+                           onkeyup="filterTable('keys')">
+                    <button class="btn btn-outline-secondary" type="button" onclick="clearTableSearch('keys')">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </div>
+                  <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="keysExpandBtn" onclick="toggleTableHistory('keys')">
+                      <i class="bi bi-arrows-expand me-1"></i>Expand All
+                    </button>
+                  <div class="dropdown">
+                    <button type="button" class="btn btn-outline-success btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                      <i class="bi bi-download me-1"></i>Export Keys
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark">
+                      <li><h6 class="dropdown-header">Keys Only</h6></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportTableResults('keys', 'csv'); return false;">
+                        <i class="bi bi-filetype-csv me-2"></i>CSV (All)
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportTableResults('keys', 'json'); return false;">
+                        <i class="bi bi-filetype-json me-2"></i>JSON (All)
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportTableResults('keys', 'xml'); return false;">
+                        <i class="bi bi-filetype-xml me-2"></i>XML (All)
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportTableResults('keys', 'csv', true); return false;">
+                        <i class="bi bi-filetype-csv me-2"></i>CSV (Unique Only)
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportTableResults('keys', 'json', true); return false;">
+                        <i class="bi bi-filetype-json me-2"></i>JSON (Unique Only)
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportTableResults('keys', 'xml', true); return false;">
+                        <i class="bi bi-filetype-xml me-2"></i>XML (Unique Only)
+                      </a></li>
+                      <li><hr class="dropdown-divider"></li>
+                      <li><h6 class="dropdown-header">Combined (Credentials + Keys + Failed)</h6></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportCombinedResults('csv'); return false;">
+                        <i class="bi bi-filetype-csv me-2"></i>CSV — All Combined
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportCombinedResults('json'); return false;">
+                        <i class="bi bi-filetype-json me-2"></i>JSON — All Combined
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportCombinedResults('xml'); return false;">
+                        <i class="bi bi-filetype-xml me-2"></i>XML — All Combined
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportCombinedResults('csv', true); return false;">
+                        <i class="bi bi-filetype-csv me-2"></i>CSV — Unique Combined
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportCombinedResults('json', true); return false;">
+                        <i class="bi bi-filetype-json me-2"></i>JSON — Unique Combined
+                      </a></li>
+                      <li><a class="dropdown-item" href="#" onclick="exportCombinedResults('xml', true); return false;">
+                        <i class="bi bi-filetype-xml me-2"></i>XML — Unique Combined
+                      </a></li>
+                    </ul>
+                  </div>
+                </div>
+                </div>
+                <div class="d-flex gap-1 flex-wrap" id="keysProtocolFilters">
+                  <button class="btn btn-sm filter-btn active" data-filter="all" onclick="filterTableByProtocol('keys', 'all')">
+                    <i class="bi bi-grid-3x3-gap me-1"></i>All
+                  </button>
+                </div>
+              </div>
+              <!-- Keys table -->
+              <div class="table-responsive" id="keysTableContainer">
+                <table class="table table-dark table-hover success-table align-middle mb-0">
+                  <thead>
+                    <tr class="border-bottom border-secondary">
+                      <th class="ps-3" style="width: 40px;"></th>
+                      <th>Target</th>
+                      <th>Port</th>
+                      <th>Username</th>
+                      <th>Key File</th>
+                      <th>Certificate</th>
+                      <th>Details</th>
+                      <th>Timestamp</th>
+                      <th class="pe-3">Attempts</th>
+                    </tr>
+                  </thead>
+                  <tbody id="keysTableBody"></tbody>
+                </table>
+              </div>
+              <div id="keysNoResults" class="text-center py-4" style="display: none;">
+                <i class="bi bi-search text-muted fs-1"></i>
+                <p class="text-muted mt-2 mb-0">No key results match your search criteria</p>
+                <button class="btn btn-outline-secondary btn-sm mt-2" onclick="clearTableSearch('keys')">Clear Filters</button>
+              </div>
+              <div id="keysEmpty" class="text-center py-4" style="display: none;">
+                <i class="bi bi-inbox text-muted fs-3"></i>
+                <p class="text-muted mt-2 mb-0">No SSH key authentication logins found</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Failed Attempts (Collapsed by default) -->
+      <div class="card bg-dark border-0 mb-4" id="failedCredsCard" style="display:none;">
+        <div class="card-header bg-dark border-bottom border-secondary py-2">
+          <a class="text-decoration-none d-flex justify-content-between align-items-center text-light" data-bs-toggle="collapse" href="#failedCredsSection" role="button">
+            <div class="d-flex align-items-center">
+              <i class="bi bi-shield-x text-secondary me-2"></i>
+              <span>Failed Credential Attempts</span>
+              <span class="badge bg-secondary ms-2" id="failedCredsBadge">0</span>
+            </div>
+            <i class="bi bi-chevron-down small"></i>
+          </a>
+        </div>
+        <div class="collapse" id="failedCredsSection">
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-dark table-hover table-sm align-middle mb-0">
+                <thead>
+                  <tr class="border-bottom border-secondary">
+                    <th class="ps-3">Target</th>
+                    <th>Port</th>
+                    <th>Protocol</th>
+                    <th>Username</th>
+                    <th>Password</th>
+                    <th class="pe-3">Details</th>
+                  </tr>
+                </thead>
+                <tbody id="failedCredsBody"></tbody>
+              </table>
+            </div>
+            <div id="failedCredsPagination" class="d-flex justify-content-between align-items-center px-3 py-2 border-top border-secondary" style="display:none !important;">
+              <div class="d-flex align-items-center gap-2">
+                <span class="text-muted small">Show:</span>
+                <select class="form-select form-select-sm bg-dark text-light border-secondary" style="width: auto; font-size: 0.8rem;" onchange="changeFailedCredsPerPage(this.value)">
+                  <option value="100" selected>100</option>
+                  <option value="250">250</option>
+                  <option value="500">500</option>
+                  <option value="1000">1000</option>
+                  <option value="all">All</option>
+                </select>
+                <span class="text-muted small" id="failedCredsInfo">0 entries</span>
+              </div>
+              <div class="d-flex align-items-center gap-1">
+                <button class="btn btn-sm btn-outline-secondary" onclick="navFailedCreds(-1)" id="failedCredsPrev" disabled>&laquo; Prev</button>
+                <span class="text-muted small mx-2" id="failedCredsPageInfo">Page 1 of 1</span>
+                <button class="btn btn-sm btn-outline-secondary" onclick="navFailedCreds(1)" id="failedCredsNext" disabled>Next &raquo;</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card bg-dark border-0 mb-4" id="failedKeysCard" style="display:none;">
+        <div class="card-header bg-dark border-bottom border-secondary py-2">
+          <a class="text-decoration-none d-flex justify-content-between align-items-center text-light" data-bs-toggle="collapse" href="#failedKeysSection" role="button">
+            <div class="d-flex align-items-center">
+              <i class="bi bi-shield-x text-secondary me-2"></i>
+              <span>Failed Key Attempts</span>
+              <span class="badge bg-secondary ms-2" id="failedKeysBadge">0</span>
+            </div>
+            <i class="bi bi-chevron-down small"></i>
+          </a>
+        </div>
+        <div class="collapse" id="failedKeysSection">
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-dark table-hover table-sm align-middle mb-0">
+                <thead>
+                  <tr class="border-bottom border-secondary">
+                    <th class="ps-3">Target</th>
+                    <th>Port</th>
+                    <th>Username</th>
+                    <th>Key File</th>
+                    <th>Certificate</th>
+                    <th class="pe-3">Details</th>
+                  </tr>
+                </thead>
+                <tbody id="failedKeysBody"></tbody>
+              </table>
+            </div>
+            <div id="failedKeysPagination" class="d-flex justify-content-between align-items-center px-3 py-2 border-top border-secondary" style="display:none !important;">
+              <div class="d-flex align-items-center gap-2">
+                <span class="text-muted small">Show:</span>
+                <select class="form-select form-select-sm bg-dark text-light border-secondary" style="width: auto; font-size: 0.8rem;" onchange="changeFailedKeysPerPage(this.value)">
+                  <option value="100" selected>100</option>
+                  <option value="250">250</option>
+                  <option value="500">500</option>
+                  <option value="1000">1000</option>
+                  <option value="all">All</option>
+                </select>
+                <span class="text-muted small" id="failedKeysInfo">0 entries</span>
+              </div>
+              <div class="d-flex align-items-center gap-1">
+                <button class="btn btn-sm btn-outline-secondary" onclick="navFailedKeys(-1)" id="failedKeysPrev" disabled>&laquo; Prev</button>
+                <span class="text-muted small mx-2" id="failedKeysPageInfo">Page 1 of 1</span>
+                <button class="btn btn-sm btn-outline-secondary" onclick="navFailedKeys(1)" id="failedKeysNext" disabled>Next &raquo;</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Errors (Collapsed by default) -->
+      <div class="card bg-dark border-0 mb-4" id="errorsCard" style="display:none;">
+        <div class="card-header bg-dark border-bottom border-warning py-2">
+          <a class="text-decoration-none d-flex justify-content-between align-items-center text-light" data-bs-toggle="collapse" href="#errorsSection" role="button">
+            <div class="d-flex align-items-center">
+              <i class="bi bi-exclamation-octagon text-warning me-2"></i>
+              <span>Errors</span>
+              <span class="badge bg-warning text-dark ms-2" id="errorsCountBadge">0</span>
+            </div>
+            <i class="bi bi-chevron-down small"></i>
+          </a>
+        </div>
+        <div class="collapse" id="errorsSection">
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-dark table-hover table-sm align-middle mb-0">
+                <thead>
+                  <tr class="border-bottom border-secondary">
+                    <th class="ps-3">Target</th>
+                    <th>Port</th>
+                    <th>Protocol</th>
+                    <th class="pe-3">Error Details</th>
+                  </tr>
+                </thead>
+                <tbody id="errorsBody"></tbody>
+              </table>
+            </div>
+            <div id="errorsPagination" class="d-flex justify-content-between align-items-center px-3 py-2 border-top border-secondary" style="display:none !important;">
+              <div class="d-flex align-items-center gap-2">
+                <span class="text-muted small">Show:</span>
+                <select class="form-select form-select-sm bg-dark text-light border-secondary" style="width: auto; font-size: 0.8rem;" onchange="changeErrorsPerPage(this.value)">
+                  <option value="100" selected>100</option>
+                  <option value="250">250</option>
+                  <option value="500">500</option>
+                  <option value="1000">1000</option>
+                  <option value="all">All</option>
+                </select>
+                <span class="text-muted small" id="errorsInfo">0 entries</span>
+              </div>
+              <div class="d-flex align-items-center gap-1">
+                <button class="btn btn-sm btn-outline-secondary" onclick="navErrors(-1)" id="errorsPrev" disabled>&laquo; Prev</button>
+                <span class="text-muted small mx-2" id="errorsPageInfo">Page 1 of 1</span>
+                <button class="btn btn-sm btn-outline-secondary" onclick="navErrors(1)" id="errorsNext" disabled>Next &raquo;</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      {% if total == 0 %}
+      <div class="card bg-dark border-0" id="emptyState">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-inbox display-4 text-muted mb-3"></i>
+          <h5 class="text-light">No Results Yet</h5>
+          <p class="text-secondary mb-3">Start a credential scan to see results here.</p>
+          <a href="/credrecon/new" class="btn btn-primary btn-sm">
+            <i class="bi bi-play-circle me-1"></i>Start Scan
+          </a>
+        </div>
+      </div>
+      {% endif %}
+      </div><!-- /tableView -->
+
+      <!-- Tag Assignment Modal (used from table view target links) -->
+      <div class="modal fade" id="tagModal" tabindex="-1">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+          <div class="modal-content bg-dark text-light border-secondary">
+            <div class="modal-header border-secondary py-2">
+              <h6 class="modal-title"><i class="bi bi-tag me-2"></i>Tags for <span id="tagModalHost" class="font-monospace"></span></h6>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2">
+              <div id="tagModalCurrentTags" class="mb-2"></div>
+              <div class="input-group input-group-sm">
+                <input type="text" class="form-control bg-dark border-secondary text-light"
+                       id="tagModalInput" placeholder="Add new tag..."
+                       onkeydown="if(event.key==='Enter'){addTagFromModal(); return false;}">
+                <button class="btn btn-outline-success" type="button" onclick="addTagFromModal()">
+                  <i class="bi bi-plus-lg"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Host Detail Modal (used from PWNboard tile click) -->
+      <div class="modal fade" id="hostDetailModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+          <div class="modal-content bg-dark text-light border-secondary">
+            <div class="modal-header border-secondary py-2">
+              <h5 class="modal-title font-monospace" id="hostDetailIP"></h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-3" id="hostDetailBody">
+            </div>
+            <div class="modal-footer border-secondary py-2">
+              <div id="hostDetailTags" class="flex-grow-1"></div>
+              <div class="input-group input-group-sm" style="max-width:220px;">
+                <input type="text" class="form-control bg-dark border-secondary text-light"
+                       id="hostDetailTagInput" placeholder="Add tag..."
+                       onkeydown="if(event.key==='Enter'){addTagFromHostDetail(); return false;}">
+                <button class="btn btn-outline-success btn-sm" type="button" onclick="addTagFromHostDetail()">
+                  <i class="bi bi-plus-lg"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Group Hosts Modal (create a named column from selected hosts) -->
+      <div class="modal fade" id="groupModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content bg-dark text-light border-secondary">
+            <div class="modal-header border-secondary py-2">
+              <h6 class="modal-title"><i class="bi bi-columns-gap me-2"></i>Create Host Group</h6>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-3">
+              <p class="text-muted small mb-3">
+                <span id="groupHostCount">0</span> hosts selected — they will be displayed in their own column.
+              </p>
+              <div id="groupSelectedList" class="mb-3 d-flex flex-wrap gap-1" style="max-height:120px; overflow-y:auto;"></div>
+              <label class="form-label text-light small mb-1 fw-semibold">Group Name</label>
+              <input type="text" class="form-control bg-dark border-secondary text-light"
+                     id="groupNameInput" placeholder="e.g. Team 1, DMZ Servers, Windows DCs..."
+                     onkeydown="if(event.key==='Enter'){createGroup(); return false;}" autofocus>
+            </div>
+            <div class="modal-footer border-secondary py-2">
+              <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+              <button type="button" class="btn btn-info btn-sm" onclick="createGroup()">
+                <i class="bi bi-plus-lg me-1"></i>Create Group
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<style>
+/* Results tabs */
+.results-tab {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: #8b949e;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+}
+.results-tab:hover {
+  color: #c9d1d9;
+  border-color: rgba(255,255,255,0.1) !important;
+}
+.results-tab.active {
+  color: #58a6ff !important;
+  border-color: rgba(88,166,255,0.3) rgba(88,166,255,0.3) transparent !important;
+  background: rgba(88,166,255,0.05) !important;
+}
+
+/* Success table - larger and more readable */
+.success-table {
+  font-size: 1rem;
+}
+.success-table thead th {
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #8b949e;
+  padding: 1rem 0.75rem;
+  background: rgba(0,0,0,0.2);
+  white-space: nowrap;
+}
+.success-table tbody td {
+  padding: 1rem 0.75rem;
+  vertical-align: middle;
+  font-size: 1rem;
+}
+.success-table tbody tr:hover {
+  background: rgba(88, 166, 255, 0.05);
+}
+
+/* Target links */
+.target-link {
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+  font-size: 1rem;
+  color: #58a6ff;
+  text-decoration: none;
+}
+.target-link:hover {
+  color: #79b8ff;
+  text-decoration: underline;
+}
+
+/* Port badge */
+.port-badge {
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #c9d1d9;
+  background: rgba(99, 110, 123, 0.2);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+/* Protocol badge with colors */
+.protocol-badge {
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  text-transform: lowercase;
+}
+.protocol-ssh { background: rgba(63, 185, 80, 0.2); color: #3fb950; }
+.protocol-ftp { background: rgba(88, 166, 255, 0.2); color: #58a6ff; }
+.protocol-http, .protocol-https { background: rgba(136, 87, 44, 0.3); color: #db8b44; }
+.protocol-smb, .protocol-smbv2 { background: rgba(56, 139, 253, 0.2); color: #388bfd; }
+.protocol-rdp { background: rgba(210, 153, 34, 0.2); color: #d29922; }
+.protocol-mysql, .protocol-mssql, .protocol-postgres { background: rgba(248, 81, 73, 0.2); color: #f85149; }
+.protocol-telnet { background: rgba(139, 148, 158, 0.2); color: #8b949e; }
+.protocol-vnc { background: rgba(163, 113, 247, 0.2); color: #a371f7; }
+
+/* Credential styling - larger and easy to copy */
+.cred-username {
+  background: rgba(240, 136, 62, 0.2);
+  color: #f0883e;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  user-select: all;
+  border: 1px solid rgba(240, 136, 62, 0.3);
+}
+.cred-password {
+  background: rgba(248, 81, 73, 0.2);
+  color: #f85149;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  user-select: all;
+  border: 1px solid rgba(248, 81, 73, 0.3);
+}
+
+/* Key file path styling */
+.key-path {
+  background: rgba(63, 185, 80, 0.15);
+  color: #3fb950;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  user-select: all;
+  border: 1px solid rgba(63, 185, 80, 0.2);
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+}
+.cert-path {
+  background: rgba(88, 166, 255, 0.15);
+  color: #58a6ff;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  user-select: all;
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+/* Details cell */
+.details-cell {
+  color: #8b949e;
+  font-size: 0.9rem;
+  max-width: 300px;
+}
+
+/* Timestamp cell */
+.timestamp-cell {
+  color: #6e7681;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* Collapse toggle icon rotation */
+[data-bs-toggle="collapse"][aria-expanded="true"] .bi-chevron-down {
+  transform: rotate(180deg);
+}
+[data-bs-toggle="collapse"] .bi-chevron-down {
+  transition: transform 0.2s ease;
+}
+
+/* Search and filter styling */
+.form-control.bg-dark:focus {
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.25);
+  border-color: #58a6ff;
+}
+
+/* Filter buttons */
+.filter-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #8b949e;
+  transition: all 0.2s ease;
+}
+.filter-btn:hover {
+  background: rgba(88, 166, 255, 0.1);
+  border-color: rgba(88, 166, 255, 0.3);
+  color: #58a6ff;
+}
+.filter-btn.active {
+  background: rgba(88, 166, 255, 0.2);
+  border-color: #58a6ff;
+  color: #58a6ff;
+}
+
+/* Zero-count protocol filter buttons (dimmed) */
+.filter-btn-zero {
+  opacity: 0.4;
+}
+.filter-btn-zero:hover {
+  opacity: 0.8;
+}
+
+/* Protocol-specific filter buttons */
+.filter-btn[data-filter="ssh"] { border-left: 3px solid #3fb950; }
+.filter-btn[data-filter="ftp"] { border-left: 3px solid #58a6ff; }
+.filter-btn[data-filter="http"], .filter-btn[data-filter="https"] { border-left: 3px solid #db8b44; }
+.filter-btn[data-filter="smb"], .filter-btn[data-filter="smbv2"] { border-left: 3px solid #388bfd; }
+.filter-btn[data-filter="rdp"] { border-left: 3px solid #d29922; }
+.filter-btn[data-filter="winrm"], .filter-btn[data-filter="winrm-ssl"] { border-left: 3px solid #d29922; }
+.filter-btn[data-filter="mysql"], .filter-btn[data-filter="mssql"], .filter-btn[data-filter="postgres"] { border-left: 3px solid #f85149; }
+.filter-btn[data-filter="mongodb"], .filter-btn[data-filter="redis"], .filter-btn[data-filter="elasticsearch"] { border-left: 3px solid #f85149; }
+.filter-btn[data-filter="couchdb"], .filter-btn[data-filter="influxdb"], .filter-btn[data-filter="cassandra"] { border-left: 3px solid #f85149; }
+.filter-btn[data-filter="neo4j"], .filter-btn[data-filter="memcached"] { border-left: 3px solid #f85149; }
+.filter-btn[data-filter="telnet"] { border-left: 3px solid #8b949e; }
+.filter-btn[data-filter="vnc"] { border-left: 3px solid #a371f7; }
+.filter-btn[data-filter="smtp"], .filter-btn[data-filter="smtps"] { border-left: 3px solid #79c0ff; }
+.filter-btn[data-filter="imap"], .filter-btn[data-filter="imaps"] { border-left: 3px solid #79c0ff; }
+.filter-btn[data-filter="pop3"], .filter-btn[data-filter="pop3s"] { border-left: 3px solid #79c0ff; }
+.filter-btn[data-filter="ldap"], .filter-btn[data-filter="ldaps"] { border-left: 3px solid #bc8cff; }
+.filter-btn[data-filter="snmp"] { border-left: 3px solid #56d364; }
+.filter-btn[data-filter="ipmi"] { border-left: 3px solid #56d364; }
+.filter-btn[data-filter="mqtt"], .filter-btn[data-filter="mqtts"] { border-left: 3px solid #56d364; }
+
+/* Expandable row toggle button */
+.expand-toggle {
+  background: none;
+  border: none;
+  color: #8b949e;
+  padding: 0.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+}
+.expand-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #58a6ff;
+}
+.expand-toggle.expanded {
+  color: #58a6ff;
+}
+.expand-toggle i {
+  transition: transform 0.2s ease;
+}
+.expand-toggle.expanded i {
+  transform: rotate(90deg);
+}
+.expand-toggle.no-history {
+  visibility: hidden;
+}
+
+/* Main credential row */
+.cred-row {
+  cursor: default;
+}
+.cred-row.has-history {
+  cursor: pointer;
+}
+.cred-row.has-history:hover {
+  background: rgba(88, 166, 255, 0.05) !important;
+}
+.cred-row.hidden {
+  display: none;
+}
+
+/* History sub-row */
+.history-row {
+  display: none;
+  background: rgba(0, 0, 0, 0.2) !important;
+}
+.history-row.show {
+  display: table-row;
+}
+.history-row td {
+  padding: 0 !important;
+  border-top: none !important;
+}
+
+/* History table inside the expandable row */
+.history-table {
+  width: 100%;
+  margin: 0;
+  background: rgba(0, 0, 0, 0.15);
+}
+.history-table thead {
+  background: rgba(0, 0, 0, 0.3);
+}
+.history-table thead th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6e7681;
+  padding: 0.5rem 0.75rem !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+.history-table tbody td {
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.85rem;
+  color: #8b949e;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+.history-table tbody tr:last-child td {
+  border-bottom: none !important;
+}
+
+/* Attempts badge */
+.attempts-badge {
+  background: rgba(13, 202, 240, 0.2);
+  color: #0dcaf0;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.attempts-badge.single {
+  background: rgba(108, 117, 125, 0.2);
+  color: #6c757d;
+}
+
+/* ==================== PWNBOARD GRID ==================== */
+.pwn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 8px;
+}
+.pwn-cell {
+  border-radius: 4px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: box-shadow 0.12s ease;
+  border: none;
+  border-left: 4px solid transparent;
+  position: relative;
+}
+.pwn-cell:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+.pwn-cell .pwn-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.pwn-cell .pwn-ip {
+  font-family: 'SF Mono', 'Consolas', 'Fira Code', monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.pwn-cell .pwn-status-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+.pwn-cell .pwn-protocols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.pwn-cell .pwn-proto-badge {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.7);
+}
+.pwn-cell .pwn-detail {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: inherit;
+}
+.pwn-cell .pwn-detail .pwn-cred {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 0.8rem;
+}
+.pwn-cell .pwn-time {
+  font-size: 0.75rem;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0.7;
+}
+.pwn-cell .pwn-summary {
+  font-size: 0.8rem;
+  margin-top: 6px;
+  font-weight: 500;
+}
+/* Status colors — flat, material */
+.pwn-cell.pwn-success {
+  background: #1a332a;
+  border-left-color: #28a745;
+  color: #d4edda;
+}
+.pwn-cell.pwn-success .pwn-status-label { background: #28a745; color: #fff; }
+.pwn-cell.pwn-success .pwn-proto-badge { background: rgba(40,167,69,0.15); color: #6fcf7c; }
+.pwn-cell.pwn-failed {
+  background: #2d1a1e;
+  border-left-color: #dc3545;
+  color: #f5c6cb;
+}
+.pwn-cell.pwn-failed .pwn-status-label { background: #dc3545; color: #fff; }
+.pwn-cell.pwn-failed .pwn-proto-badge { background: rgba(220,53,69,0.15); color: #e88a93; }
+.pwn-cell.pwn-error {
+  background: #2d2a1a;
+  border-left-color: #ffc107;
+  color: #fff3cd;
+}
+.pwn-cell.pwn-error .pwn-status-label { background: #e0a800; color: #1a1a1a; }
+.pwn-cell.pwn-error .pwn-proto-badge { background: rgba(255,193,7,0.12); color: #e0c56a; }
+.pwn-cell.pwn-untested {
+  background: #1e2126;
+  border-left-color: #6c757d;
+  color: #adb5bd;
+}
+.pwn-cell.pwn-untested .pwn-status-label { background: #495057; color: #ced4da; }
+/* Legend swatches */
+.pwn-legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+}
+.pwn-legend-swatch.pwn-success { background: #28a745; }
+.pwn-legend-swatch.pwn-failed { background: #dc3545; }
+.pwn-legend-swatch.pwn-error { background: #ffc107; }
+.pwn-legend-swatch.pwn-untested { background: #6c757d; }
+
+/* ==================== HEADER VIEW TOGGLE & NAV ==================== */
+.credrecon-view-toggle {
+  display: inline-flex;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+.credrecon-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #8b949e;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.credrecon-view-btn:hover {
+  color: #c9d1d9;
+  background: rgba(255,255,255,0.06);
+}
+.credrecon-view-btn.active {
+  background: rgba(88, 166, 255, 0.15);
+  color: #58a6ff;
+}
+.credrecon-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  color: #8b949e;
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+.credrecon-nav-link:hover {
+  color: #c9d1d9;
+  background: rgba(255,255,255,0.06);
+}
+.credrecon-nav-primary {
+  color: #58a6ff;
+  background: rgba(88, 166, 255, 0.08);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+}
+.credrecon-nav-primary:hover {
+  color: #79c0ff;
+  background: rgba(88, 166, 255, 0.15);
+  border-color: rgba(88, 166, 255, 0.3);
+}
+/* PWNboard tab styling — now handled by .pwn-toolbar-tabs */
+
+/* ==================== PWNBOARD TOOLBAR ==================== */
+.pwn-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.pwn-toolbar-tabs {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.pwn-toolbar-tabs .nav-link {
+  color: #8b949e;
+  border: none;
+  background: transparent;
+  padding: 6px 14px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+.pwn-toolbar-tabs .nav-link:hover { color: #c9d1d9; background: rgba(255,255,255,0.04); }
+.pwn-toolbar-tabs .nav-link.active {
+  color: #e6edf3;
+  background: rgba(255,255,255,0.08);
+}
+body.light-theme .pwn-toolbar { border-bottom-color: rgba(0,0,0,0.08); }
+body.light-theme .pwn-toolbar-tabs .nav-link { color: #57606a; }
+body.light-theme .pwn-toolbar-tabs .nav-link:hover { color: #24292f; background: rgba(0,0,0,0.04); }
+body.light-theme .pwn-toolbar-tabs .nav-link.active { color: #24292f; background: rgba(0,0,0,0.06); }
+
+/* Toolbar search */
+.pwn-toolbar-search {
+  flex: 1;
+  max-width: 320px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.pwn-toolbar-search .pwn-search-icon {
+  position: absolute;
+  left: 10px;
+  color: #484f58;
+  font-size: 0.82rem;
+  pointer-events: none;
+}
+.pwn-toolbar-search input {
+  width: 100%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  padding: 5px 32px 5px 30px;
+  font-size: 0.85rem;
+  color: #c9d1d9;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.pwn-toolbar-search input:focus {
+  border-color: rgba(88,166,255,0.4);
+  background: rgba(255,255,255,0.06);
+}
+.pwn-toolbar-search input::placeholder { color: #484f58; }
+.pwn-toolbar-search button {
+  position: absolute;
+  right: 4px;
+  background: none;
+  border: none;
+  color: #484f58;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+.pwn-toolbar-search button:hover { color: #c9d1d9; }
+body.light-theme .pwn-toolbar-search input { background: #fff; border-color: #d0d7de; color: #1f2328; }
+body.light-theme .pwn-toolbar-search input:focus { border-color: #0969da; }
+body.light-theme .pwn-toolbar-search input::placeholder { color: #8b949e; }
+body.light-theme .pwn-toolbar-search .pwn-search-icon { color: #8b949e; }
+
+/* Service filter dropdown */
+.pwn-service-filter {
+  position: relative;
+}
+.pwn-service-filter select {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  padding: 5px 28px 5px 10px;
+  font-size: 0.85rem;
+  color: #c9d1d9;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23484f58' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  transition: border-color 0.15s, background 0.15s;
+  min-width: 130px;
+}
+.pwn-service-filter select:focus {
+  border-color: rgba(88,166,255,0.4);
+  background-color: rgba(255,255,255,0.06);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23484f58' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.pwn-service-filter select option {
+  background: #1c2128;
+  color: #c9d1d9;
+}
+body.light-theme .pwn-service-filter select {
+  background-color: #fff;
+  border-color: #d0d7de;
+  color: #1f2328;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b949e' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+body.light-theme .pwn-service-filter select:focus {
+  border-color: #0969da;
+}
+body.light-theme .pwn-service-filter select option {
+  background: #fff;
+  color: #1f2328;
+}
+
+/* Toolbar buttons */
+.pwn-toolbar-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #8b949e;
+  padding: 5px 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.pwn-toolbar-btn:hover { color: #c9d1d9; border-color: rgba(255,255,255,0.2); }
+.pwn-toolbar-btn.active {
+  color: #0dcaf0;
+  border-color: #0dcaf0;
+  background: rgba(13, 202, 240, 0.1);
+}
+.pwn-toolbar-btn-primary {
+  color: #0dcaf0;
+  border-color: #0dcaf0;
+  background: rgba(13, 202, 240, 0.1);
+}
+.pwn-toolbar-btn-primary:hover { background: rgba(13, 202, 240, 0.2); }
+body.light-theme .pwn-toolbar-btn { border-color: #d0d7de; color: #57606a; }
+body.light-theme .pwn-toolbar-btn:hover { color: #24292f; border-color: #afb8c1; }
+body.light-theme .pwn-toolbar-btn.active { color: #0969da; border-color: #0969da; background: rgba(9,105,218,0.08); }
+
+/* Legend (compact) */
+.pwn-legend {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+/* Select mode */
+.pwn-cell.pwn-selectable { cursor: crosshair; }
+.pwn-cell.pwn-selected {
+  outline: 2px solid #0dcaf0 !important;
+  outline-offset: -2px;
+}
+.pwn-cell.pwn-selected::after {
+  content: '\F272';
+  font-family: 'bootstrap-icons';
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 1.1rem;
+  color: #0dcaf0;
+}
+
+/* Tag badges on tiles */
+.pwn-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 6px;
+}
+.pwn-tag-badge {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(13, 202, 240, 0.15);
+  color: #0dcaf0;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+body.light-theme .pwn-tag-badge { background: rgba(13,110,253,0.1); color: #0d6efd; }
+
+/* ==================== HOST GROUPS (columns) ==================== */
+.pwn-group {
+  margin-bottom: 20px;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.pwn-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.pwn-group-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e6edf3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pwn-group-title .bi { color: #0dcaf0; font-size: 1rem; }
+.pwn-group-count {
+  font-size: 0.78rem;
+  color: #8b949e;
+  background: rgba(255,255,255,0.06);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.pwn-group-actions { display: flex; gap: 4px; }
+.pwn-group-actions button {
+  background: none;
+  border: none;
+  color: #484f58;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  transition: all 0.12s;
+}
+.pwn-group-actions button:hover { color: #c9d1d9; background: rgba(255,255,255,0.06); }
+.pwn-group-actions button.pwn-group-delete:hover { color: #f85149; background: rgba(248,81,73,0.1); }
+.pwn-group-body { padding: 12px; }
+.pwn-group-body .pwn-grid { gap: 6px; }
+body.light-theme .pwn-group { border-color: #d8dee4; }
+body.light-theme .pwn-group-header { background: #f6f8fa; border-bottom-color: #d8dee4; }
+body.light-theme .pwn-group-title { color: #24292f; }
+body.light-theme .pwn-group-count { background: #e1e4e8; color: #57606a; }
+body.light-theme .pwn-group-actions button { color: #8b949e; }
+body.light-theme .pwn-group-actions button:hover { color: #24292f; background: rgba(0,0,0,0.04); }
+
+/* Ungrouped section label */
+.pwn-ungrouped-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #484f58;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+body.light-theme .pwn-ungrouped-label { color: #8b949e; border-bottom-color: #d8dee4; }
+
+/* Group rename input */
+.pwn-group-rename-input {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid #0dcaf0;
+  border-radius: 4px;
+  color: #e6edf3;
+  padding: 2px 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  outline: none;
+  width: 200px;
+}
+body.light-theme .pwn-group-rename-input { background: #fff; color: #24292f; border-color: #0969da; }
+
+/* Group modal */
+#groupSelectedList .badge {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 0.78rem;
+}
+
+/* ==================== TAG SYSTEM ==================== */
+.cred-row.tag-hidden {
+  display: none !important;
+}
+.cred-row.tag-hidden + .history-row {
+  display: none !important;
+}
+#tagModalCurrentTags .badge {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+#tagModalCurrentTags .badge .bi-x-lg {
+  font-size: 0.65rem;
+  cursor: pointer;
+}
+#tagModalCurrentTags .badge:hover .bi-x-lg {
+  color: #f85149;
+}
+
+
+/* ==================== HOST DETAIL MODAL ==================== */
+#hostDetailBody .detail-attempt {
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  font-size: 0.88rem;
+}
+#hostDetailBody .detail-attempt.attempt-success {
+  background: rgba(40,167,69,0.12);
+  border-left: 3px solid #28a745;
+}
+#hostDetailBody .detail-attempt.attempt-failed {
+  background: rgba(220,53,69,0.12);
+  border-left: 3px solid #dc3545;
+}
+#hostDetailBody .detail-attempt.attempt-error {
+  background: rgba(255,193,7,0.10);
+  border-left: 3px solid #ffc107;
+}
+#hostDetailBody .detail-attempt .attempt-meta {
+  font-size: 0.78rem;
+  opacity: 0.7;
+}
+#hostDetailBody .detail-attempt .attempt-cred {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 0.82rem;
+}
+#hostDetailBody .detail-section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.6;
+  margin-bottom: 6px;
+  margin-top: 12px;
+}
+#hostDetailBody .detail-section-title:first-child { margin-top: 0; }
+#hostDetailTags .badge { font-size: 0.8rem; font-weight: 500; }
+#hostDetailTags .badge .bi-x-lg { font-size: 0.6rem; cursor: pointer; }
+#hostDetailTags .badge:hover .bi-x-lg { color: #f85149; }
+
+/* ==================== LIGHT THEME ==================== */
+body.light-theme .pwn-cell.pwn-success {
+  background: #f0faf3;
+  border-left-color: #28a745;
+  color: #155724;
+}
+body.light-theme .pwn-cell.pwn-success .pwn-proto-badge { background: rgba(40,167,69,0.1); color: #1a7a32; }
+body.light-theme .pwn-cell.pwn-failed {
+  background: #fdf2f3;
+  border-left-color: #dc3545;
+  color: #721c24;
+}
+body.light-theme .pwn-cell.pwn-failed .pwn-proto-badge { background: rgba(220,53,69,0.1); color: #a71d2a; }
+body.light-theme .pwn-cell.pwn-error {
+  background: #fffcf0;
+  border-left-color: #ffc107;
+  color: #856404;
+}
+body.light-theme .pwn-cell.pwn-error .pwn-proto-badge { background: rgba(255,193,7,0.1); color: #856404; }
+body.light-theme .pwn-cell.pwn-untested {
+  background: #f6f8fa;
+  border-left-color: #6c757d;
+  color: #495057;
+}
+body.light-theme .pwn-cell .pwn-time { border-top-color: rgba(0,0,0,0.08); }
+body.light-theme .pwn-cell:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+/* Light theme: header view toggle & nav */
+body.light-theme .credrecon-view-toggle {
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(0,0,0,0.1);
+}
+body.light-theme .credrecon-view-btn {
+  color: #57606a;
+}
+body.light-theme .credrecon-view-btn:hover {
+  color: #24292f;
+  background: rgba(0,0,0,0.06);
+}
+body.light-theme .credrecon-view-btn.active {
+  background: rgba(13, 110, 253, 0.12);
+  color: #0d6efd;
+}
+body.light-theme .credrecon-nav-link {
+  color: #57606a;
+}
+body.light-theme .credrecon-nav-link:hover {
+  color: #24292f;
+  background: rgba(0,0,0,0.06);
+}
+body.light-theme .credrecon-nav-primary {
+  color: #0d6efd;
+  background: rgba(13, 110, 253, 0.06);
+  border-color: rgba(13, 110, 253, 0.2);
+}
+body.light-theme .credrecon-nav-primary:hover {
+  color: #0a58ca;
+  background: rgba(13, 110, 253, 0.12);
+  border-color: rgba(13, 110, 253, 0.3);
+}
+body.light-theme #tagModal .modal-content {
+  background: #ffffff !important;
+  color: #1f2328 !important;
+  border-color: #d0d7de !important;
+}
+body.light-theme #tagModal .modal-header {
+  border-color: #d0d7de !important;
+}
+body.light-theme #tagModal .form-control {
+  background: #ffffff !important;
+  border-color: #d0d7de !important;
+  color: #1f2328 !important;
+}
+</style>
+
+<script>
+// ==================== GLOBAL STATE ====================
+const tableState = {
+  creds: { grouped: {}, raw: [], protocolFilter: 'all', expanded: false, rowIndex: 0, expandedKeys: new Set() },
+  keys:  { grouped: {}, raw: [], protocolFilter: 'all', expanded: false, rowIndex: 0, expandedKeys: new Set() },
+  failed: []  // Failed/error results for export
+};
+
+// ==================== HELPERS ====================
+function isKeyAuth(cred) {
+  return cred.service === 'ssh-key' || cred.service === 'ssh-cert'
+    || (cred.password && String(cred.password).startsWith('key:'));
+}
+
+function parseKeyInfo(password) {
+  if (!password) return { keyFile: '', certFile: '' };
+  const stripped = String(password).replace(/^key:/, '');
+  const certSplit = stripped.split('+cert:');
+  return {
+    keyFile: certSplit[0] || '',
+    certFile: certSplit.length > 1 ? certSplit[1] : ''
+  };
+}
+
+function shortPath(fullPath) {
+  if (!fullPath) return '';
+  const parts = fullPath.split('/');
+  return parts[parts.length - 1] || fullPath;
+}
+
+/* formatTimestamp now in global cygor-datetime.js */
+/* escapeHtml, escapeCSV now in global cygor-utils.js */
+
+function escapeXML(value) {
+  if (!value) return '';
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function getDateString() { return new Date().toISOString().split('T')[0]; }
+
+function downloadFile(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType + ';charset=utf-8;' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  window.URL.revokeObjectURL(url);
+}
+
+function buildXML(data, fields) {
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  xml += `<credrecon_results generated="${new Date().toISOString()}" total="${data.length}">\n`;
+  data.forEach(item => {
+    xml += '  <result>\n';
+    fields.forEach(field => {
+      xml += `    <${field}>${escapeXML(String(item[field] ?? ''))}</${field}>\n`;
+    });
+    xml += '  </result>\n';
+  });
+  xml += '</credrecon_results>\n';
+  return xml;
+}
+
+// ==================== INIT ====================
+document.addEventListener('DOMContentLoaded', function() {
+  loadTags();
+  fetchAllData();
+});
+
+async function fetchAllData() {
+  const loading = document.getElementById('tableDataLoading');
+  try {
+    const PER_PAGE = 50000;
+    // Fetch first page
+    const resp = await fetch(`/api/credrecon/results/aggregated?per_page=${PER_PAGE}&page=1`);
+    if (!resp.ok) throw new Error('Failed to fetch results');
+    const data = await resp.json();
+
+    let allResults = data.results || [];
+    console.log(`[cygor] fetchAllData: page 1 returned ${allResults.length} results, total=${data.total}, pages=${data.total_pages}`);
+
+    // If there are more pages, fetch them all in parallel
+    if (data.total_pages && data.total_pages > 1) {
+      const fetches = [];
+      for (let p = 2; p <= data.total_pages; p++) {
+        fetches.push(
+          fetch(`/api/credrecon/results/aggregated?per_page=${PER_PAGE}&page=${p}`)
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null)
+        );
+      }
+      const pages = await Promise.all(fetches);
+      pages.forEach(pageData => {
+        if (pageData && pageData.results) {
+          allResults = allResults.concat(pageData.results);
+        }
+      });
+    }
+
+    // Split results into success/failed/error
+    allResults.forEach(r => {
+      if (r.status === 'success') {
+        if (isKeyAuth(r)) tableState.keys.raw.push(r);
+        else tableState.creds.raw.push(r);
+      } else {
+        tableState.failed.push(r);
+      }
+    });
+
+    console.log(`[cygor] Split: creds=${tableState.creds.raw.length}, keys=${tableState.keys.raw.length}, failed=${tableState.failed.length}`);
+
+    // Group and render — each section independent so errors don't cascade
+    try { groupData(); renderAllTables(); } catch(e) { console.error('Error rendering tables:', e); }
+    try { populateFailedSections(); } catch(e) { console.error('Error populating failed sections:', e); }
+
+    // Show/hide sections based on data
+    if (loading) loading.style.display = 'none';
+    const successCount = tableState.creds.raw.length + tableState.keys.raw.length;
+    if (successCount > 0) {
+      const section = document.getElementById('successfulSection');
+      if (section) section.style.display = 'block';
+      const badge = document.getElementById('successfulCountBadge');
+      if (badge) badge.textContent = successCount;
+    }
+
+    // Auto-switch to keys tab if no creds but keys exist
+    const credsTab = document.getElementById('creds-tab');
+    const keysTab = document.getElementById('keys-tab');
+    if (Object.keys(tableState.creds.grouped).length === 0 && Object.keys(tableState.keys.grouped).length > 0 && credsTab && keysTab) {
+      new bootstrap.Tab(keysTab).show();
+    }
+  } catch (e) {
+    console.error('Error loading data:', e);
+    if (loading) loading.innerHTML = '<i class="bi bi-exclamation-triangle text-warning fs-1"></i><p class="mt-3 text-warning">Error loading results</p>';
+  }
+}
+
+function groupData() {
+  ['creds', 'keys'].forEach(cat => {
+    const state = tableState[cat];
+    state.grouped = {};
+    state.raw.forEach(cred => {
+      const key = `${cred.ip}:${cred.port}:${cred.username}:${cred.password}`;
+      if (!state.grouped[key]) {
+        state.grouped[key] = {
+          ip: cred.ip, port: cred.port, protocol: cred.protocol,
+          service: cred.service || '', username: cred.username,
+          password: cred.password, attempts: []
+        };
+      }
+      state.grouped[key].attempts.push({ timestamp: cred.timestamp, details: cred.details || '' });
+    });
+    Object.values(state.grouped).forEach(g => {
+      g.attempts.sort((a, b) => (new Date(b.timestamp).getTime() || 0) - (new Date(a.timestamp).getTime() || 0));
+    });
+  });
+  const credsBadge = document.getElementById('credsCountBadge');
+  const keysBadge = document.getElementById('keysCountBadge');
+  if (credsBadge) credsBadge.textContent = Object.keys(tableState.creds.grouped).length;
+  if (keysBadge) keysBadge.textContent = Object.keys(tableState.keys.grouped).length;
+}
+
+function reGroupAndRender() {
+  groupData();
+  renderAllTables();
+  if (currentView === 'dashboard') {
+    buildPwnboard();
+  }
+}
+
+// ==================== RENDER TABLES ====================
+function renderAllTables() {
+  renderCredentialsTable();
+  renderKeysTable();
+  initProtocolFilters();
+}
+
+function renderCredentialsTable() {
+  const tbody = document.getElementById('credsTableBody');
+  const emptyEl = document.getElementById('credsEmpty');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+  const state = tableState.creds;
+  state.rowIndex = 0;
+
+  const entries = Object.entries(state.grouped).sort((a, b) =>
+    (new Date(b[1].attempts[0]?.timestamp).getTime() || 0) - (new Date(a[1].attempts[0]?.timestamp).getTime() || 0)
+  );
+
+  if (entries.length === 0) {
+    if (emptyEl) emptyEl.style.display = 'block';
+    return;
+  }
+
+  entries.forEach(([key, cred]) => {
+    const hasHistory = cred.attempts.length > 1;
+    const latest = cred.attempts[0];
+    const safeId = 'creds-row-' + state.rowIndex++;
+
+    const mainRow = document.createElement('tr');
+    mainRow.className = `cred-row border-bottom border-dark ${hasHistory ? 'has-history' : ''}`;
+    mainRow.dataset.key = key;
+    mainRow.dataset.protocol = cred.protocol.toLowerCase();
+    mainRow.dataset.table = 'creds';
+    mainRow.dataset.searchable = `${cred.ip} ${cred.port} ${cred.protocol} ${cred.service} ${cred.username} ${cred.password}`.toLowerCase();
+    mainRow.dataset.rowId = safeId;
+    if (hasHistory) mainRow.onclick = function(e) { if (!e.target.closest('.expand-toggle')) toggleHistory(safeId); };
+
+    const wasExpanded = hasHistory && state.expandedKeys.has(key);
+
+    mainRow.innerHTML = `
+      <td class="ps-3">
+        <button class="expand-toggle ${hasHistory ? '' : 'no-history'} ${wasExpanded ? 'expanded' : ''}" onclick="event.stopPropagation(); toggleHistory('${safeId}')" title="${hasHistory ? 'Show previous attempts' : 'No previous attempts'}">
+          <i class="bi bi-chevron-right"></i>
+        </button>
+      </td>
+      <td><span class="target-link" style="cursor:pointer;" onclick="event.stopPropagation(); showTagModal('${escapeHtml(cred.ip)}')" title="Click to manage tags">${escapeHtml(cred.ip)}</span></td>
+      <td><span class="port-badge">${escapeHtml(cred.port)}</span></td>
+      <td><span class="protocol-badge protocol-${cred.protocol.toLowerCase()}">${escapeHtml(cred.protocol.toLowerCase())}</span></td>
+      <td><span class="cred-username font-monospace">${escapeHtml(cred.username)}</span></td>
+      <td><span class="cred-password font-monospace">${escapeHtml(cred.password)}</span></td>
+      <td class="details-cell">${escapeHtml(latest.details || '')}</td>
+      <td class="timestamp-cell">${formatTimestamp(latest.timestamp)}</td>
+      <td class="pe-3"><span class="attempts-badge ${hasHistory ? '' : 'single'}">${cred.attempts.length}</span></td>
+    `;
+    tbody.appendChild(mainRow);
+
+    if (hasHistory) {
+      const historyRow = document.createElement('tr');
+      historyRow.className = `history-row ${wasExpanded ? 'show' : ''}`;
+      historyRow.id = `history-${safeId}`;
+      historyRow.innerHTML = `
+        <td colspan="9">
+          <table class="table table-dark history-table mb-0">
+            <thead><tr>
+              <th style="width:40px;"></th><th>Attempt #</th><th>Target</th><th>Port</th><th>Protocol</th><th>Username</th><th>Password</th><th>Details</th><th>Timestamp</th>
+            </tr></thead>
+            <tbody>
+              ${cred.attempts.map((a, i) => `<tr><td></td><td><span class="badge bg-secondary">#${i+1}</span></td><td class="font-monospace">${escapeHtml(cred.ip)}</td><td class="font-monospace">${escapeHtml(cred.port)}</td><td class="font-monospace">${escapeHtml(cred.protocol.toLowerCase())}</td><td class="font-monospace">${escapeHtml(cred.username)}</td><td class="font-monospace">${escapeHtml(cred.password)}</td><td>${escapeHtml(a.details||'-')}</td><td>${formatTimestamp(a.timestamp)}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </td>`;
+      tbody.appendChild(historyRow);
+    }
+  });
+}
+
+function renderKeysTable() {
+  const tbody = document.getElementById('keysTableBody');
+  const emptyEl = document.getElementById('keysEmpty');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+  const state = tableState.keys;
+  state.rowIndex = 0;
+
+  const entries = Object.entries(state.grouped).sort((a, b) =>
+    (new Date(b[1].attempts[0]?.timestamp).getTime() || 0) - (new Date(a[1].attempts[0]?.timestamp).getTime() || 0)
+  );
+
+  if (entries.length === 0) {
+    if (emptyEl) emptyEl.style.display = 'block';
+    return;
+  }
+
+  entries.forEach(([key, cred]) => {
+    const hasHistory = cred.attempts.length > 1;
+    const latest = cred.attempts[0];
+    const safeId = 'keys-row-' + state.rowIndex++;
+    const keyInfo = parseKeyInfo(cred.password);
+
+    const mainRow = document.createElement('tr');
+    mainRow.className = `cred-row border-bottom border-dark ${hasHistory ? 'has-history' : ''}`;
+    mainRow.dataset.key = key;
+    mainRow.dataset.protocol = (cred.protocol || 'ssh').toLowerCase();
+    mainRow.dataset.table = 'keys';
+    mainRow.dataset.searchable = `${cred.ip} ${cred.port} ${cred.username} ${keyInfo.keyFile} ${keyInfo.certFile}`.toLowerCase();
+    mainRow.dataset.rowId = safeId;
+    if (hasHistory) mainRow.onclick = function(e) { if (!e.target.closest('.expand-toggle')) toggleHistory(safeId); };
+
+    const wasExpanded = hasHistory && state.expandedKeys.has(key);
+
+    mainRow.innerHTML = `
+      <td class="ps-3">
+        <button class="expand-toggle ${hasHistory ? '' : 'no-history'} ${wasExpanded ? 'expanded' : ''}" onclick="event.stopPropagation(); toggleHistory('${safeId}')" title="${hasHistory ? 'Show previous attempts' : 'No previous attempts'}">
+          <i class="bi bi-chevron-right"></i>
+        </button>
+      </td>
+      <td><span class="target-link" style="cursor:pointer;" onclick="event.stopPropagation(); showTagModal('${escapeHtml(cred.ip)}')" title="Click to manage tags">${escapeHtml(cred.ip)}</span></td>
+      <td><span class="port-badge">${escapeHtml(cred.port)}</span></td>
+      <td><span class="cred-username font-monospace">${escapeHtml(cred.username)}</span></td>
+      <td><span class="key-path font-monospace" title="${escapeHtml(keyInfo.keyFile)}">${escapeHtml(shortPath(keyInfo.keyFile))}</span></td>
+      <td>${keyInfo.certFile ? `<span class="cert-path font-monospace" title="${escapeHtml(keyInfo.certFile)}">${escapeHtml(shortPath(keyInfo.certFile))}</span>` : '<span class="text-muted small">none</span>'}</td>
+      <td class="details-cell">${escapeHtml(latest.details || '')}</td>
+      <td class="timestamp-cell">${formatTimestamp(latest.timestamp)}</td>
+      <td class="pe-3"><span class="attempts-badge ${hasHistory ? '' : 'single'}">${cred.attempts.length}</span></td>
+    `;
+    tbody.appendChild(mainRow);
+
+    if (hasHistory) {
+      const historyRow = document.createElement('tr');
+      historyRow.className = `history-row ${wasExpanded ? 'show' : ''}`;
+      historyRow.id = `history-${safeId}`;
+      historyRow.innerHTML = `
+        <td colspan="9">
+          <table class="table table-dark history-table mb-0">
+            <thead><tr>
+              <th style="width:40px;"></th><th>Attempt #</th><th>Target</th><th>Port</th><th>Username</th><th>Key File</th><th>Certificate</th><th>Details</th><th>Timestamp</th>
+            </tr></thead>
+            <tbody>
+              ${cred.attempts.map((a, i) => {
+                const ki = parseKeyInfo(cred.password);
+                return `<tr><td></td><td><span class="badge bg-secondary">#${i+1}</span></td><td class="font-monospace">${escapeHtml(cred.ip)}</td><td class="font-monospace">${escapeHtml(cred.port)}</td><td class="font-monospace">${escapeHtml(cred.username)}</td><td class="font-monospace">${escapeHtml(shortPath(ki.keyFile))}</td><td class="font-monospace">${escapeHtml(shortPath(ki.certFile) || '-')}</td><td>${escapeHtml(a.details||'-')}</td><td>${formatTimestamp(a.timestamp)}</td></tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </td>`;
+      tbody.appendChild(historyRow);
+    }
+  });
+}
+
+// ==================== ALL SUPPORTED PROTOCOLS ====================
+const ALL_PROTOCOLS = [
+  'ssh', 'ftp', 'telnet', 'http', 'https',
+  'smb', 'rdp', 'winrm', 'winrm-ssl', 'vnc',
+  'mysql', 'postgres', 'mssql', 'mongodb', 'redis',
+  'elasticsearch', 'couchdb', 'influxdb', 'cassandra', 'neo4j', 'memcached',
+  'smtp', 'smtps', 'imap', 'imaps', 'pop3', 'pop3s',
+  'ldap', 'ldaps',
+  'snmp', 'ipmi', 'mqtt', 'mqtts',
+];
+
+// ==================== PROTOCOL FILTERS ====================
+function _buildProtocolFilterButtons(container, cat, grouped) {
+  if (!container) return;
+  // Clear dynamically-added protocol buttons to prevent duplicates on re-render
+  // Keep the static "All" button (data-filter="all")
+  container.querySelectorAll('.filter-btn:not([data-filter="all"])').forEach(btn => btn.remove());
+
+  // Count results per protocol from actual data
+  const counts = new Map();
+  Object.values(grouped).forEach(cred => {
+    const p = cred.protocol.toLowerCase();
+    counts.set(p, (counts.get(p) || 0) + 1);
+  });
+
+  // Collect any extra protocols present in data but not in ALL_PROTOCOLS
+  const extras = [];
+  counts.forEach((_, p) => { if (!ALL_PROTOCOLS.includes(p)) extras.push(p); });
+  extras.sort();
+
+  // Build buttons: only show protocols that have results (sorted by count desc)
+  const withResults = ALL_PROTOCOLS.filter(p => counts.has(p)).sort((a, b) => counts.get(b) - counts.get(a));
+
+  [...withResults, ...extras].forEach(protocol => {
+    const count = counts.get(protocol) || 0;
+    if (count === 0) return;
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sm filter-btn';
+    btn.dataset.filter = protocol;
+    btn.onclick = () => filterTableByProtocol(cat, protocol);
+    btn.innerHTML = `${protocol.toUpperCase()} <span class="badge bg-secondary ms-1">${count}</span>`;
+    container.appendChild(btn);
+  });
+}
+
+function initProtocolFilters() {
+  _buildProtocolFilterButtons(
+    document.getElementById('credsProtocolFilters'), 'creds', tableState.creds.grouped
+  );
+  _buildProtocolFilterButtons(
+    document.getElementById('keysProtocolFilters'), 'keys', tableState.keys.grouped
+  );
+}
+
+// ==================== FILTER / SEARCH ====================
+function filterTable(cat) {
+  const searchInput = document.getElementById(`${cat}SearchInput`);
+  const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+  const state = tableState[cat];
+  const rows = document.querySelectorAll(`.cred-row[data-table="${cat}"]`);
+  let visible = 0;
+
+  rows.forEach(row => {
+    const matchesSearch = !searchTerm || row.dataset.searchable.includes(searchTerm);
+    const matchesProtocol = state.protocolFilter === 'all' || row.dataset.protocol === state.protocolFilter;
+    const matchesTag = !row.classList.contains('tag-hidden');
+    if (matchesSearch && matchesProtocol && matchesTag) {
+      row.classList.remove('hidden');
+      visible++;
+    } else {
+      row.classList.add('hidden');
+      const historyRow = document.getElementById(`history-${row.dataset.rowId}`);
+      if (historyRow) { historyRow.classList.remove('show'); const btn = row.querySelector('.expand-toggle'); if (btn) btn.classList.remove('expanded'); }
+    }
+  });
+
+  const noMsg = document.getElementById(`${cat}NoResults`);
+  const tableContainer = document.getElementById(`${cat}TableContainer`);
+  if (noMsg && tableContainer) {
+    noMsg.style.display = visible === 0 ? 'block' : 'none';
+    tableContainer.style.display = visible === 0 ? 'none' : '';
+  }
+}
+
+function filterTableByProtocol(cat, protocol) {
+  tableState[cat].protocolFilter = protocol;
+  const container = document.getElementById(`${cat}ProtocolFilters`);
+  if (container) {
+    container.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.filter === protocol);
+    });
+  }
+  filterTable(cat);
+}
+
+function clearTableSearch(cat) {
+  const input = document.getElementById(`${cat}SearchInput`);
+  if (input) input.value = '';
+  tableState[cat].protocolFilter = 'all';
+  const container = document.getElementById(`${cat}ProtocolFilters`);
+  if (container) {
+    container.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.filter === 'all');
+    });
+  }
+  filterTable(cat);
+}
+
+// ==================== EXPAND / COLLAPSE ====================
+function toggleHistory(safeId) {
+  const historyRow = document.getElementById(`history-${safeId}`);
+  const mainRow = document.querySelector(`.cred-row[data-row-id="${safeId}"]`);
+  const btn = mainRow?.querySelector('.expand-toggle');
+  if (historyRow && btn) {
+    const isExpanded = historyRow.classList.toggle('show');
+    btn.classList.toggle('expanded', isExpanded);
+    // Track expanded state by data-key so it survives re-renders
+    const cat = mainRow.dataset.table;
+    const key = mainRow.dataset.key;
+    if (cat && key && tableState[cat]) {
+      if (isExpanded) tableState[cat].expandedKeys.add(key);
+      else tableState[cat].expandedKeys.delete(key);
+    }
+  }
+}
+
+function toggleTableHistory(cat) {
+  const state = tableState[cat];
+  state.expanded = !state.expanded;
+  const rows = document.querySelectorAll(`.cred-row[data-table="${cat}"]`);
+  rows.forEach(row => {
+    const historyRow = document.getElementById(`history-${row.dataset.rowId}`);
+    const btn = row.querySelector('.expand-toggle:not(.no-history)');
+    if (historyRow) historyRow.classList.toggle('show', state.expanded);
+    if (btn) btn.classList.toggle('expanded', state.expanded);
+    // Sync expandedKeys set
+    const key = row.dataset.key;
+    if (key && historyRow) {
+      if (state.expanded) state.expandedKeys.add(key);
+      else state.expandedKeys.delete(key);
+    }
+  });
+  const toggleBtn = document.getElementById(`${cat}ExpandBtn`);
+  if (toggleBtn) {
+    toggleBtn.innerHTML = state.expanded
+      ? '<i class="bi bi-arrows-collapse me-1"></i>Collapse All'
+      : '<i class="bi bi-arrows-expand me-1"></i>Expand All';
+  }
+}
+
+// ==================== EXPORT ====================
+function exportTableResults(cat, format, uniqueOnly = false) {
+  const state = tableState[cat];
+  const dateStr = getDateString();
+  const prefix = cat === 'keys' ? 'credrecon_key_results' : 'credrecon_credential_results';
+  const suffix = uniqueOnly ? '_unique' : '_all';
+
+  // Get failed entries filtered to this category (creds vs keys)
+  const failedForCat = (tableState.failed || []).filter(r => cat === 'keys' ? isKeyAuth(r) : !isKeyAuth(r));
+
+  if (uniqueOnly) {
+    if (cat === 'keys') {
+      const data = [];
+      // Successful keys
+      Object.values(state.grouped).forEach(cred => {
+        const ki = parseKeyInfo(cred.password);
+        data.push({ ip: cred.ip, port: cred.port, username: cred.username, key_file: ki.keyFile, certificate: ki.certFile, service: cred.service, status: 'success', attempt_count: cred.attempts.length, latest_timestamp: cred.attempts[0]?.timestamp || '', details: cred.attempts[0]?.details || '' });
+      });
+      // Failed keys (deduplicated)
+      const failedGrouped = {};
+      failedForCat.forEach(r => {
+        const key = `${r.ip}:${r.port}:${r.username}:${r.password}`;
+        if (!failedGrouped[key]) failedGrouped[key] = { ...r, attempt_count: 0 };
+        failedGrouped[key].attempt_count++;
+        failedGrouped[key].latest_timestamp = r.timestamp || failedGrouped[key].latest_timestamp || '';
+      });
+      Object.values(failedGrouped).forEach(r => {
+        const ki = parseKeyInfo(r.password);
+        data.push({ ip: r.ip, port: r.port, username: r.username, key_file: ki.keyFile, certificate: ki.certFile, service: r.service || '', status: r.status || 'failed', attempt_count: r.attempt_count, latest_timestamp: r.latest_timestamp || '', details: r.details || '' });
+      });
+      const fields = ['ip', 'port', 'username', 'key_file', 'certificate', 'service', 'status', 'attempt_count', 'latest_timestamp', 'details'];
+      const csvHeader = 'Target,Port,Username,Key File,Certificate,Service,Status,Attempt Count,Latest Timestamp,Details';
+      doExport(data, fields, csvHeader, format, prefix + suffix + '_' + dateStr);
+    } else {
+      const data = [];
+      // Successful credentials
+      Object.values(state.grouped).forEach(cred => {
+        data.push({ ip: cred.ip, port: cred.port, protocol: cred.protocol, service: cred.service || '', username: cred.username, password: cred.password, status: 'success', attempt_count: cred.attempts.length, latest_timestamp: cred.attempts[0]?.timestamp || '', details: cred.attempts[0]?.details || '' });
+      });
+      // Failed credentials (deduplicated)
+      const failedGrouped = {};
+      failedForCat.forEach(r => {
+        const key = `${r.ip}:${r.port}:${r.username}:${r.password}`;
+        if (!failedGrouped[key]) failedGrouped[key] = { ...r, attempt_count: 0 };
+        failedGrouped[key].attempt_count++;
+        failedGrouped[key].latest_timestamp = r.timestamp || failedGrouped[key].latest_timestamp || '';
+      });
+      Object.values(failedGrouped).forEach(r => {
+        data.push({ ip: r.ip, port: r.port, protocol: r.protocol || '', service: r.service || '', username: r.username, password: r.password || '', status: r.status || 'failed', attempt_count: r.attempt_count, latest_timestamp: r.latest_timestamp || '', details: r.details || '' });
+      });
+      const fields = ['ip', 'port', 'protocol', 'service', 'username', 'password', 'status', 'attempt_count', 'latest_timestamp', 'details'];
+      const csvHeader = 'Target,Port,Protocol,Service,Username,Password,Status,Attempt Count,Latest Timestamp,Details';
+      doExport(data, fields, csvHeader, format, prefix + suffix + '_' + dateStr);
+    }
+  } else {
+    if (cat === 'keys') {
+      const data = [];
+      // Successful keys
+      state.raw.forEach(cred => {
+        const ki = parseKeyInfo(cred.password);
+        data.push({ ip: cred.ip, port: cred.port, username: cred.username, key_file: ki.keyFile, certificate: ki.certFile, service: cred.service || '', status: 'success', details: cred.details || '', timestamp: cred.timestamp || '' });
+      });
+      // Failed keys
+      failedForCat.forEach(r => {
+        const ki = parseKeyInfo(r.password);
+        data.push({ ip: r.ip, port: r.port, username: r.username, key_file: ki.keyFile, certificate: ki.certFile, service: r.service || '', status: r.status || 'failed', details: r.details || '', timestamp: r.timestamp || '' });
+      });
+      const fields = ['ip', 'port', 'username', 'key_file', 'certificate', 'service', 'status', 'details', 'timestamp'];
+      const csvHeader = 'Target,Port,Username,Key File,Certificate,Service,Status,Details,Timestamp';
+      doExport(data, fields, csvHeader, format, prefix + suffix + '_' + dateStr);
+    } else {
+      const data = [];
+      // Successful credentials
+      state.raw.forEach(cred => {
+        data.push({ ip: cred.ip, port: cred.port, protocol: cred.protocol, service: cred.service || '', username: cred.username, password: cred.password, status: 'success', details: cred.details || '', timestamp: cred.timestamp || '' });
+      });
+      // Failed credentials
+      failedForCat.forEach(r => {
+        data.push({ ip: r.ip, port: r.port, protocol: r.protocol || '', service: r.service || '', username: r.username, password: r.password || '', status: r.status || 'failed', details: r.details || '', timestamp: r.timestamp || '' });
+      });
+      const fields = ['ip', 'port', 'protocol', 'service', 'username', 'password', 'status', 'details', 'timestamp'];
+      const csvHeader = 'Target,Port,Protocol,Service,Username,Password,Status,Details,Timestamp';
+      doExport(data, fields, csvHeader, format, prefix + suffix + '_' + dateStr);
+    }
+  }
+}
+
+function doExport(data, fields, csvHeader, format, filename) {
+  if (format === 'csv') {
+    let csv = csvHeader + '\n';
+    data.forEach(item => {
+      csv += fields.map(f => `"${escapeCSV(item[f])}"`).join(',') + '\n';
+    });
+    downloadFile(csv, filename + '.csv', 'text/csv');
+  } else if (format === 'json') {
+    downloadFile(JSON.stringify(data, null, 2), filename + '.json', 'application/json');
+  } else if (format === 'xml') {
+    downloadFile(buildXML(data, fields), filename + '.xml', 'application/xml');
+  }
+}
+
+// ==================== COMBINED EXPORT ====================
+function exportCombinedResults(format, uniqueOnly = false) {
+  const dateStr = getDateString();
+  const prefix = 'credrecon_combined';
+  const suffix = uniqueOnly ? '_unique' : '_all';
+  const fields = ['ip', 'port', 'protocol', 'service', 'username', 'password', 'status', 'auth_type', 'key_file', 'certificate', 'details', 'timestamp'];
+  const csvHeader = 'Target,Port,Protocol,Service,Username,Password,Status,Auth Type,Key File,Certificate,Details,Timestamp';
+  const uniqueFields = ['ip', 'port', 'protocol', 'service', 'username', 'password', 'status', 'auth_type', 'key_file', 'certificate', 'attempt_count', 'latest_timestamp', 'details'];
+  const uniqueCsvHeader = 'Target,Port,Protocol,Service,Username,Password,Status,Auth Type,Key File,Certificate,Attempt Count,Latest Timestamp,Details';
+
+  if (uniqueOnly) {
+    const data = [];
+    // Successful credential entries
+    Object.values(tableState.creds.grouped).forEach(cred => {
+      data.push({
+        ip: cred.ip, port: cred.port, protocol: cred.protocol, service: cred.service || '',
+        username: cred.username, password: cred.password, status: 'success', auth_type: 'credential',
+        key_file: '', certificate: '',
+        attempt_count: cred.attempts.length,
+        latest_timestamp: cred.attempts[0]?.timestamp || '',
+        details: cred.attempts[0]?.details || ''
+      });
+    });
+    // Successful key entries
+    Object.values(tableState.keys.grouped).forEach(cred => {
+      const ki = parseKeyInfo(cred.password);
+      data.push({
+        ip: cred.ip, port: cred.port, protocol: cred.protocol || 'ssh', service: cred.service || '',
+        username: cred.username, password: '', status: 'success', auth_type: cred.service === 'ssh-cert' ? 'certificate' : 'key',
+        key_file: ki.keyFile, certificate: ki.certFile,
+        attempt_count: cred.attempts.length,
+        latest_timestamp: cred.attempts[0]?.timestamp || '',
+        details: cred.attempts[0]?.details || ''
+      });
+    });
+    // Failed/error entries (deduplicated by target:port:username:password)
+    const failedGrouped = {};
+    tableState.failed.forEach(r => {
+      const key = `${r.ip}:${r.port}:${r.username}:${r.password}`;
+      if (!failedGrouped[key]) {
+        failedGrouped[key] = { ...r, attempt_count: 0 };
+      }
+      failedGrouped[key].attempt_count++;
+      failedGrouped[key].latest_timestamp = r.timestamp || failedGrouped[key].latest_timestamp || '';
+    });
+    Object.values(failedGrouped).forEach(r => {
+      data.push({
+        ip: r.ip, port: r.port, protocol: r.protocol || '', service: r.service || '',
+        username: r.username, password: r.password || '', status: r.status || 'failed',
+        auth_type: isKeyAuth(r) ? 'key' : 'credential',
+        key_file: isKeyAuth(r) ? parseKeyInfo(r.password).keyFile : '',
+        certificate: isKeyAuth(r) ? parseKeyInfo(r.password).certFile : '',
+        attempt_count: r.attempt_count,
+        latest_timestamp: r.latest_timestamp || '',
+        details: r.details || ''
+      });
+    });
+    doExport(data, uniqueFields, uniqueCsvHeader, format, prefix + suffix + '_' + dateStr);
+  } else {
+    const data = [];
+    // Successful credential entries
+    tableState.creds.raw.forEach(cred => {
+      data.push({
+        ip: cred.ip, port: cred.port, protocol: cred.protocol, service: cred.service || '',
+        username: cred.username, password: cred.password, status: 'success', auth_type: 'credential',
+        key_file: '', certificate: '',
+        details: cred.details || '', timestamp: cred.timestamp || ''
+      });
+    });
+    // Successful key entries
+    tableState.keys.raw.forEach(cred => {
+      const ki = parseKeyInfo(cred.password);
+      data.push({
+        ip: cred.ip, port: cred.port, protocol: cred.protocol || 'ssh', service: cred.service || '',
+        username: cred.username, password: '', status: 'success', auth_type: cred.service === 'ssh-cert' ? 'certificate' : 'key',
+        key_file: ki.keyFile, certificate: ki.certFile,
+        details: cred.details || '', timestamp: cred.timestamp || ''
+      });
+    });
+    // Failed/error entries
+    tableState.failed.forEach(r => {
+      data.push({
+        ip: r.ip, port: r.port, protocol: r.protocol || '', service: r.service || '',
+        username: r.username, password: r.password || '', status: r.status || 'failed',
+        auth_type: isKeyAuth(r) ? 'key' : 'credential',
+        key_file: isKeyAuth(r) ? parseKeyInfo(r.password).keyFile : '',
+        certificate: isKeyAuth(r) ? parseKeyInfo(r.password).certFile : '',
+        details: r.details || '', timestamp: r.timestamp || ''
+      });
+    });
+    doExport(data, fields, csvHeader, format, prefix + suffix + '_' + dateStr);
+  }
+}
+
+// ==================== FAILED SECTIONS (PAGINATED) ====================
+// Pagination state
+let _failedCredsData = [];
+let _failedKeysData = [];
+let _errorsData = [];
+let _failedCredsPage = 1, _failedCredsPerPage = 100;
+let _failedKeysPage = 1, _failedKeysPerPage = 100;
+let _errorsPage = 1, _errorsPerPage = 100;
+
+function populateFailedSections() {
+  const failedData = tableState.failed || [];
+  console.log(`[cygor] populateFailedSections: ${failedData.length} total failed/error results`);
+  if (failedData.length === 0) return;
+
+  _failedCredsData = failedData.filter(r => r.status === 'failed' && !isKeyAuth(r));
+  _failedKeysData = failedData.filter(r => r.status === 'failed' && isKeyAuth(r));
+  _errorsData = failedData.filter(r => r.status === 'error');
+
+  // Update badges
+  const credsBadge = document.getElementById('failedCredsBadge');
+  const keysBadge = document.getElementById('failedKeysBadge');
+  const errorsBadge = document.getElementById('errorsCountBadge');
+  if (credsBadge) credsBadge.textContent = _failedCredsData.length;
+  if (keysBadge) keysBadge.textContent = _failedKeysData.length;
+  if (errorsBadge) errorsBadge.textContent = _errorsData.length;
+
+  // Show cards and render first page
+  if (_failedCredsData.length > 0) {
+    const card = document.getElementById('failedCredsCard');
+    if (card) card.style.display = 'block';
+    _failedCredsPage = 1;
+    renderFailedCredsPage();
+  }
+  if (_failedKeysData.length > 0) {
+    const card = document.getElementById('failedKeysCard');
+    if (card) card.style.display = 'block';
+    _failedKeysPage = 1;
+    renderFailedKeysPage();
+  }
+  if (_errorsData.length > 0) {
+    const card = document.getElementById('errorsCard');
+    if (card) card.style.display = 'block';
+    _errorsPage = 1;
+    renderErrorsPage();
+  }
+}
+
+function renderFailedCredsPage() {
+  const tbody = document.getElementById('failedCredsBody');
+  if (!tbody) return;
+  const total = _failedCredsData.length;
+  const perPage = _failedCredsPerPage === 'all' ? total : _failedCredsPerPage;
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  if (_failedCredsPage > totalPages) _failedCredsPage = totalPages;
+  const start = (_failedCredsPage - 1) * perPage;
+  const end = Math.min(start + perPage, total);
+  const frag = document.createDocumentFragment();
+  for (let i = start; i < end; i++) {
+    const r = _failedCredsData[i];
+    const row = document.createElement('tr');
+    row.className = 'border-bottom border-dark';
+    row.innerHTML = `
+      <td class="ps-3"><span class="font-monospace text-secondary small">${escapeHtml(r.ip)}</span></td>
+      <td><span class="font-monospace text-secondary small">${escapeHtml(r.port)}</span></td>
+      <td><span class="font-monospace text-secondary small">${escapeHtml((r.protocol||'').toLowerCase())}</span></td>
+      <td><span class="font-monospace text-secondary small">${escapeHtml(r.username)}</span></td>
+      <td><span class="font-monospace text-secondary small">${escapeHtml(r.password)}</span></td>
+      <td class="pe-3 text-secondary small">${escapeHtml(r.details)}</td>`;
+    frag.appendChild(row);
+  }
+  tbody.innerHTML = '';
+  tbody.appendChild(frag);
+  // Update pagination controls
+  const pagination = document.getElementById('failedCredsPagination');
+  if (pagination) pagination.style.cssText = total > 0 ? 'display: flex !important;' : 'display: none !important;';
+  const info = document.getElementById('failedCredsInfo');
+  if (info) info.textContent = `${start + 1}-${end} of ${total.toLocaleString()} entries`;
+  const pageInfo = document.getElementById('failedCredsPageInfo');
+  if (pageInfo) pageInfo.textContent = `Page ${_failedCredsPage} of ${totalPages}`;
+  const prevBtn = document.getElementById('failedCredsPrev');
+  const nextBtn = document.getElementById('failedCredsNext');
+  if (prevBtn) prevBtn.disabled = _failedCredsPage <= 1;
+  if (nextBtn) nextBtn.disabled = _failedCredsPage >= totalPages;
+}
+
+function navFailedCreds(dir) {
+  _failedCredsPage += dir;
+  renderFailedCredsPage();
+}
+function changeFailedCredsPerPage(val) {
+  _failedCredsPerPage = val === 'all' ? 'all' : parseInt(val);
+  _failedCredsPage = 1;
+  renderFailedCredsPage();
+}
+
+function renderFailedKeysPage() {
+  const tbody = document.getElementById('failedKeysBody');
+  if (!tbody) return;
+  const total = _failedKeysData.length;
+  const perPage = _failedKeysPerPage === 'all' ? total : _failedKeysPerPage;
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  if (_failedKeysPage > totalPages) _failedKeysPage = totalPages;
+  const start = (_failedKeysPage - 1) * perPage;
+  const end = Math.min(start + perPage, total);
+  const frag = document.createDocumentFragment();
+  for (let i = start; i < end; i++) {
+    const r = _failedKeysData[i];
+    const ki = parseKeyInfo(r.password);
+    const row = document.createElement('tr');
+    row.className = 'border-bottom border-dark';
+    row.innerHTML = `
+      <td class="ps-3"><span class="font-monospace text-secondary small">${escapeHtml(r.ip)}</span></td>
+      <td><span class="font-monospace text-secondary small">${escapeHtml(r.port)}</span></td>
+      <td><span class="font-monospace text-secondary small">${escapeHtml(r.username)}</span></td>
+      <td><span class="font-monospace text-secondary small" title="${escapeHtml(ki.keyFile)}">${escapeHtml(shortPath(ki.keyFile))}</span></td>
+      <td><span class="font-monospace text-secondary small" title="${escapeHtml(ki.certFile)}">${escapeHtml(shortPath(ki.certFile) || '-')}</span></td>
+      <td class="pe-3 text-secondary small">${escapeHtml(r.details)}</td>`;
+    frag.appendChild(row);
+  }
+  tbody.innerHTML = '';
+  tbody.appendChild(frag);
+  const pagination = document.getElementById('failedKeysPagination');
+  if (pagination) pagination.style.cssText = total > 0 ? 'display: flex !important;' : 'display: none !important;';
+  const info = document.getElementById('failedKeysInfo');
+  if (info) info.textContent = `${start + 1}-${end} of ${total.toLocaleString()} entries`;
+  const pageInfo = document.getElementById('failedKeysPageInfo');
+  if (pageInfo) pageInfo.textContent = `Page ${_failedKeysPage} of ${totalPages}`;
+  const prevBtn = document.getElementById('failedKeysPrev');
+  const nextBtn = document.getElementById('failedKeysNext');
+  if (prevBtn) prevBtn.disabled = _failedKeysPage <= 1;
+  if (nextBtn) nextBtn.disabled = _failedKeysPage >= totalPages;
+}
+
+function navFailedKeys(dir) {
+  _failedKeysPage += dir;
+  renderFailedKeysPage();
+}
+function changeFailedKeysPerPage(val) {
+  _failedKeysPerPage = val === 'all' ? 'all' : parseInt(val);
+  _failedKeysPage = 1;
+  renderFailedKeysPage();
+}
+
+function renderErrorsPage() {
+  const tbody = document.getElementById('errorsBody');
+  if (!tbody) return;
+  const total = _errorsData.length;
+  const perPage = _errorsPerPage === 'all' ? total : _errorsPerPage;
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  if (_errorsPage > totalPages) _errorsPage = totalPages;
+  const start = (_errorsPage - 1) * perPage;
+  const end = Math.min(start + perPage, total);
+  const frag = document.createDocumentFragment();
+  for (let i = start; i < end; i++) {
+    const r = _errorsData[i];
+    const row = document.createElement('tr');
+    row.className = 'border-bottom border-dark';
+    row.innerHTML = `
+      <td class="ps-3"><span class="font-monospace text-secondary small">${escapeHtml(r.ip)}</span></td>
+      <td><span class="font-monospace text-secondary small">${escapeHtml(r.port)}</span></td>
+      <td><span class="font-monospace text-secondary small">${escapeHtml((r.protocol||'').toLowerCase())}</span></td>
+      <td class="pe-3 text-warning small">${escapeHtml(r.details)}</td>`;
+    frag.appendChild(row);
+  }
+  tbody.innerHTML = '';
+  tbody.appendChild(frag);
+  const pagination = document.getElementById('errorsPagination');
+  if (pagination) pagination.style.cssText = total > 0 ? 'display: flex !important;' : 'display: none !important;';
+  const info = document.getElementById('errorsInfo');
+  if (info) info.textContent = `${start + 1}-${end} of ${total.toLocaleString()} entries`;
+  const pageInfo = document.getElementById('errorsPageInfo');
+  if (pageInfo) pageInfo.textContent = `Page ${_errorsPage} of ${totalPages}`;
+  const prevBtn = document.getElementById('errorsPrev');
+  const nextBtn = document.getElementById('errorsNext');
+  if (prevBtn) prevBtn.disabled = _errorsPage <= 1;
+  if (nextBtn) nextBtn.disabled = _errorsPage >= totalPages;
+}
+
+function navErrors(dir) {
+  _errorsPage += dir;
+  renderErrorsPage();
+}
+function changeErrorsPerPage(val) {
+  _errorsPerPage = val === 'all' ? 'all' : parseInt(val);
+  _errorsPage = 1;
+  renderErrorsPage();
+}
+
+// ==================== VIEW TOGGLE ====================
+let currentView = 'table';
+let activePwnTab = 'creds';  // which pwnboard tab is active
+
+function switchView(view) {
+  currentView = view;
+  const tableView = document.getElementById('tableView');
+  const dashboardView = document.getElementById('dashboardView');
+  const tableBtn = document.getElementById('viewTableBtn');
+  const dashBtn = document.getElementById('viewDashboardBtn');
+
+  if (view === 'dashboard') {
+    if (tableView) tableView.style.display = 'none';
+    if (dashboardView) dashboardView.style.display = 'block';
+    tableBtn.classList.remove('active');
+    dashBtn.classList.add('active');
+    buildPwnboard();
+    preloadPwnboardTags();
+  } else {
+    if (tableView) tableView.style.display = 'block';
+    if (dashboardView) dashboardView.style.display = 'none';
+    tableBtn.classList.add('active');
+    dashBtn.classList.remove('active');
+  }
+}
+
+function switchPwnTab(tab) {
+  activePwnTab = tab;
+  // Rebuild grids for current tab (data already aggregated in pwnboardHosts)
+  renderPwnGrid(tab);
+}
+
+// ==================== PWNBOARD GRID ====================
+// Global store of aggregated host data for the detail modal
+let pwnboardHosts = {};
+
+/* timeAgo now in global cygor-datetime.js */
+
+function tsMs(ts) {
+  if (!ts) return 0;
+  const d = new Date(ts);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+function buildPwnboard() {
+  // Aggregate ALL results by host IP
+  const hosts = {};
+
+  function addResult(r, status) {
+    const ip = r.ip || r.target || '';
+    if (!ip) return;
+    if (!hosts[ip]) {
+      hosts[ip] = {
+        ip: ip,
+        protocols: new Set(),
+        ports: new Set(),
+        allResults: [],
+        latestTimestamp: null,
+        totalTests: 0,
+        hasCreds: false,   // has credential-based results (password auth)
+        hasKeys: false      // has key-based results (key/cert auth)
+      };
+    }
+    const h = hosts[ip];
+    const proto = (r.protocol || '').toLowerCase();
+    if (proto) h.protocols.add(proto);
+    if (r.port) h.ports.add(String(r.port));
+    h.totalTests++;
+
+    const ts = r.timestamp || '';
+    if (ts) {
+      const d = new Date(ts);
+      if (!isNaN(d.getTime()) && (!h.latestTimestamp || d > h.latestTimestamp)) {
+        h.latestTimestamp = d;
+      }
+    }
+
+    // Determine if this is a key-based result
+    // For successes, we use isKeyAuth. For failures/errors, check auth_method or password field.
+    const keyBased = isKeyAuth(r);
+
+    if (keyBased) h.hasKeys = true;
+    else h.hasCreds = true;
+
+    h.allResults.push({
+      status: status,
+      protocol: proto,
+      port: r.port,
+      username: r.username || '',
+      password: r.password || '',
+      details: r.details || '',
+      timestamp: ts,
+      isKey: keyBased,
+      source_ip: r.source_ip || ''
+    });
+  }
+
+  // Process all data sources
+  tableState.creds.raw.forEach(r => addResult(r, 'success'));
+  tableState.keys.raw.forEach(r => addResult(r, 'success'));
+  (tableState.failed || []).forEach(r => {
+    if (r.status === 'error') addResult(r, 'error');
+    else addResult(r, 'failed');
+  });
+
+  // Sort each host's results by timestamp descending (newest first)
+  Object.values(hosts).forEach(h => {
+    h.allResults.sort((a, b) => tsMs(b.timestamp) - tsMs(a.timestamp));
+  });
+
+  // Determine status per host based on the LATEST result per service (port+protocol).
+  Object.values(hosts).forEach(h => {
+    const serviceLatest = {};
+    h.allResults.forEach(r => {
+      const svcKey = `${r.port}:${r.protocol}`;
+      if (!serviceLatest[svcKey] || tsMs(r.timestamp) > tsMs(serviceLatest[svcKey].timestamp)) {
+        serviceLatest[svcKey] = r;
+      }
+    });
+
+    const latestResults = Object.values(serviceLatest);
+    const hasLatestSuccess = latestResults.some(r => r.status === 'success');
+    const hasLatestFailed = latestResults.some(r => r.status === 'failed');
+    const hasLatestError = latestResults.some(r => r.status === 'error');
+
+    if (hasLatestSuccess && !hasLatestFailed && !hasLatestError) {
+      h.overallStatus = 'success';
+    } else if (hasLatestSuccess && (hasLatestFailed || hasLatestError)) {
+      h.overallStatus = 'mixed';
+    } else if (hasLatestFailed) {
+      h.overallStatus = 'failed';
+    } else if (hasLatestError) {
+      h.overallStatus = 'error';
+    } else {
+      h.overallStatus = 'untested';
+    }
+
+    h.serviceLatest = serviceLatest;
+    h.successCount = h.allResults.filter(r => r.status === 'success').length;
+    h.failedCount = h.allResults.filter(r => r.status === 'failed').length;
+    h.errorCount = h.allResults.filter(r => r.status === 'error').length;
+  });
+
+  // Store globally for detail modal
+  pwnboardHosts = hosts;
+
+  // Populate service filter dropdown
+  const allProtocols = new Set();
+  Object.values(hosts).forEach(h => h.protocols.forEach(p => allProtocols.add(p)));
+  const svcSelect = document.getElementById('pwnServiceFilter');
+  if (svcSelect) {
+    const currentVal = svcSelect.value;
+    svcSelect.innerHTML = '<option value="">All Services</option>';
+    [...allProtocols].sort().forEach(proto => {
+      const opt = document.createElement('option');
+      opt.value = proto;
+      opt.textContent = proto.toUpperCase();
+      svcSelect.appendChild(opt);
+    });
+    svcSelect.value = currentVal;
+  }
+
+  // Update tab badges
+  const allHosts = Object.values(hosts);
+  const credHosts = allHosts.filter(h => h.hasCreds);
+  const keyHosts = allHosts.filter(h => h.hasKeys);
+  const credsBadge = document.getElementById('pwnCredsBadge');
+  const keysBadge = document.getElementById('pwnKeysBadge');
+  const allBadge = document.getElementById('pwnAllBadge');
+  if (credsBadge) credsBadge.textContent = credHosts.length;
+  if (keysBadge) keysBadge.textContent = keyHosts.length;
+  if (allBadge) allBadge.textContent = allHosts.length;
+
+  // Render the active tab
+  renderPwnGrid(activePwnTab);
+}
+
+function renderPwnGrid(tab) {
+  const gridMap = { creds: 'pwnboardGridCreds', keys: 'pwnboardGridKeys', all: 'pwnboardGridAll' };
+  const emptyMap = { creds: 'pwnboardEmptyCreds', keys: 'pwnboardEmptyKeys', all: 'pwnboardEmptyAll' };
+  const groupMap = { creds: 'pwnboardGroupsCreds', keys: 'pwnboardGroupsKeys', all: 'pwnboardGroupsAll' };
+
+  const grid = document.getElementById(gridMap[tab]);
+  const empty = document.getElementById(emptyMap[tab]);
+  const groupsContainer = document.getElementById(groupMap[tab]);
+  if (!grid) return;
+  grid.innerHTML = '';
+  if (groupsContainer) groupsContainer.innerHTML = '';
+  // Remove any previous "Ungrouped Hosts" labels
+  const oldLabel = grid.parentNode.querySelector('.pwn-ungrouped-label');
+  if (oldLabel) oldLabel.remove();
+
+  const allHosts = Object.values(pwnboardHosts);
+  let hostList;
+  if (tab === 'creds') {
+    hostList = allHosts.filter(h => h.hasCreds);
+  } else if (tab === 'keys') {
+    hostList = allHosts.filter(h => h.hasKeys);
+  } else {
+    hostList = allHosts;
+  }
+
+  // Compute tab-specific status for sorting
+  if (tab === 'creds' || tab === 'keys') {
+    const isKeyTab = (tab === 'keys');
+    hostList.forEach(h => {
+      const tabSvcLatest = {};
+      h.allResults.forEach(r => {
+        if (r.isKey !== isKeyTab) return;
+        const svcKey = `${r.port}:${r.protocol}`;
+        if (!tabSvcLatest[svcKey] || tsMs(r.timestamp) > tsMs(tabSvcLatest[svcKey].timestamp)) {
+          tabSvcLatest[svcKey] = r;
+        }
+      });
+      const lr = Object.values(tabSvcLatest);
+      const s = lr.some(r => r.status === 'success');
+      const f = lr.some(r => r.status === 'failed');
+      const e = lr.some(r => r.status === 'error');
+      if (lr.length === 0) h._tabStatus = 'untested';
+      else if (s && !f && !e) h._tabStatus = 'success';
+      else if (s && (f || e)) h._tabStatus = 'mixed';
+      else if (f) h._tabStatus = 'failed';
+      else if (e) h._tabStatus = 'error';
+      else h._tabStatus = 'untested';
+    });
+  } else {
+    hostList.forEach(h => { h._tabStatus = h.overallStatus; });
+  }
+
+  // Sort
+  const sortHosts = (list) => {
+    list.sort((a, b) => {
+      const scoreMap = { success: 3, mixed: 2, failed: 1, error: 0, untested: -1 };
+      const diff = (scoreMap[b._tabStatus] || -1) - (scoreMap[a._tabStatus] || -1);
+      if (diff !== 0) return diff;
+      return a.ip.localeCompare(b.ip, undefined, { numeric: true });
+    });
+    return list;
+  };
+  sortHosts(hostList);
+
+  if (hostList.length === 0) {
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  const tagFilteredIPs = tagFilteredAddresses;
+  const searchQuery = (document.getElementById('pwnboardSearch')?.value || '').trim().toLowerCase();
+  const serviceFilter = (document.getElementById('pwnServiceFilter')?.value || '').toLowerCase();
+  const clearBtn = document.getElementById('pwnboardSearchClear');
+  if (clearBtn) clearBtn.style.display = searchQuery ? 'block' : 'none';
+
+  // Helper: check if host passes search + tag + service filters
+  function passesFilter(h) {
+    if (tagFilteredIPs && !tagFilteredIPs.has(h.ip)) return false;
+    if (serviceFilter && !h.protocols.has(serviceFilter)) return false;
+    if (searchQuery) {
+      const ipMatch = h.ip.toLowerCase().includes(searchQuery);
+      const protoMatch = [...h.protocols].some(p => p.toLowerCase().includes(searchQuery));
+      const userMatch = h.allResults.some(r => (r.username || '').toLowerCase().includes(searchQuery));
+      const passMatch = h.allResults.some(r => (r.password || '').toLowerCase().includes(searchQuery));
+      const tagMatch = (hostTagCache[h.ip]?.tags || []).some(t => t.toLowerCase().includes(searchQuery));
+      const groupMatch = pwnGroups.some(g => g.ips.has(h.ip) && g.name.toLowerCase().includes(searchQuery));
+      const statusMatch = (h._tabStatus || '').includes(searchQuery) || ('pwned'.includes(searchQuery) && h._tabStatus === 'success');
+      if (!ipMatch && !protoMatch && !userMatch && !passMatch && !tagMatch && !groupMatch && !statusMatch) return false;
+    }
+    return true;
+  }
+
+  // Helper: get filtered service-latest for a host in current tab
+  function getFilteredSvcLatest(h) {
+    if (tab !== 'creds' && tab !== 'keys') return h.serviceLatest;
+    const isKeyTab = (tab === 'keys');
+    const fsl = {};
+    h.allResults.forEach(r => {
+      if (r.isKey !== isKeyTab) return;
+      const svcKey = `${r.port}:${r.protocol}`;
+      if (!fsl[svcKey] || tsMs(r.timestamp) > tsMs(fsl[svcKey].timestamp)) fsl[svcKey] = r;
+    });
+    return fsl;
+  }
+
+  // Helper: build a cell DOM element for a host
+  function buildCell(h) {
+    const filteredServiceLatest = getFilteredSvcLatest(h);
+    if ((tab === 'creds' || tab === 'keys') && Object.keys(filteredServiceLatest).length === 0) return null;
+
+    let statusClass, statusLabel;
+    const ts = h._tabStatus;
+    if (ts === 'success') { statusClass = 'pwn-success'; statusLabel = 'PWNED'; }
+    else if (ts === 'mixed') { statusClass = 'pwn-success'; statusLabel = 'MIXED'; }
+    else if (ts === 'failed') { statusClass = 'pwn-failed'; statusLabel = 'FAILED'; }
+    else if (ts === 'error') { statusClass = 'pwn-error'; statusLabel = 'ERROR'; }
+    else { statusClass = 'pwn-untested'; statusLabel = 'N/A'; }
+
+    const cell = document.createElement('div');
+    cell.className = `pwn-cell ${statusClass}`;
+    cell.dataset.ip = h.ip;
+
+    if (pwnSelectMode) {
+      cell.classList.add('pwn-selectable');
+      if (pwnSelectedHosts.has(h.ip)) cell.classList.add('pwn-selected');
+      cell.onclick = (e) => { e.stopPropagation(); togglePwnSelect(h.ip, cell); };
+    } else {
+      cell.onclick = () => showHostDetail(h.ip);
+    }
+
+    const protoBadges = [...h.protocols].map(p =>
+      `<span class="pwn-proto-badge">${escapeHtml(p.toUpperCase())}</span>`
+    ).join('');
+
+    let detailHtml = '';
+    const svcEntries = Object.values(filteredServiceLatest);
+    svcEntries.sort((a, b) => {
+      const order = { success: 0, failed: 1, error: 2 };
+      return (order[a.status] ?? 3) - (order[b.status] ?? 3);
+    });
+    svcEntries.slice(0, 4).forEach(r => {
+      let icon, cls;
+      if (r.status === 'success') { icon = 'bi-unlock-fill'; cls = ''; }
+      else if (r.status === 'error') { icon = 'bi-exclamation-triangle'; cls = ' style="opacity:0.8;"'; }
+      else { icon = 'bi-x-lg'; cls = ' style="opacity:0.8;"'; }
+
+      if (r.status === 'success' && r.isKey) {
+        const ki = parseKeyInfo(r.password);
+        detailHtml += `<div class="pwn-detail"${cls}><i class="bi ${icon} me-1"></i><span class="pwn-cred">${escapeHtml(r.username)}</span> via <span class="pwn-cred">${escapeHtml(shortPath(ki.keyFile))}</span> on port ${escapeHtml(String(r.port))}</div>`;
+      } else if (r.status === 'success') {
+        detailHtml += `<div class="pwn-detail"${cls}><i class="bi ${icon} me-1"></i><span class="pwn-cred">${escapeHtml(r.username)}</span> : <span class="pwn-cred">${escapeHtml(r.password)}</span> on port ${escapeHtml(String(r.port))}</div>`;
+      } else {
+        const reason = r.details || (r.status === 'error' ? 'Connection error' : 'Auth failed');
+        const short = reason.length > 60 ? reason.substring(0, 60) + '...' : reason;
+        detailHtml += `<div class="pwn-detail"${cls}><i class="bi ${icon} me-1"></i>:${escapeHtml(String(r.port))} ${escapeHtml(short)}</div>`;
+      }
+    });
+    if (svcEntries.length > 4) {
+      detailHtml += `<div class="pwn-detail" style="opacity:0.6;">+ ${svcEntries.length - 4} more services</div>`;
+    }
+
+    const summaryParts = [];
+    if (tab === 'creds' || tab === 'keys') {
+      const isKeyTab = (tab === 'keys');
+      const tabResults = h.allResults.filter(r => r.isKey === isKeyTab);
+      const sc = tabResults.filter(r => r.status === 'success').length;
+      const fc = tabResults.filter(r => r.status === 'failed').length;
+      const ec = tabResults.filter(r => r.status === 'error').length;
+      if (sc > 0) summaryParts.push(`${sc} pwned`);
+      if (fc > 0) summaryParts.push(`${fc} failed`);
+      if (ec > 0) summaryParts.push(`${ec} error${ec > 1 ? 's' : ''}`);
+    } else {
+      if (h.successCount > 0) summaryParts.push(`${h.successCount} pwned`);
+      if (h.failedCount > 0) summaryParts.push(`${h.failedCount} failed`);
+      if (h.errorCount > 0) summaryParts.push(`${h.errorCount} error${h.errorCount > 1 ? 's' : ''}`);
+    }
+
+    let latestTs = h.latestTimestamp;
+    if (tab === 'creds' || tab === 'keys') {
+      const isKeyTab = (tab === 'keys');
+      latestTs = null;
+      h.allResults.forEach(r => {
+        if (r.isKey !== isKeyTab) return;
+        const d = new Date(r.timestamp);
+        if (!isNaN(d.getTime()) && (!latestTs || d > latestTs)) latestTs = d;
+      });
+    }
+    const tsStr = latestTs ? timeAgo(latestTs.toISOString()) : '';
+    const tsTitle = latestTs ? latestTs.toLocaleString() : '';
+    const timeHtml = tsStr ? `<div class="pwn-time" title="${escapeHtml(tsTitle)}"><i class="bi bi-clock"></i> Last check ${escapeHtml(tsStr)}</div>` : '';
+
+    const hostTags = hostTagCache[h.ip]?.tags || [];
+    const tagHtml = hostTags.length > 0
+      ? `<div class="pwn-tags">${hostTags.map(t => `<span class="pwn-tag-badge">${escapeHtml(t)}</span>`).join('')}</div>`
+      : '';
+
+    cell.innerHTML = `
+      <div class="pwn-header">
+        <span class="pwn-ip">${escapeHtml(h.ip)}</span>
+        <span class="pwn-status-label">${statusLabel}</span>
+      </div>
+      <div class="pwn-protocols">${protoBadges}</div>
+      ${tagHtml}
+      ${detailHtml}
+      <div class="pwn-summary">${summaryParts.join(' &middot; ')}</div>
+      ${timeHtml}
+    `;
+    return cell;
+  }
+
+  // Build a lookup: IP → hostData
+  const hostByIp = {};
+  hostList.forEach(h => { hostByIp[h.ip] = h; });
+
+  // Track which IPs are placed in groups
+  const groupedIPs = new Set();
+  let totalVisible = 0;
+
+  // Render groups
+  if (groupsContainer && pwnGroups.length > 0) {
+    pwnGroups.forEach(group => {
+      // Get hosts in this group that are in the current hostList
+      const groupHosts = [...group.ips]
+        .map(ip => hostByIp[ip])
+        .filter(h => h && passesFilter(h));
+      sortHosts(groupHosts);
+
+      if (groupHosts.length === 0) return;
+
+      const section = document.createElement('div');
+      section.className = 'pwn-group';
+      section.dataset.groupId = group.id;
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'pwn-group-header';
+      header.innerHTML = `
+        <div class="pwn-group-title">
+          <i class="bi bi-columns-gap"></i>
+          <span class="pwn-group-title-text">${escapeHtml(group.name)}</span>
+          <span class="pwn-group-count">${groupHosts.length} host${groupHosts.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="pwn-group-actions">
+          <button onclick="renameGroup('${group.id}')" title="Rename"><i class="bi bi-pencil"></i></button>
+          <button class="pwn-group-delete" onclick="deleteGroup('${group.id}')" title="Remove group"><i class="bi bi-trash3"></i></button>
+        </div>
+      `;
+      section.appendChild(header);
+
+      // Body grid
+      const body = document.createElement('div');
+      body.className = 'pwn-group-body';
+      const groupGrid = document.createElement('div');
+      groupGrid.className = 'pwn-grid';
+
+      groupHosts.forEach(h => {
+        const cell = buildCell(h);
+        if (cell) {
+          groupGrid.appendChild(cell);
+          groupedIPs.add(h.ip);
+          totalVisible++;
+        }
+      });
+
+      body.appendChild(groupGrid);
+      section.appendChild(body);
+      groupsContainer.appendChild(section);
+    });
+  }
+
+  // Render ungrouped hosts
+  const ungroupedHosts = hostList.filter(h => !groupedIPs.has(h.ip) && passesFilter(h));
+
+  if (ungroupedHosts.length > 0) {
+    // Only show label if there are groups
+    if (pwnGroups.length > 0 && groupedIPs.size > 0) {
+      const label = document.createElement('div');
+      label.className = 'pwn-ungrouped-label';
+      label.textContent = 'Ungrouped Hosts';
+      grid.parentNode.insertBefore(label, grid);
+    }
+
+    const frag = document.createDocumentFragment();
+    ungroupedHosts.forEach(h => {
+      const cell = buildCell(h);
+      if (cell) {
+        frag.appendChild(cell);
+        totalVisible++;
+      }
+    });
+    grid.appendChild(frag);
+  }
+
+  // Empty state
+  if (totalVisible === 0 && hostList.length > 0) {
+    if (empty) {
+      empty.style.display = 'block';
+      if (searchQuery) {
+        empty.innerHTML = `<i class="bi bi-search text-muted display-4"></i><p class="text-muted mt-3">No hosts match "${escapeHtml(searchQuery)}"</p>`;
+      }
+    }
+  } else if (totalVisible === 0) {
+    if (empty) empty.style.display = 'block';
+  }
+}
+
+// ==================== HOST DETAIL MODAL ====================
+let hostDetailCurrentIp = null;
+let hostDetailFilter = 'all';       // current status filter
+let hostDetailPageSize = 25;        // attempts shown per "page" per service
+let hostDetailShownCounts = {};     // svcKey -> how many currently rendered
+
+function _renderAttemptHtml(r) {
+  let cls = 'attempt-' + (r.status === 'success' ? 'success' : (r.status === 'error' ? 'error' : 'failed'));
+  let statusBadge;
+  if (r.status === 'success') statusBadge = '<span class="badge bg-success me-2">SUCCESS</span>';
+  else if (r.status === 'error') statusBadge = '<span class="badge bg-warning text-dark me-2">ERROR</span>';
+  else statusBadge = '<span class="badge bg-danger me-2">FAILED</span>';
+
+  // Source IP badge (shown when IP rotation is active)
+  const srcIp = r.source_ip ? `<span class="badge bg-dark text-info ms-2" title="Source IP"><i class="bi bi-shuffle me-1"></i>${escapeHtml(r.source_ip)}</span>` : '';
+
+  let credHtml = '';
+  if (r.isKey) {
+    const ki = parseKeyInfo(r.password);
+    credHtml = `<span class="attempt-cred">${escapeHtml(r.username)}</span> via <span class="attempt-cred">${escapeHtml(shortPath(ki.keyFile))}</span>`;
+    if (ki.certFile) credHtml += ` + cert: <span class="attempt-cred">${escapeHtml(shortPath(ki.certFile))}</span>`;
+  } else if (r.username) {
+    credHtml = `<span class="attempt-cred">${escapeHtml(r.username)}</span> : <span class="attempt-cred">${escapeHtml(r.password || '(empty)')}</span>`;
+  }
+
+  const reason = r.details ? `<div class="mt-1" style="font-size:0.82rem;">${escapeHtml(r.details)}</div>` : '';
+  const ts = r.timestamp ? formatTimestamp(r.timestamp) : '';
+
+  return `<div class="detail-attempt ${cls}">
+    <div class="d-flex align-items-center justify-content-between">
+      <div>${statusBadge}${srcIp}${credHtml}</div>
+      <span class="attempt-meta">${escapeHtml(ts)}</span>
+    </div>
+    ${reason}
+  </div>`;
+}
+
+function _getFilteredResults(results, filter) {
+  if (filter === 'all') return results;
+  return results.filter(r => r.status === filter);
+}
+
+function _renderHostDetailBody() {
+  const ip = hostDetailCurrentIp;
+  const h = pwnboardHosts[ip];
+  if (!h) return;
+
+  const body = document.getElementById('hostDetailBody');
+  if (!body) return;
+
+  // Group results by service (port:protocol)
+  const byService = {};
+  h.allResults.forEach(r => {
+    const key = `${r.port}:${r.protocol}`;
+    if (!byService[key]) byService[key] = { port: r.port, protocol: r.protocol, results: [], key: key, safeKey: key.replace(/[^a-zA-Z0-9]/g, '-') };
+    byService[key].results.push(r);
+  });
+
+  // Sort services: those with latest success first
+  const services = Object.values(byService);
+  services.forEach(svc => svc.results.sort((a, b) => tsMs(b.timestamp) - tsMs(a.timestamp)));
+  services.sort((a, b) => {
+    const aLatest = a.results[0]?.status || '';
+    const bLatest = b.results[0]?.status || '';
+    const order = { success: 0, failed: 1, error: 2 };
+    return (order[aLatest] ?? 3) - (order[bLatest] ?? 3);
+  });
+
+  // Count totals for filter badges
+  const totalAll = h.allResults.length;
+  const totalSuccess = h.allResults.filter(r => r.status === 'success').length;
+  const totalFailed = h.allResults.filter(r => r.status === 'failed').length;
+  const totalError = h.allResults.filter(r => r.status === 'error').length;
+
+  let html = '';
+
+  // Status filter toolbar
+  html += `<div class="d-flex gap-1 flex-wrap mb-3 pb-2 border-bottom border-secondary">
+    <button class="btn btn-sm filter-btn ${hostDetailFilter === 'all' ? 'active' : ''}" onclick="setHostDetailFilter('all')">
+      <i class="bi bi-grid-3x3-gap me-1"></i>All <span class="badge bg-secondary ms-1">${totalAll}</span>
+    </button>
+    <button class="btn btn-sm filter-btn ${hostDetailFilter === 'success' ? 'active' : ''}" onclick="setHostDetailFilter('success')" style="border-left: 3px solid #28a745;">
+      SUCCESS <span class="badge bg-secondary ms-1">${totalSuccess}</span>
+    </button>
+    <button class="btn btn-sm filter-btn ${hostDetailFilter === 'failed' ? 'active' : ''}" onclick="setHostDetailFilter('failed')" style="border-left: 3px solid #dc3545;">
+      FAILED <span class="badge bg-secondary ms-1">${totalFailed}</span>
+    </button>
+    <button class="btn btn-sm filter-btn ${hostDetailFilter === 'error' ? 'active' : ''}" onclick="setHostDetailFilter('error')" style="border-left: 3px solid #ffc107;">
+      ERROR <span class="badge bg-secondary ms-1">${totalError}</span>
+    </button>
+  </div>`;
+
+  // Reset shown counts
+  hostDetailShownCounts = {};
+  let renderedServices = 0;
+
+  services.forEach(svc => {
+    const filtered = _getFilteredResults(svc.results, hostDetailFilter);
+    if (filtered.length === 0) return;  // hide empty services for current filter
+
+    renderedServices++;
+    const proto = (svc.protocol || '').toUpperCase();
+    const svcKey = svc.key;       // e.g. "22:ssh" — used for data lookup
+    const safeKey = svc.safeKey;  // e.g. "22-ssh" — safe for HTML IDs
+    const showCount = Math.min(hostDetailPageSize, filtered.length);
+    hostDetailShownCounts[svcKey] = showCount;
+
+    // Service header with count
+    html += `<div class="detail-section-title d-flex justify-content-between align-items-center">
+      <span>${escapeHtml(proto)} : ${escapeHtml(String(svc.port))}</span>
+      <span class="badge bg-secondary" style="font-size:0.7rem;">${filtered.length} attempts</span>
+    </div>`;
+
+    // Attempts container
+    html += `<div id="svc-attempts-${safeKey}">`;
+    filtered.slice(0, showCount).forEach(r => { html += _renderAttemptHtml(r); });
+    html += `</div>`;
+
+    // "Load More" button if more results exist
+    if (filtered.length > showCount) {
+      const remaining = filtered.length - showCount;
+      html += `<div id="svc-loadmore-${safeKey}" class="text-center py-2">
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadMoreAttempts('${svcKey}', '${safeKey}')">
+          <i class="bi bi-arrow-down-circle me-1"></i>Load more <span class="badge bg-secondary ms-1">${remaining} remaining</span>
+        </button>
+      </div>`;
+    }
+  });
+
+  // If no services match the filter
+  if (renderedServices === 0) {
+    html += `<div class="text-center text-muted py-4">No ${hostDetailFilter} attempts for this host.</div>`;
+  }
+
+  body.innerHTML = html;
+}
+
+function setHostDetailFilter(filter) {
+  hostDetailFilter = filter;
+  _renderHostDetailBody();
+}
+
+function loadMoreAttempts(svcKey, safeKey) {
+  const ip = hostDetailCurrentIp;
+  const h = pwnboardHosts[ip];
+  if (!h) return;
+
+  // Rebuild the service results for this key
+  const results = [];
+  h.allResults.forEach(r => {
+    if (`${r.port}:${r.protocol}` === svcKey) results.push(r);
+  });
+  results.sort((a, b) => tsMs(b.timestamp) - tsMs(a.timestamp));
+  const filtered = _getFilteredResults(results, hostDetailFilter);
+
+  const currentShown = hostDetailShownCounts[svcKey] || hostDetailPageSize;
+  const nextShown = Math.min(currentShown + hostDetailPageSize, filtered.length);
+  hostDetailShownCounts[svcKey] = nextShown;
+
+  // Append new attempts to the container
+  const container = document.getElementById(`svc-attempts-${safeKey}`);
+  if (container) {
+    let newHtml = '';
+    filtered.slice(currentShown, nextShown).forEach(r => { newHtml += _renderAttemptHtml(r); });
+    container.insertAdjacentHTML('beforeend', newHtml);
+  }
+
+  // Update or remove "Load More" button
+  const loadMoreDiv = document.getElementById(`svc-loadmore-${safeKey}`);
+  if (loadMoreDiv) {
+    const remaining = filtered.length - nextShown;
+    if (remaining > 0) {
+      loadMoreDiv.innerHTML = `<button class="btn btn-sm btn-outline-secondary" onclick="loadMoreAttempts('${svcKey}', '${safeKey}')">
+        <i class="bi bi-arrow-down-circle me-1"></i>Load more <span class="badge bg-secondary ms-1">${remaining} remaining</span>
+      </button>`;
+    } else {
+      loadMoreDiv.remove();
+    }
+  }
+}
+
+async function showHostDetail(ip) {
+  hostDetailCurrentIp = ip;
+  hostDetailFilter = 'all';
+  hostDetailShownCounts = {};
+  const h = pwnboardHosts[ip];
+  if (!h) return;
+
+  document.getElementById('hostDetailIP').textContent = ip;
+
+  _renderHostDetailBody();
+
+  // Load tags for footer
+  if (!hostTagCache[ip]) {
+    try {
+      const resp = await fetch(`/api/hosts/resolve?addresses=${encodeURIComponent(ip)}`);
+      const data = await resp.json();
+      hostTagCache[ip] = data.hosts[ip] || { host_id: null, tags: [] };
+    } catch(e) {
+      hostTagCache[ip] = { host_id: null, tags: [] };
+    }
+  }
+  renderHostDetailTags(ip);
+
+  new bootstrap.Modal(document.getElementById('hostDetailModal')).show();
+}
+
+function renderHostDetailTags(ip) {
+  const container = document.getElementById('hostDetailTags');
+  const info = hostTagCache[ip] || { tags: [] };
+  const input = document.getElementById('hostDetailTagInput');
+
+  if (!info.host_id) {
+    container.innerHTML = '<span class="text-muted small">Host not in DB</span>';
+    if (input) input.disabled = true;
+    return;
+  }
+  if (input) input.disabled = false;
+
+  if (info.tags.length === 0) {
+    container.innerHTML = '<span class="text-muted small">No tags</span>';
+    return;
+  }
+  container.innerHTML = info.tags.map(t =>
+    `<span class="badge bg-info text-dark me-1">
+      ${escapeHtml(t)}
+      <i class="bi bi-x-lg ms-1" onclick="removeTagFromHostDetail('${escapeHtml(ip)}', '${escapeHtml(t)}')"></i>
+    </span>`
+  ).join('');
+}
+
+async function addTagFromHostDetail() {
+  const input = document.getElementById('hostDetailTagInput');
+  const tagName = input.value.trim().toLowerCase();
+  const ip = hostDetailCurrentIp;
+  if (!tagName || !ip) return;
+
+  const info = hostTagCache[ip];
+  if (!info || !info.host_id) return;
+
+  try {
+    await fetch(`/api/hosts/${info.host_id}/tags`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags: [tagName] })
+    });
+    if (!info.tags.includes(tagName)) info.tags.push(tagName);
+    renderHostDetailTags(ip);
+    input.value = '';
+    loadTags();
+    if (currentView === 'dashboard') renderPwnGrid(activePwnTab);
+  } catch(e) { console.error('Failed to add tag:', e); }
+}
+
+async function removeTagFromHostDetail(ip, tagName) {
+  const info = hostTagCache[ip];
+  if (!info || !info.host_id) return;
+
+  try {
+    await fetch(`/api/hosts/${info.host_id}/tags/${encodeURIComponent(tagName)}`, { method: 'DELETE' });
+    info.tags = info.tags.filter(t => t !== tagName);
+    renderHostDetailTags(ip);
+    loadTags();
+    if (currentView === 'dashboard') renderPwnGrid(activePwnTab);
+  } catch(e) { console.error('Failed to remove tag:', e); }
+}
+
+// ==================== PWNBOARD SEARCH & HOST GROUPS ====================
+let pwnSelectMode = false;
+let pwnSelectedHosts = new Set();
+// Groups: array of { id, name, ips: Set }. Persisted in localStorage.
+let pwnGroups = [];
+
+function _loadGroups() {
+  try {
+    const raw = localStorage.getItem('cygor_pwn_groups');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      pwnGroups = parsed.map(g => ({ id: g.id, name: g.name, ips: new Set(g.ips) }));
+    }
+  } catch(e) { pwnGroups = []; }
+}
+function _saveGroups() {
+  try {
+    const data = pwnGroups.map(g => ({ id: g.id, name: g.name, ips: [...g.ips] }));
+    localStorage.setItem('cygor_pwn_groups', JSON.stringify(data));
+  } catch(e) { /* ignore */ }
+}
+_loadGroups();
+
+function filterPwnboard() {
+  renderPwnGrid(activePwnTab);
+}
+
+function clearPwnboardSearch() {
+  const input = document.getElementById('pwnboardSearch');
+  if (input) input.value = '';
+  renderPwnGrid(activePwnTab);
+}
+
+function togglePwnSelectMode() {
+  pwnSelectMode = !pwnSelectMode;
+  const btn = document.getElementById('pwnSelectModeBtn');
+  const createBtn = document.getElementById('pwnGroupCreateBtn');
+
+  if (pwnSelectMode) {
+    btn.classList.add('active');
+    btn.innerHTML = '<i class="bi bi-x-lg me-1"></i>Cancel';
+  } else {
+    btn.classList.remove('active');
+    btn.innerHTML = '<i class="bi bi-columns-gap me-1"></i>Group';
+    pwnSelectedHosts.clear();
+    if (createBtn) createBtn.style.display = 'none';
+  }
+  renderPwnGrid(activePwnTab);
+}
+
+function togglePwnSelect(ip, cellEl) {
+  if (pwnSelectedHosts.has(ip)) {
+    pwnSelectedHosts.delete(ip);
+    cellEl.classList.remove('pwn-selected');
+  } else {
+    pwnSelectedHosts.add(ip);
+    cellEl.classList.add('pwn-selected');
+  }
+  const createBtn = document.getElementById('pwnGroupCreateBtn');
+  const countEl = document.getElementById('pwnGroupCount');
+  if (pwnSelectedHosts.size > 0) {
+    if (createBtn) createBtn.style.display = 'inline-block';
+    if (countEl) countEl.textContent = pwnSelectedHosts.size;
+  } else {
+    if (createBtn) createBtn.style.display = 'none';
+  }
+}
+
+function showGroupModal() {
+  if (pwnSelectedHosts.size === 0) return;
+  const count = document.getElementById('groupHostCount');
+  if (count) count.textContent = pwnSelectedHosts.size;
+
+  const listEl = document.getElementById('groupSelectedList');
+  if (listEl) {
+    listEl.innerHTML = [...pwnSelectedHosts].map(ip =>
+      `<span class="badge bg-secondary">${escapeHtml(ip)}</span>`
+    ).join('');
+  }
+
+  document.getElementById('groupNameInput').value = '';
+  const modal = new bootstrap.Modal(document.getElementById('groupModal'));
+  modal.show();
+  // Focus input after modal animation
+  document.getElementById('groupModal').addEventListener('shown.bs.modal', function handler() {
+    document.getElementById('groupNameInput').focus();
+    document.getElementById('groupModal').removeEventListener('shown.bs.modal', handler);
+  });
+}
+
+function createGroup() {
+  const input = document.getElementById('groupNameInput');
+  const name = input.value.trim();
+  if (!name || pwnSelectedHosts.size === 0) return;
+
+  const group = {
+    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+    name: name,
+    ips: new Set(pwnSelectedHosts)
+  };
+  pwnGroups.push(group);
+  _saveGroups();
+
+  // Close modal + exit select mode
+  const modal = bootstrap.Modal.getInstance(document.getElementById('groupModal'));
+  if (modal) modal.hide();
+
+  pwnSelectMode = false;
+  pwnSelectedHosts.clear();
+  const btn = document.getElementById('pwnSelectModeBtn');
+  if (btn) { btn.classList.remove('active'); btn.innerHTML = '<i class="bi bi-columns-gap me-1"></i>Group'; }
+  document.getElementById('pwnGroupCreateBtn').style.display = 'none';
+
+  renderPwnGrid(activePwnTab);
+}
+
+function deleteGroup(groupId) {
+  pwnGroups = pwnGroups.filter(g => g.id !== groupId);
+  _saveGroups();
+  renderPwnGrid(activePwnTab);
+}
+
+function renameGroup(groupId) {
+  const group = pwnGroups.find(g => g.id === groupId);
+  if (!group) return;
+  const headerEl = document.querySelector(`[data-group-id="${groupId}"] .pwn-group-title-text`);
+  if (!headerEl) return;
+
+  const current = group.name;
+  headerEl.innerHTML = `<input type="text" class="pwn-group-rename-input" value="${escapeHtml(current)}"
+    onblur="finishRename('${groupId}', this)"
+    onkeydown="if(event.key==='Enter')this.blur(); if(event.key==='Escape'){this.value='';this.blur();}">`;
+  const inp = headerEl.querySelector('input');
+  inp.focus();
+  inp.select();
+}
+
+function finishRename(groupId, inputEl) {
+  const newName = inputEl.value.trim();
+  const group = pwnGroups.find(g => g.id === groupId);
+  if (group && newName) {
+    group.name = newName;
+    _saveGroups();
+  }
+  renderPwnGrid(activePwnTab);
+}
+
+// Preload tag cache for all pwnboard hosts (called after buildPwnboard)
+async function preloadPwnboardTags() {
+  const allIPs = Object.keys(pwnboardHosts);
+  const uncached = allIPs.filter(ip => !hostTagCache[ip]);
+  if (uncached.length === 0) return;
+
+  for (let i = 0; i < uncached.length; i += 100) {
+    const batch = uncached.slice(i, i + 100);
+    try {
+      const resp = await fetch(`/api/hosts/resolve?addresses=${encodeURIComponent(batch.join(','))}`);
+      const data = await resp.json();
+      Object.entries(data.hosts || {}).forEach(([ip, info]) => {
+        hostTagCache[ip] = info;
+      });
+      batch.forEach(ip => {
+        if (!hostTagCache[ip]) hostTagCache[ip] = { host_id: null, tags: [] };
+      });
+    } catch(e) {
+      batch.forEach(ip => { hostTagCache[ip] = { host_id: null, tags: [] }; });
+    }
+  }
+  renderPwnGrid(activePwnTab);
+}
+
+// ==================== TAG SYSTEM ====================
+let hostTagCache = {};
+let tagFilteredAddresses = null;  // Set of IPs allowed by tag filter, null = all
+
+async function loadTags() {
+  // Tags are loaded for host detail display; no dropdown filter menu needed
+  try {
+    const resp = await fetch('/api/hosts/tags');
+    if (!resp.ok) return;
+  } catch(e) { console.error('Failed to load tags:', e); }
+}
+
+async function showTagModal(hostIp) {
+  document.getElementById('tagModalHost').textContent = hostIp;
+  document.getElementById('tagModalInput').value = '';
+
+  // Resolve host and get tags if not cached
+  if (!hostTagCache[hostIp]) {
+    try {
+      const resp = await fetch(`/api/hosts/resolve?addresses=${encodeURIComponent(hostIp)}`);
+      const data = await resp.json();
+      hostTagCache[hostIp] = data.hosts[hostIp] || { host_id: null, tags: [] };
+    } catch(e) {
+      hostTagCache[hostIp] = { host_id: null, tags: [] };
+    }
+  }
+
+  renderModalTags(hostIp);
+  new bootstrap.Modal(document.getElementById('tagModal')).show();
+}
+
+function renderModalTags(hostIp) {
+  const container = document.getElementById('tagModalCurrentTags');
+  const info = hostTagCache[hostIp] || { tags: [] };
+
+  if (!info.host_id) {
+    container.innerHTML = '<span class="text-muted small">Host not in database (no scan data ingested)</span>';
+    document.getElementById('tagModalInput').disabled = true;
+    return;
+  }
+  document.getElementById('tagModalInput').disabled = false;
+
+  if (info.tags.length === 0) {
+    container.innerHTML = '<span class="text-muted small">No tags assigned</span>';
+    return;
+  }
+
+  container.innerHTML = info.tags.map(t =>
+    `<span class="badge bg-info text-dark me-1 mb-1">
+      ${escapeHtml(t)}
+      <i class="bi bi-x-lg ms-1" onclick="removeTag('${escapeHtml(hostIp)}', '${escapeHtml(t)}')"></i>
+    </span>`
+  ).join('');
+}
+
+async function addTagFromModal() {
+  const input = document.getElementById('tagModalInput');
+  const tagName = input.value.trim().toLowerCase();
+  const hostIp = document.getElementById('tagModalHost').textContent;
+  if (!tagName) return;
+
+  const info = hostTagCache[hostIp];
+  if (!info || !info.host_id) return;
+
+  try {
+    await fetch(`/api/hosts/${info.host_id}/tags`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags: [tagName] })
+    });
+    if (!info.tags.includes(tagName)) info.tags.push(tagName);
+    renderModalTags(hostIp);
+    input.value = '';
+    loadTags();
+  } catch(e) { console.error('Failed to add tag:', e); }
+}
+
+async function removeTag(hostIp, tagName) {
+  const info = hostTagCache[hostIp];
+  if (!info || !info.host_id) return;
+
+  try {
+    await fetch(`/api/hosts/${info.host_id}/tags/${encodeURIComponent(tagName)}`, { method: 'DELETE' });
+    info.tags = info.tags.filter(t => t !== tagName);
+    renderModalTags(hostIp);
+    loadTags();
+  } catch(e) { console.error('Failed to remove tag:', e); }
+}
+</script>
+{% endblock %}

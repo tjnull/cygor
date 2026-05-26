@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid py-3">
+  <!-- Header -->
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h2 class="mb-0">{{ module.name }}</h2>
+      <div class="text-secondary small">
+        {% if module.description %}{{ module.description }}{% endif %}
+        {% if module.version %}<span class="ms-2">v{{ module.version }}</span>{% endif %}
+        {% if module.author %}<span class="ms-2">by {{ module.author }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if ctx.chart %}
+  <!-- Chart Container -->
+  <div class="card bg-dark border-0 shadow-sm p-3">
+    <canvas id="chartCanvas" style="min-height:340px;"></canvas>
+  </div>
+
+  <!-- Optional Details / Legend Section -->
+  {% if ctx.summary %}
+  <div class="mt-3">
+    <h5 class="text-light mb-2">Summary</h5>
+    <div class="text-secondary small">
+      {% for k, v in ctx.summary.items() %}
+        <div><strong class="text-light">{{ k }}:</strong> {{ v }}</div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <!-- No Chart Fallback -->
+  <div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle me-1"></i> No chart data available for this module.
+  </div>
+  {% endif %}
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+{% if ctx.chart %}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const ctx = document.getElementById("chartCanvas").getContext("2d");
+
+  // Safely parse chart data passed from backend
+  const chartData = {{ ctx.chart | tojson | safe }};
+  const chartType = chartData.type || "bar";
+  const chartConfig = {
+    type: chartType,
+    data: chartData.data || {},
+    options: Object.assign({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          labels: { color: "rgba(255,255,255,0.85)" }
+        },
+        title: {
+          display: chartData.title ? true : false,
+          text: chartData.title || "",
+          color: "#fff",
+          font: { size: 18, weight: "bold" }
+        },
+        tooltip: {
+          backgroundColor: "rgba(0,0,0,0.8)",
+          titleColor: "#fff",
+          bodyColor: "#ddd"
+        }
+      },
+      scales: {
+        x: { ticks: { color: "#ccc" }, grid: { color: "rgba(255,255,255,0.05)" } },
+        y: { ticks: { color: "#ccc" }, grid: { color: "rgba(255,255,255,0.05)" } }
+      }
+    }, chartData.options || {})
+  };
+
+  // Create chart
+  new Chart(ctx, chartConfig);
+});
+</script>
+{% endif %}
+{% endblock %}

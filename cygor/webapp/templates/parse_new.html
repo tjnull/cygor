@@ -1,0 +1,779 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container-fluid py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-10 col-xl-8">
+
+      <!-- Page header -->
+      <div class="cy-page-header">
+        <a href="/tasks" class="cy-btn cy-btn-icon" title="Back to Tasks">
+          <i class="bi bi-arrow-left"></i>
+        </a>
+        <h1><i class="bi bi-file-earmark-code"></i>Parse Scan Results</h1>
+        <span class="cy-page-subtitle">Import nmap, masscan, or other scan output</span>
+      </div>
+
+      <!-- About Cygor Parse & Quick Guide -->
+      <div class="card bg-dark mb-4">
+        <div class="card-header" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#parseGuide">
+          <h5 class="mb-0 d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-info-circle me-2"></i>About Cygor Parse & Quick Guide</span>
+            <i class="bi bi-chevron-down"></i>
+          </h5>
+        </div>
+        <div id="parseGuide" class="collapse">
+          <div class="card-body">
+            <p class="text-light mb-3">
+              Cygor Parse processes scan results from Nmap, Masscan, and other scanning tools to extract and organize host and service information. It automatically generates categorized hostlists for further enumeration.
+            </p>
+            <h6 class="text-secondary mb-2">Key Features:</h6>
+            <ul class="mb-3 text-light small">
+              <li><strong>Multi-Format Support:</strong> Processes .xml, .nmap, and .gnmap files from various scanners</li>
+              <li><strong>Automatic Categorization:</strong> Organizes discovered services into service-specific hostlists</li>
+              <li><strong>Flexible Input:</strong> Browse server files, upload files, or extract from zip archives</li>
+              <li><strong>Organized Output:</strong> Creates structured directories with parsed results for easy analysis</li>
+            </ul>
+            <h6 class="text-secondary mb-2">Input Options Guide:</h6>
+            <ul class="mb-0 small text-light">
+              <li><strong>Single File:</strong> Parse a single scan file already on the server</li>
+              <li><strong>Directory:</strong> Recursively parse all scan files in a directory</li>
+              <li><strong>Upload Files:</strong> Upload scan files or zip archives to parse</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Parse Form -->
+      <div class="card bg-dark">
+        <div class="card-body">
+          <form id="parseForm">
+
+            <!-- Scan Files to Parse -->
+            <div class="mb-4">
+              <label class="form-label fw-bold fs-5">
+                <i class="bi bi-folder-open me-2"></i>Scan Files to Parse
+              </label>
+
+              <div class="mb-3">
+                <div class="btn-group w-100" role="group">
+                  <input type="radio" class="btn-check" name="pathType" id="pathTypeFile" value="file" checked>
+                  <label class="btn btn-outline-secondary" for="pathTypeFile">
+                    <i class="bi bi-file-earmark me-1"></i>Single File
+                  </label>
+
+                  <input type="radio" class="btn-check" name="pathType" id="pathTypeDir" value="directory">
+                  <label class="btn btn-outline-secondary" for="pathTypeDir">
+                    <i class="bi bi-folder me-1"></i>Directory
+                  </label>
+
+                  <input type="radio" class="btn-check" name="pathType" id="pathTypeUpload" value="upload">
+                  <label class="btn btn-outline-secondary" for="pathTypeUpload">
+                    <i class="bi bi-cloud-upload me-1"></i>Upload Files
+                  </label>
+                </div>
+              </div>
+
+              <!-- Path Input Section (for file and directory modes) -->
+              <div id="pathInputSection">
+                <div class="input-group input-group-lg">
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="inputPath"
+                    placeholder="Enter full server path (e.g., /workspace/nmap/scan.xml or /workspace/nmap/scans/)"
+                    style="font-size: 1rem;"
+                  >
+                  <button class="btn btn-outline-secondary" type="button" id="browseServerBtn">
+                    <i class="bi bi-folder2-open me-2"></i>Browse Server
+                  </button>
+                </div>
+                <div class="form-text" style="font-size: 0.925rem;">
+                  Enter the full path to scan files already on the server, or click Browse Server to navigate the filesystem.
+                  Supported formats: .xml, .nmap, .gnmap | Directory mode recursively parses all files.
+                  <br><strong>To upload files instead:</strong> Switch to "Upload Files" mode above.
+                </div>
+              </div>
+
+              <!-- Upload Section -->
+              <div id="uploadZoneSection" style="display: none;">
+                <div class="upload-zone" id="uploadZone">
+                  <div class="upload-zone-content">
+                    <i class="bi bi-cloud-upload upload-icon"></i>
+                    <h5 class="upload-title">Drop files here or click to browse</h5>
+                    <p class="upload-subtitle">Supports: .xml, .nmap, .gnmap files and .zip archives</p>
+                  </div>
+                  <input type="file" id="uploadFileInput" accept=".xml,.nmap,.gnmap,.zip" multiple style="display: none;">
+                </div>
+
+                <!-- File List Display -->
+                <div id="uploadedFilesList" class="mt-3" style="display: none;">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="form-label mb-0">Selected Files:</label>
+                    <button type="button" class="btn btn-sm btn-outline-danger" id="clearAllFilesBtn">
+                      <i class="bi bi-trash me-1"></i>Clear All
+                    </button>
+                  </div>
+                  <div id="fileListContainer" class="border border-secondary rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                    <!-- Files will be listed here -->
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Output Directory (Optional) -->
+            <div class="mb-4">
+              <label class="form-label fw-bold fs-5">
+                <i class="bi bi-folder-symlink me-2"></i>Output Directory (Optional)
+              </label>
+              <div class="input-group input-group-lg">
+                <input
+                  type="text"
+                  class="form-control"
+                  id="outputDir"
+                  placeholder="Leave empty to use default location"
+                  style="font-size: 1rem;"
+                >
+                <button class="btn btn-outline-secondary" type="button" id="browseOutputServerBtn">
+                  <i class="bi bi-folder2-open me-2"></i>Browse Server
+                </button>
+              </div>
+              <div class="form-text" style="font-size: 0.925rem;">
+                Optional: Enter server path where parsed results should be saved. If empty, uses source directory or working directory.
+                <br><strong>Default behavior:</strong> If empty, uses source directory when parsing existing files or working directory when uploading.
+              </div>
+            </div>
+
+            <!-- Output Format -->
+            <div class="mb-4">
+              <label class="form-label fw-bold fs-5">
+                <i class="bi bi-file-text me-2"></i>Output Format
+              </label>
+              <select class="form-select form-select-lg" id="format" style="font-size: 1rem;">
+                <option value="txt">TXT (Plain text hostlists)</option>
+                <option value="json">JSON (Structured data)</option>
+                <option value="csv">CSV (Spreadsheet format)</option>
+              </select>
+              <div class="form-text" style="font-size: 0.925rem;">Select output format for parsed results</div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="d-flex gap-3">
+              <button type="button" class="btn btn-secondary" id="cancelBtn">
+                <i class="bi bi-x-circle me-2"></i>Cancel
+              </button>
+              <button type="submit" class="btn btn-primary flex-grow-1">
+                <i class="bi bi-play-circle me-2"></i>Parse Results
+              </button>
+            </div>
+
+          </form>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Server File Browser Modal -->
+<div class="modal fade" id="fileBrowserModal" tabindex="-1" aria-labelledby="fileBrowserModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light">
+      <div class="modal-header">
+        <h5 class="modal-title" id="fileBrowserModalLabel">
+          <i class="bi bi-folder2-open me-2"></i>Browse Server Filesystem
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Current Path Display -->
+        <div class="mb-3">
+          <label class="form-label small text-secondary">Current Path:</label>
+          <div class="input-group">
+            <input type="text" class="form-control bg-dark text-light border-secondary" id="currentPath" readonly>
+            <button class="btn btn-outline-secondary" type="button" id="goToPath" title="Go to path">
+              <i class="bi bi-arrow-right-circle"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- File/Directory List -->
+        <div id="fileList" class="file-browser-list" style="max-height: 400px; overflow-y: auto;">
+          <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="selectPathBtn">
+          <i class="bi bi-check-circle me-2"></i>Select This Directory
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Custom Alert Modals -->
+<div class="modal fade" id="cygorAlertModal" tabindex="-1" aria-labelledby="cygorAlertModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-secondary">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title text-white" id="cygorAlertModalLabel">
+          <i class="bi bi-info-circle-fill me-2"></i>Notification
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="cygorAlertMessage"></p>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="cygorSuccessModal" tabindex="-1" aria-labelledby="cygorSuccessModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-success">
+      <div class="modal-header border-success">
+        <h5 class="modal-title text-white" id="cygorSuccessModalLabel">
+          <i class="bi bi-check-circle-fill me-2 text-success"></i>Success
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="cygorSuccessMessage"></p>
+      </div>
+      <div class="modal-footer border-success">
+        <button type="button" class="btn btn-success" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="cygorErrorModal" tabindex="-1" aria-labelledby="cygorErrorModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-danger">
+      <div class="modal-header border-danger">
+        <h5 class="modal-title text-white" id="cygorErrorModalLabel">
+          <i class="bi bi-exclamation-triangle-fill me-2 text-danger"></i>Error
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="cygorErrorMessage"></p>
+      </div>
+      <div class="modal-footer border-danger">
+        <button type="button" class="btn btn-danger" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Upload Zone Styles */
+.upload-zone {
+  border: 3px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 3rem 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.upload-zone:hover {
+  border-color: rgba(13, 110, 253, 0.5);
+  background: rgba(13, 110, 253, 0.05);
+}
+
+.upload-zone.drag-over {
+  border-color: #0d6efd;
+  background: rgba(13, 110, 253, 0.1);
+}
+
+.upload-icon {
+  font-size: 3rem;
+  color: #6c757d;
+  margin-bottom: 1rem;
+}
+
+.upload-title {
+  color: #fff;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.upload-subtitle {
+  color: #6c757d;
+  margin-bottom: 0;
+}
+
+/* File Browser Styles */
+.file-browser-list {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  padding: 0.5rem;
+}
+
+.file-browser-item {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem;
+  margin-bottom: 0.25rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  gap: 0.75rem;
+}
+
+.file-browser-item:hover {
+  background: rgba(13, 110, 253, 0.15);
+}
+
+.file-browser-item.selected {
+  background: rgba(13, 110, 253, 0.3);
+  border: 1px solid #0d6efd;
+}
+
+.file-browser-icon {
+  font-size: 1.25rem;
+  min-width: 24px;
+}
+
+.file-browser-icon.directory {
+  color: #ffc107;
+}
+
+.file-browser-icon.file {
+  color: #0dcaf0;
+}
+
+.file-browser-icon.parent {
+  color: #6c757d;
+}
+
+.file-browser-name {
+  flex: 1;
+  color: #fff;
+  font-weight: 500;
+}
+
+.file-browser-size {
+  color: #6c757d;
+  font-size: 0.875rem;
+}
+
+/* Uploaded file item */
+.uploaded-file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
+  background: rgba(13, 110, 253, 0.1);
+  border: 1px solid rgba(13, 110, 253, 0.3);
+  border-radius: 4px;
+  margin-bottom: 0.25rem;
+}
+
+.uploaded-file-item .file-name {
+  color: #fff;
+  font-weight: 500;
+}
+
+.uploaded-file-item .file-size {
+  color: #6c757d;
+  font-size: 0.875rem;
+  margin-right: 0.5rem;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('DOM loaded, initializing parse form...');
+
+  const parseForm = document.getElementById('parseForm');
+  const pathTypeRadios = document.querySelectorAll('input[name="pathType"]');
+  const pathInputSection = document.getElementById('pathInputSection');
+  const uploadZoneSection = document.getElementById('uploadZoneSection');
+  const inputPathField = document.getElementById('inputPath');
+  const outputDirField = document.getElementById('outputDir');
+  const uploadZone = document.getElementById('uploadZone');
+  const uploadFileInput = document.getElementById('uploadFileInput');
+  const uploadedFilesList = document.getElementById('uploadedFilesList');
+  const fileListContainer = document.getElementById('fileListContainer');
+  const clearAllFilesBtn = document.getElementById('clearAllFilesBtn');
+  const cancelBtn = document.getElementById('cancelBtn');
+
+  let selectedFiles = [];
+
+  // Toggle between path input and upload modes
+  pathTypeRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      if (e.target.value === 'upload') {
+        pathInputSection.style.display = 'none';
+        uploadZoneSection.style.display = 'block';
+      } else {
+        pathInputSection.style.display = 'block';
+        uploadZoneSection.style.display = 'none';
+      }
+    });
+  });
+
+  // Upload zone click
+  uploadZone.addEventListener('click', () => {
+    uploadFileInput.click();
+  });
+
+  // File selection
+  uploadFileInput.addEventListener('change', (e) => {
+    handleFileSelect(e.target.files);
+  });
+
+  // Drag and drop
+  uploadZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadZone.classList.add('drag-over');
+  });
+
+  uploadZone.addEventListener('dragleave', () => {
+    uploadZone.classList.remove('drag-over');
+  });
+
+  uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove('drag-over');
+    handleFileSelect(e.dataTransfer.files);
+  });
+
+  function handleFileSelect(files) {
+    selectedFiles = [...selectedFiles, ...Array.from(files)];
+    renderFileList();
+  }
+
+  function renderFileList() {
+    if (selectedFiles.length === 0) {
+      uploadedFilesList.style.display = 'none';
+      return;
+    }
+
+    uploadedFilesList.style.display = 'block';
+    fileListContainer.innerHTML = '';
+
+    selectedFiles.forEach((file, index) => {
+      const fileItem = document.createElement('div');
+      fileItem.className = 'uploaded-file-item';
+      fileItem.innerHTML = `
+        <div>
+          <span class="file-name"><i class="bi bi-file-earmark me-2"></i>${file.name}</span>
+        </div>
+        <div class="d-flex align-items-center">
+          <span class="file-size">${formatFileSize(file.size)}</span>
+          <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeFile(${index})">
+            <i class="bi bi-x"></i>
+          </button>
+        </div>
+      `;
+      fileListContainer.appendChild(fileItem);
+    });
+  }
+
+  window.removeFile = function(index) {
+    selectedFiles.splice(index, 1);
+    renderFileList();
+  };
+
+  clearAllFilesBtn.addEventListener('click', () => {
+    selectedFiles = [];
+    renderFileList();
+  });
+
+  // Server File Browser functionality
+  let currentBrowsePath = '/';
+  let browseTargetField = null; // Track which field we're browsing for
+
+  const browseServerBtn = document.getElementById('browseServerBtn');
+  const browseOutputServerBtn = document.getElementById('browseOutputServerBtn');
+
+  if (browseServerBtn) {
+    browseServerBtn.addEventListener('click', () => {
+      console.log('Browse server button clicked');
+      browseTargetField = inputPathField;
+      // Start from the provided path or empty (server will default to working directory)
+      openFileBrowser(inputPathField.value || '');
+    });
+  }
+
+  if (browseOutputServerBtn) {
+    browseOutputServerBtn.addEventListener('click', () => {
+      console.log('Browse output server button clicked');
+      browseTargetField = outputDirField;
+      // Start from the provided path or empty (server will default to working directory)
+      openFileBrowser(outputDirField.value || '');
+    });
+  }
+
+async function openFileBrowser(initialPath) {
+  console.log('Opening file browser with path:', initialPath);
+  currentBrowsePath = initialPath;
+
+  // Get modal element and show it
+  const modalElement = document.getElementById('fileBrowserModal');
+  if (!modalElement) {
+    console.error('Modal element not found!');
+    return;
+  }
+
+  // Use Bootstrap's Modal API
+  const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+  modal.show();
+
+  // Load directory contents
+  await loadDirectory(currentBrowsePath);
+}
+
+async function loadDirectory(path) {
+  const fileList = document.getElementById('fileList');
+  const currentPathField = document.getElementById('currentPath');
+
+  // Show loading state
+  fileList.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+
+  try {
+    const response = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
+    const data = await response.json();
+
+    // Check for error response
+    if (data.error || !response.ok) {
+      fileList.innerHTML = `<div class="alert alert-danger">Error loading directory: ${data.error || 'Unknown error'}</div>`;
+      return;
+    }
+
+    currentBrowsePath = data.current_path;
+    currentPathField.value = currentBrowsePath;
+
+    if (!data.items || data.items.length === 0) {
+      fileList.innerHTML = '<div class="text-center py-4 text-secondary">No directories or scan files found</div>';
+      return;
+    }
+
+    fileList.innerHTML = '';
+
+    data.items.forEach(item => {
+      const itemEl = document.createElement('div');
+      itemEl.className = 'file-browser-item';
+      itemEl.dataset.path = item.path;
+      itemEl.dataset.type = item.type;
+
+      let icon = 'bi-folder-fill';
+      let iconClass = 'directory';
+
+      if (item.type === 'parent') {
+        icon = 'bi-arrow-up-circle-fill';
+        iconClass = 'parent';
+      } else if (item.type === 'file') {
+        icon = 'bi-file-earmark-code-fill';
+        iconClass = 'file';
+      }
+
+      let sizeText = '';
+      if (item.type === 'file' && item.size > 0) {
+        sizeText = `<span class="file-browser-size">${formatFileSize(item.size)}</span>`;
+      }
+
+      itemEl.innerHTML = `
+        <i class="bi ${icon} file-browser-icon ${iconClass}"></i>
+        <span class="file-browser-name">${item.name}</span>
+        ${sizeText}
+      `;
+
+      if (item.type === 'directory' || item.type === 'parent') {
+        itemEl.addEventListener('click', () => {
+          loadDirectory(item.path);
+        });
+      } else {
+        itemEl.addEventListener('click', function() {
+          // Deselect all
+          document.querySelectorAll('.file-browser-item').forEach(el => el.classList.remove('selected'));
+          // Select this one
+          this.classList.add('selected');
+
+          // Update the select button text based on type
+          const selectBtn = document.getElementById('selectPathBtn');
+          if (item.type === 'file') {
+            selectBtn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Select This File';
+          } else {
+            selectBtn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Select This Directory';
+          }
+        });
+      }
+
+      fileList.appendChild(itemEl);
+    });
+
+  } catch (error) {
+    console.error('Error loading directory:', error);
+    fileList.innerHTML = `<div class="alert alert-danger">Error loading directory: ${error.message}</div>`;
+  }
+}
+
+  // Go to path button
+  const goToPathBtn = document.getElementById('goToPath');
+  if (goToPathBtn) {
+    goToPathBtn.addEventListener('click', () => {
+      const pathInput = document.getElementById('currentPath');
+      if (pathInput && pathInput.value) {
+        loadDirectory(pathInput.value);
+      }
+    });
+  }
+
+  // Select path button
+  const selectPathBtn = document.getElementById('selectPathBtn');
+  if (selectPathBtn) {
+    selectPathBtn.addEventListener('click', () => {
+      const selected = document.querySelector('.file-browser-item.selected');
+      const path = selected ? selected.dataset.path : currentBrowsePath;
+
+      if (browseTargetField) {
+        browseTargetField.value = path;
+      }
+
+      // Close modal
+      const modal = bootstrap.Modal.getInstance(document.getElementById('fileBrowserModal'));
+      if (modal) {
+        modal.hide();
+      }
+    });
+  }
+
+  // Cancel button
+  cancelBtn.addEventListener('click', () => {
+    window.location.href = '/tasks';
+  });
+
+  // Form submission
+  parseForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const pathType = document.querySelector('input[name="pathType"]:checked').value;
+    const format = document.getElementById('format').value;
+
+    try {
+      if (pathType === 'upload') {
+        // Upload mode
+        if (selectedFiles.length === 0) {
+          showAlert('Please select files to upload', 'error');
+          return;
+        }
+
+        const formData = new FormData();
+        selectedFiles.forEach(file => {
+          formData.append('files', file);
+        });
+        formData.append('output_dir', outputDirField.value);
+        formData.append('format', format);
+
+        const response = await fetch('/api/parse/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          showAlert('Parse task created successfully!', 'success');
+          // Redirect after a short delay to allow user to see the success message
+          setTimeout(() => {
+            window.location.href = '/tasks';
+          }, 1500);
+        } else {
+          showAlert('Error creating parse task: ' + (result.detail || 'Unknown error'), 'error');
+        }
+
+      } else {
+        // Path mode (file or directory)
+        const inputPath = inputPathField.value.trim();
+
+        if (!inputPath) {
+          showAlert('Please enter a path or browse to select a file/directory', 'error');
+          return;
+        }
+
+        const response = await fetch('/api/parse', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            input_path: inputPath,
+            output_dir: outputDirField.value,
+            format: format,
+            path_type: pathType
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          showAlert('Parse task created successfully!', 'success');
+          // Redirect after a short delay to allow user to see the success message
+          setTimeout(() => {
+            window.location.href = '/tasks';
+          }, 1500);
+        } else {
+          showAlert('Error creating parse task: ' + (result.detail || 'Unknown error'), 'error');
+        }
+      }
+
+    } catch (error) {
+      console.error('Error submitting form:', error);
+      showAlert('Error: ' + error.message, 'error');
+    }
+  });
+
+  // Utility function to format file sizes
+  function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  // Make formatFileSize available globally for inline onclick
+  window.formatFileSize = formatFileSize;
+
+  // Custom Alert Function - Replace browser alerts with styled modals
+  function showAlert(message, type = 'info') {
+    let modalId, messageId, modal;
+    
+    if (type === 'success') {
+      modalId = 'cygorSuccessModal';
+      messageId = 'cygorSuccessMessage';
+    } else if (type === 'error') {
+      modalId = 'cygorErrorModal';
+      messageId = 'cygorErrorMessage';
+    } else {
+      modalId = 'cygorAlertModal';
+      messageId = 'cygorAlertMessage';
+    }
+    
+    const messageElement = document.getElementById(messageId);
+    if (messageElement) {
+      messageElement.textContent = message;
+      modal = new bootstrap.Modal(document.getElementById(modalId));
+      modal.show();
+    } else {
+      // Fallback — log to console if modal not found
+      console.warn('showAlert fallback — modal not found for:', message);
+    }
+  }
+});
+</script>
+
+{% endblock %}

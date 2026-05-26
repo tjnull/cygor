@@ -1,0 +1,1289 @@
+/* ============================================================
+   Cygor Shared Component Styles
+   Consolidated from per-template duplicates.
+   Loaded globally via base.html.
+   ============================================================ */
+
+
+/* ==================== CYGOR BUTTON SYSTEM ==================== */
+
+.cygor-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  background: rgba(255,255,255,0.04);
+  color: #8b949e;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+.cygor-btn:hover {
+  color: #c9d1d9;
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15);
+}
+.cygor-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.cygor-btn-primary {
+  color: #58a6ff;
+  background: rgba(88,166,255,0.1);
+  border-color: rgba(88,166,255,0.25);
+}
+.cygor-btn-primary:hover {
+  color: #79c0ff;
+  background: rgba(88,166,255,0.18);
+  border-color: rgba(88,166,255,0.35);
+}
+.cygor-btn-warn {
+  color: #d29922;
+  background: rgba(210,153,34,0.1);
+  border-color: rgba(210,153,34,0.25);
+}
+.cygor-btn-warn:hover {
+  color: #e3b341;
+  background: rgba(210,153,34,0.18);
+  border-color: rgba(210,153,34,0.35);
+}
+.cygor-btn-info {
+  color: #39d2c0;
+  background: rgba(57,210,192,0.1);
+  border-color: rgba(57,210,192,0.25);
+}
+.cygor-btn-info:hover {
+  color: #56d4c4;
+  background: rgba(57,210,192,0.18);
+  border-color: rgba(57,210,192,0.35);
+}
+.cygor-btn-danger {
+  color: #f85149;
+  background: rgba(248,81,73,0.1);
+  border-color: rgba(248,81,73,0.25);
+}
+.cygor-btn-danger:hover {
+  color: #ff7b72;
+  background: rgba(248,81,73,0.18);
+  border-color: rgba(248,81,73,0.35);
+}
+.cygor-btn-success {
+  color: #3fb950;
+  background: rgba(63,185,80,0.1);
+  border-color: rgba(63,185,80,0.25);
+}
+.cygor-btn-success:hover {
+  color: #56d364;
+  background: rgba(63,185,80,0.18);
+  border-color: rgba(63,185,80,0.35);
+}
+.cygor-btn-sm {
+  padding: 3px 8px;
+  font-size: 0.75rem;
+}
+
+
+/* ==================== BOOTSTRAP BUTTON HARMONIZATION ====================
+   Cygor's UI standardized on outline-style buttons (transparent background,
+   colored border + text). Older templates still use Bootstrap's solid
+   ``.btn-primary``/``.btn-success``/``.btn-danger``/``.btn-warning``/
+   ``.btn-info``/``.btn-secondary`` classes, which render as filled gradient
+   blocks that look out of place. Override those globally so existing markup
+   renders in the outline style without touching every template.
+
+   Color tokens match the .cygor-btn-* family above so Bootstrap-class buttons
+   and cygor-class buttons sit visually side by side.
+
+   Skipped:
+   - ``.btn-outline-*`` — already outline.
+   - ``.btn-link``, ``.btn-close`` — not solid-fill buttons.
+   - The ``btn-check`` toggle pattern.
+   ============================================================ */
+
+.btn.btn-primary:not(.btn-outline-primary) {
+  background-color: rgba(88, 166, 255, 0.10);
+  border-color: rgba(88, 166, 255, 0.35);
+  color: #58a6ff;
+  background-image: none;
+  box-shadow: none;
+}
+.btn.btn-primary:not(.btn-outline-primary):hover,
+.btn.btn-primary:not(.btn-outline-primary):focus,
+.btn.btn-primary:not(.btn-outline-primary):active {
+  background-color: rgba(88, 166, 255, 0.18);
+  border-color: rgba(88, 166, 255, 0.50);
+  color: #79c0ff;
+  box-shadow: none;
+  transform: none;
+}
+
+.btn.btn-success:not(.btn-outline-success) {
+  background-color: rgba(63, 185, 80, 0.10);
+  border-color: rgba(63, 185, 80, 0.35);
+  color: #3fb950;
+  background-image: none;
+  box-shadow: none;
+}
+.btn.btn-success:not(.btn-outline-success):hover,
+.btn.btn-success:not(.btn-outline-success):focus,
+.btn.btn-success:not(.btn-outline-success):active {
+  background-color: rgba(63, 185, 80, 0.18);
+  border-color: rgba(63, 185, 80, 0.50);
+  color: #56d364;
+  box-shadow: none;
+}
+
+.btn.btn-danger:not(.btn-outline-danger) {
+  background-color: rgba(248, 81, 73, 0.10);
+  border-color: rgba(248, 81, 73, 0.35);
+  color: #f85149;
+  background-image: none;
+  box-shadow: none;
+}
+.btn.btn-danger:not(.btn-outline-danger):hover,
+.btn.btn-danger:not(.btn-outline-danger):focus,
+.btn.btn-danger:not(.btn-outline-danger):active {
+  background-color: rgba(248, 81, 73, 0.18);
+  border-color: rgba(248, 81, 73, 0.50);
+  color: #ff7b72;
+  box-shadow: none;
+}
+
+.btn.btn-warning:not(.btn-outline-warning) {
+  background-color: rgba(210, 153, 34, 0.10);
+  border-color: rgba(210, 153, 34, 0.35);
+  color: #d29922;
+  background-image: none;
+  box-shadow: none;
+}
+.btn.btn-warning:not(.btn-outline-warning):hover,
+.btn.btn-warning:not(.btn-outline-warning):focus,
+.btn.btn-warning:not(.btn-outline-warning):active {
+  background-color: rgba(210, 153, 34, 0.18);
+  border-color: rgba(210, 153, 34, 0.50);
+  color: #e3b341;
+  box-shadow: none;
+}
+
+.btn.btn-info:not(.btn-outline-info) {
+  background-color: rgba(57, 210, 192, 0.10);
+  border-color: rgba(57, 210, 192, 0.35);
+  color: #39d2c0;
+  background-image: none;
+  box-shadow: none;
+}
+.btn.btn-info:not(.btn-outline-info):hover,
+.btn.btn-info:not(.btn-outline-info):focus,
+.btn.btn-info:not(.btn-outline-info):active {
+  background-color: rgba(57, 210, 192, 0.18);
+  border-color: rgba(57, 210, 192, 0.50);
+  color: #56d4c4;
+  box-shadow: none;
+}
+
+.btn.btn-secondary:not(.btn-outline-secondary) {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #c9d1d9;
+  background-image: none;
+  box-shadow: none;
+}
+.btn.btn-secondary:not(.btn-outline-secondary):hover,
+.btn.btn-secondary:not(.btn-outline-secondary):focus,
+.btn.btn-secondary:not(.btn-outline-secondary):active {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #e4e4e7;
+  box-shadow: none;
+}
+
+
+/* ==================== ICON BUTTONS ==================== */
+
+.cygor-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  background: rgba(255,255,255,0.04);
+  color: #8b949e;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.cygor-icon-btn:hover {
+  color: #c9d1d9;
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15);
+}
+.cygor-icon-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.cygor-icon-btn.cygor-btn-sm {
+  width: 26px;
+  height: 26px;
+  font-size: 0.8rem;
+}
+
+
+/* ==================== NAV LINK BUTTON ==================== */
+
+.cygor-nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.04);
+  color: #8b949e;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+.cygor-nav-link:hover {
+  color: #c9d1d9;
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15);
+}
+
+
+/* ==================== TABLE ACTION BUTTONS ==================== */
+
+.cygor-action-group {
+  display: inline-flex;
+  gap: 4px;
+}
+.cygor-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  background: transparent;
+  color: #8b949e;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+.cygor-action-btn:hover {
+  background: rgba(255,255,255,0.06);
+}
+.cygor-action-view {
+  color: #58a6ff;
+  border-color: rgba(88,166,255,0.15);
+}
+.cygor-action-view:hover {
+  background: rgba(88,166,255,0.12);
+  color: #79c0ff;
+}
+.cygor-action-warn {
+  color: #d29922;
+  border-color: rgba(210,153,34,0.15);
+}
+.cygor-action-warn:hover {
+  background: rgba(210,153,34,0.12);
+  color: #e3b341;
+}
+.cygor-action-danger {
+  color: #f85149;
+  border-color: rgba(248,81,73,0.15);
+}
+.cygor-action-danger:hover {
+  background: rgba(248,81,73,0.12);
+  color: #ff7b72;
+}
+
+
+/* ==================== STATUS BADGES ==================== */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-transform: capitalize;
+}
+.status-badge i {
+  font-size: 1.1rem;
+  margin-right: 0.5rem;
+}
+.status-pending {
+  background-color: rgba(13, 202, 240, 0.15);
+  color: #0dcaf0;
+  border: 1px solid rgba(13, 202, 240, 0.3);
+}
+.status-running {
+  background-color: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+.status-completed {
+  background-color: rgba(25, 135, 84, 0.15);
+  color: #198754;
+  border: 1px solid rgba(25, 135, 84, 0.3);
+}
+.status-failed {
+  background-color: rgba(220, 53, 69, 0.15);
+  color: #dc3545;
+  border: 1px solid rgba(220, 53, 69, 0.3);
+}
+.status-cancelled {
+  background-color: rgba(108, 117, 125, 0.15);
+  color: #9ca3ab;
+  border: 1px solid rgba(108, 117, 125, 0.3);
+}
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(255, 193, 7, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(255, 193, 7, 0.6);
+  }
+}
+
+
+/* ==================== TERMINAL OUTPUT ==================== */
+
+.terminal-output {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  padding: 0.875rem 1rem;
+  margin: 0;
+  color: #e8e8e8;
+  background: #000;
+  max-height: 650px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+  display: none;
+  border: none;
+}
+.terminal-output.active {
+  display: block;
+}
+.terminal-errors {
+  color: #f85149;
+}
+
+/* Scrollbar — wide, visible, draggable */
+.terminal-output {
+  scrollbar-width: auto;
+  scrollbar-color: #555 #111;
+}
+.terminal-output::-webkit-scrollbar { width: 14px; }
+.terminal-output::-webkit-scrollbar-track { background: #111; }
+.terminal-output::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 7px;
+  border: 3px solid #111;
+  min-height: 40px;
+}
+.terminal-output::-webkit-scrollbar-thumb:hover { background: #777; }
+.terminal-output::-webkit-scrollbar-thumb:active { background: #999; }
+
+
+/* ==================== ANSI COLOR CLASSES ==================== */
+
+.ansi-black-fg   { color: #586e75; }
+.ansi-red-fg     { color: #f85149; }
+.ansi-green-fg   { color: #3fb950; }
+.ansi-yellow-fg  { color: #d29922; }
+.ansi-blue-fg    { color: #58a6ff; }
+.ansi-magenta-fg { color: #bc8cff; }
+.ansi-cyan-fg    { color: #79c0ff; }
+.ansi-white-fg   { color: #e6edf3; }
+.ansi-bright-black-fg   { color: #6e7681; }
+.ansi-bright-red-fg     { color: #ff7b72; }
+.ansi-bright-green-fg   { color: #56d364; }
+.ansi-bright-yellow-fg  { color: #e3b341; }
+.ansi-bright-blue-fg    { color: #79c0ff; }
+.ansi-bright-magenta-fg { color: #d2a8ff; }
+.ansi-bright-cyan-fg    { color: #a5d6ff; }
+.ansi-bright-white-fg   { color: #ffffff; }
+.ansi-bold { font-weight: 700; }
+
+
+/* ==================== EMPTY STATE ==================== */
+
+.empty-state-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(139, 148, 158, 0.08);
+  border: 1px solid rgba(139, 148, 158, 0.15);
+  border-radius: 16px;
+}
+.empty-state-icon i {
+  font-size: 2.5rem;
+  color: #6e7681;
+}
+.empty-cmd-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 1.25rem;
+  transition: all 0.15s ease;
+}
+.empty-cmd-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+}
+.empty-cmd-icon {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 1.2rem;
+}
+.empty-cmd-code {
+  display: block;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.82rem;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: left;
+  user-select: all;
+}
+
+
+/* ============================================================
+   LIGHT THEME OVERRIDES
+   ============================================================ */
+
+/* Buttons */
+body.light-theme .cygor-btn {
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(0,0,0,0.1);
+  color: #57606a;
+}
+body.light-theme .cygor-btn:hover {
+  color: #24292f;
+  background: rgba(0,0,0,0.06);
+}
+body.light-theme .cygor-btn-primary {
+  color: #0d6efd;
+  background: rgba(13,110,253,0.06);
+  border-color: rgba(13,110,253,0.2);
+}
+body.light-theme .cygor-btn-primary:hover {
+  color: #0a58ca;
+  background: rgba(13,110,253,0.12);
+  border-color: rgba(13,110,253,0.3);
+}
+body.light-theme .cygor-btn-warn {
+  color: #9a6700;
+  background: rgba(154,103,0,0.06);
+  border-color: rgba(154,103,0,0.2);
+}
+body.light-theme .cygor-btn-warn:hover {
+  color: #7d5200;
+  background: rgba(154,103,0,0.12);
+}
+body.light-theme .cygor-btn-info {
+  color: #0d7d6c;
+  background: rgba(13,125,108,0.06);
+  border-color: rgba(13,125,108,0.2);
+}
+body.light-theme .cygor-btn-info:hover {
+  color: #0a5e52;
+  background: rgba(13,125,108,0.12);
+}
+body.light-theme .cygor-btn-danger {
+  color: #cf222e;
+  background: rgba(207,34,46,0.06);
+  border-color: rgba(207,34,46,0.2);
+}
+body.light-theme .cygor-btn-danger:hover {
+  color: #a40e26;
+  background: rgba(207,34,46,0.12);
+}
+body.light-theme .cygor-btn-success {
+  color: #1a7f37;
+  background: rgba(26,127,55,0.06);
+  border-color: rgba(26,127,55,0.2);
+}
+body.light-theme .cygor-btn-success:hover {
+  color: #116329;
+  background: rgba(26,127,55,0.12);
+}
+
+/* Icon buttons */
+body.light-theme .cygor-icon-btn {
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(0,0,0,0.1);
+  color: #57606a;
+}
+body.light-theme .cygor-icon-btn:hover {
+  color: #24292f;
+  background: rgba(0,0,0,0.06);
+}
+
+/* Nav link */
+body.light-theme .cygor-nav-link {
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(0,0,0,0.1);
+  color: #57606a;
+}
+body.light-theme .cygor-nav-link:hover {
+  color: #24292f;
+  background: rgba(0,0,0,0.06);
+}
+
+/* Action buttons */
+body.light-theme .cygor-action-btn {
+  border-color: rgba(0,0,0,0.08);
+  color: #57606a;
+}
+body.light-theme .cygor-action-view {
+  color: #0d6efd;
+  border-color: rgba(13,110,253,0.15);
+}
+body.light-theme .cygor-action-view:hover {
+  background: rgba(13,110,253,0.08);
+}
+body.light-theme .cygor-action-warn {
+  color: #9a6700;
+  border-color: rgba(154,103,0,0.15);
+}
+body.light-theme .cygor-action-warn:hover {
+  background: rgba(154,103,0,0.08);
+}
+body.light-theme .cygor-action-danger {
+  color: #cf222e;
+  border-color: rgba(207,34,46,0.15);
+}
+body.light-theme .cygor-action-danger:hover {
+  background: rgba(207,34,46,0.08);
+}
+
+/* Terminal */
+body.light-theme .terminal-window {
+  border-color: #d0d7de;
+}
+body.light-theme .terminal-output {
+  background: #ffffff;
+  color: #1f2328;
+  scrollbar-color: #c0c8d0 #f0f0f0;
+}
+body.light-theme .terminal-errors {
+  color: #cf222e;
+}
+body.light-theme .terminal-output::-webkit-scrollbar-track { background: #f0f0f0; }
+body.light-theme .terminal-output::-webkit-scrollbar-thumb { background: #c0c8d0; border-color: #f0f0f0; }
+body.light-theme .terminal-output::-webkit-scrollbar-thumb:hover { background: #a0a8b0; }
+body.light-theme .terminal-output::-webkit-scrollbar-thumb:active { background: #808890; }
+body.light-theme .ansi-red-fg     { color: #cf222e; }
+body.light-theme .ansi-green-fg   { color: #116329; }
+body.light-theme .ansi-yellow-fg  { color: #9a6700; }
+body.light-theme .ansi-blue-fg    { color: #0550ae; }
+body.light-theme .ansi-magenta-fg { color: #8250df; }
+body.light-theme .ansi-cyan-fg    { color: #0969da; }
+
+/* Empty state */
+body.light-theme .empty-state-icon {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+body.light-theme .empty-state-icon i {
+  color: #8b949e;
+}
+body.light-theme .empty-cmd-card {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+body.light-theme .empty-cmd-card:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+body.light-theme .empty-cmd-code {
+  background: #f6f8fa;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+/* =================================================================
+   ULTRA-WIDE DENSITY OVERRIDES
+   On displays >=1700px, common stat-card patterns get a horizontal
+   layout (icon left, value+label stacked right) so each card fills
+   its column instead of stretching empty space across 500-700px of
+   width. This fixes the "everything looks chunky" feel on 32" 1440p
+   and 4K monitors without changing the underlying grid. Smaller
+   screens are untouched.
+   ================================================================= */
+@media (min-width: 1700px) {
+  /* Reports dashboard / shared stat-card pattern: icon + value + label
+     stacked vertically by default. Switch to horizontal so a 575px col
+     reads as one neat row instead of a tall card with empty sides. */
+  .stat-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.1rem 1.25rem;
+  }
+  .stat-card .stat-card-icon {
+    margin-bottom: 0;
+    flex-shrink: 0;
+  }
+  .stat-card-body,
+  .stat-card > div:not(.stat-card-icon) {
+    min-width: 0;
+  }
+
+  /* host_detail / service_detail info-card pattern: title above value.
+     Horizontal at wide widths so the card fills its column. */
+  .info-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+  }
+  .info-card .info-card-title {
+    margin-bottom: 0;
+    flex: 1;
+    min-width: 0;
+  }
+  .info-card .info-card-value {
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* Bootstrap stat rows that don't use a named class (vulnerabilities.html
+     uses bare .card inside narrow .col-md-2 cells). Tighten the inner
+     card-body padding so 6 cards across don't dwarf their content. */
+  .row > [class*="col-md-2"] > .card > .card-body.text-center,
+  .row > [class*="col-lg-3"][class*="col-md-6"] > .card > .card-body.text-center {
+    padding: 0.85rem 0.75rem;
+  }
+}
+
+@media (min-width: 2000px) {
+  .stat-card { padding: 1rem 1.25rem; gap: 1.25rem; }
+  .info-card { padding: 0.9rem 1.25rem; }
+}
+
+/* =================================================================
+   CYGOR DESIGN SYSTEM PRIMITIVES (.cy-*)
+   Opt-in: pages migrate to these by replacing ad-hoc styles. Existing
+   Bootstrap-based markup keeps working untouched until each page is
+   migrated. Tokens defined in base.html :root.
+   ================================================================= */
+
+/* --- Card --- */
+.cy-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.cy-card-header {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.cy-card-title {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+.cy-card-title i { color: var(--accent); font-size: var(--fs-md); }
+.cy-card-body { padding: var(--space-4); }
+.cy-card-body--flush { padding: 0; }
+
+/* --- Inputs --- */
+.cy-input,
+select.cy-input,
+textarea.cy-input {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-1);
+  font-size: var(--fs-md);
+  font-family: inherit;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+  width: 100%;
+  line-height: 1.4;
+}
+.cy-input::placeholder { color: var(--text-3); }
+.cy-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.cy-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* --- Buttons --- */
+.cy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-md);
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-2);
+  color: var(--text-1);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: inherit;
+  line-height: 1.4;
+  text-decoration: none;
+  white-space: nowrap;       /* never wrap label across lines, even in narrow cells */
+}
+.cy-btn:hover { background: var(--surface-3); border-color: var(--border-strong); color: var(--text-1); }
+.cy-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cy-btn-primary {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #ffffff;
+}
+.cy-btn-primary:hover { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+.cy-btn-ghost { background: transparent; }
+.cy-btn-ghost:hover { background: var(--surface-2); }
+.cy-btn-icon {
+  padding: 6px;
+  width: 32px;
+  height: 32px;
+  justify-content: center;
+}
+.cy-btn-danger {
+  background: rgba(248,81,73,0.12);
+  border-color: rgba(248,81,73,0.3);
+  color: var(--danger);
+}
+.cy-btn-danger:hover {
+  background: rgba(248,81,73,0.2);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* --- Chip / pill --- */
+.cy-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: var(--fs-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+  text-decoration: none;
+}
+.cy-chip:hover { background: var(--surface-3); border-color: var(--border-strong); color: var(--text-1); }
+.cy-chip.is-active,
+.cy-chip[data-active="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text-1);
+}
+.cy-chip i { font-size: var(--fs-md); color: var(--accent); }
+
+/* --- Badge --- */
+.cy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-2);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+.cy-badge-success { background: rgba(63,185,80,0.12);  color: var(--success); border-color: rgba(63,185,80,0.3); }
+.cy-badge-warn    { background: rgba(210,153,34,0.12); color: var(--warn);    border-color: rgba(210,153,34,0.3); }
+.cy-badge-danger  { background: rgba(248,81,73,0.12);  color: var(--danger);  border-color: rgba(248,81,73,0.3); }
+.cy-badge-accent  { background: var(--accent-soft);     color: var(--accent); border-color: rgba(88,166,255,0.3); }
+
+/* --- kbd hint --- */
+.cy-kbd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-2);
+  display: inline-block;
+}
+
+/* --- Inline code chip --- */
+.cy-code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+/* --- Stat tile (horizontal: icon left, value+label right) --- */
+.cy-stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+.cy-stat-row.cy-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cy-stat-row.cy-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cy-stat-row.cy-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.cy-stat-row.cy-cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.cy-stat-tile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s;
+}
+a.cy-stat-tile:hover { border-color: var(--border-strong); }
+.cy-stat-tile-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-lg);
+  flex-shrink: 0;
+}
+.cy-stat-tile-icon--success { background: rgba(63,185,80,0.12);  color: var(--success); }
+.cy-stat-tile-icon--warn    { background: rgba(210,153,34,0.12); color: var(--warn); }
+.cy-stat-tile-icon--danger  { background: rgba(248,81,73,0.12);  color: var(--danger); }
+.cy-stat-tile-meta { min-width: 0; }
+.cy-stat-tile-value {
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  color: var(--text-1);
+  line-height: 1.1;
+}
+.cy-stat-tile-label {
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+/* --- List row (flat row inside a card) --- */
+.cy-list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s;
+}
+.cy-list-row:last-child { border-bottom: none; }
+.cy-list-row:hover { background: var(--surface-3); color: inherit; }
+.cy-list-row .cy-list-icon {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.cy-list-row .cy-list-name { flex: 1; color: var(--text-1); min-width: 0; }
+.cy-list-row .cy-list-meta { color: var(--text-3); font-size: var(--fs-xs); }
+
+/* --- Empty state --- */
+.cy-empty {
+  text-align: center;
+  padding: var(--space-5) var(--space-4);
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+}
+.cy-empty-title { color: var(--text-2); font-size: var(--fs-md); margin-bottom: 4px; }
+
+/* --- Page header (title + subtitle on one baseline) --- */
+.cy-page-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+.cy-page-header h1 {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  color: var(--text-1);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.cy-page-header h1 i { color: var(--accent); }
+.cy-page-header .cy-page-subtitle {
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+}
+.cy-page-header .cy-page-actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* --- Light theme variants for the design system --- */
+body.light-theme {
+  --bg-base:       #ffffff;
+  --surface-1:     #ffffff;
+  --surface-2:     #f6f8fa;
+  --surface-3:     #eef1f4;
+  --border-subtle: rgba(0,0,0,0.08);
+  --border-strong: rgba(0,0,0,0.16);
+  --text-1:        #1f2328;
+  --text-2:        #424a53;
+  --text-3:        #57606a;
+  --accent:        #0969da;
+  --accent-soft:   rgba(9,105,218,0.1);
+  --accent-strong: #0550ae;
+}
+
+/* --- Table primitive (used inside .cy-card) ---------------------- */
+.cy-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.cy-table thead th {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+}
+.cy-table tbody td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+.cy-table tbody tr:last-child td { border-bottom: none; }
+.cy-table tbody tr:hover { background: var(--surface-2); }
+.cy-table .cy-mono {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+}
+.cy-table .cy-cell-muted { color: var(--text-3); }
+.cy-table .cy-cell-strong { color: var(--text-1); font-weight: 500; }
+
+/* Cell-level helpers usable in any review table:
+   .host-ip      monospace primary IP (accent, bold, hover-underline)
+   .host-hostname secondary hostname text */
+.host-ip {
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.01em;
+  text-decoration: none;
+}
+.host-ip:hover { color: var(--accent); text-decoration: underline; }
+.host-hostname { color: var(--text-2); font-size: var(--fs-sm); }
+.host-hostname-muted { color: var(--text-3); font-size: var(--fs-sm); }
+.cy-cell-muted { color: var(--text-3); }
+.cy-cell-strong { color: var(--text-1); font-weight: 500; }
+
+/* =================================================================
+   BOOTSTRAP HARMONIZATION
+   Pull legacy Bootstrap .card.bg-dark and .table-dark visuals into the
+   design-system look without touching template markup. Pages that
+   already use .cy-card / .cy-table are unaffected (different selectors).
+   This is the bridge that lets every page feel like the same product
+   while we incrementally migrate markup.
+   ================================================================= */
+
+/* Cards: any .card.bg-dark — replace navy blue + Bootstrap shadow with
+   pure-black surface + 1px subtle border, matching .cy-card. */
+.card.bg-dark,
+.card.bg-gradient-dark {
+  background: var(--surface-1) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: none !important;
+  color: var(--text-2);
+}
+.card.bg-dark .card-header,
+.card.bg-gradient-dark .card-header {
+  background: transparent !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-2);
+}
+.card.bg-dark .card-header h5,
+.card.bg-dark .card-header h6,
+.card.bg-gradient-dark .card-header h5,
+.card.bg-gradient-dark .card-header h6 {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0;
+}
+.card.bg-dark .card-header h5 i,
+.card.bg-dark .card-header h6 i,
+.card.bg-gradient-dark .card-header h5 i,
+.card.bg-gradient-dark .card-header h6 i { color: var(--accent); font-size: var(--fs-md); }
+
+/* Cards with semantic borders (border-info, border-success, etc.) —
+   keep the accent color cue but as a 1px subtle stripe, not the heavy
+   2px Bootstrap border. */
+.card.bg-dark.border-info, .card.bg-dark.border-primary { border-color: rgba(88,166,255,0.3) !important; }
+.card.bg-dark.border-success { border-color: rgba(63,185,80,0.3) !important; }
+.card.bg-dark.border-warning { border-color: rgba(210,153,34,0.3) !important; }
+.card.bg-dark.border-danger  { border-color: rgba(248,81,73,0.3) !important; }
+
+/* Tables: any .table.table-dark gets the .cy-table treatment.
+   Drops striped rows (visual noise), uses a single subtle row rule,
+   shrinks header to the 11px uppercase eyebrow style. */
+.table.table-dark {
+  --bs-table-bg: var(--surface-1);
+  --bs-table-color: var(--text-2);
+  --bs-table-border-color: var(--border-subtle);
+  --bs-table-striped-bg: transparent;
+  --bs-table-hover-bg: var(--surface-2);
+  --bs-table-hover-color: var(--text-1);
+  background: var(--surface-1);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  margin-bottom: 0;
+}
+.table.table-dark > :not(caption) > * > * {
+  background-color: transparent;
+  color: inherit;
+  border-bottom-color: var(--border-subtle) !important;
+  padding: var(--space-2) var(--space-3);
+}
+.table.table-dark thead th {
+  font-size: var(--fs-xs) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  background: transparent !important;
+}
+.table.table-dark tbody tr:hover > * {
+  background-color: var(--surface-2) !important;
+  color: var(--text-1) !important;
+}
+.table.table-dark tbody tr:last-child > * { border-bottom: none !important; }
+
+/* Bootstrap badges in tables/cards adopt the .cy-badge sizing. */
+.card.bg-dark .badge,
+.table.table-dark .badge {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+
+/* Bootstrap "card-header bg-dark" (separately classed) — same treatment
+   as .card.bg-dark .card-header. */
+.card-header.bg-dark {
+  background: transparent !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+/* Form controls inside dark cards/forms — match .cy-input visual.
+   Bootstrap form-control + form-select with bg-dark styling. */
+.form-control.bg-dark,
+.form-select.bg-dark,
+input.bg-dark[type="text"],
+input.bg-dark[type="number"],
+input.bg-dark[type="search"],
+textarea.bg-dark {
+  background: var(--surface-2) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-1) !important;
+  font-size: var(--fs-md);
+  border-radius: var(--radius-md);
+}
+.form-control.bg-dark:focus,
+.form-select.bg-dark:focus,
+input.bg-dark:focus,
+textarea.bg-dark:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-soft) !important;
+  background: var(--surface-2) !important;
+  color: var(--text-1) !important;
+}
+
+/* Alerts: lighten the visual weight to match cy-card aesthetic */
+.alert.alert-info,
+.alert.alert-warning,
+.alert.alert-success,
+.alert.alert-danger,
+.alert.alert-secondary {
+  border-radius: var(--radius-md);
+  border-width: 1px;
+  font-size: var(--fs-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+/* =================================================================
+   BADGE HARMONIZATION
+   Bootstrap-style "<span class='badge bg-info'>" badges are scattered
+   throughout cygor (PORT_SCAN, scan complete, trigger labels, port
+   chips in tables, etc.). They render in saturated Bootstrap colors
+   (bright cyan, bright blue) that look out of place next to the new
+   .cy-badge family. Map them globally to the .cy-badge visual.
+   ================================================================= */
+.badge.bg-primary,
+.badge.bg-info,
+.badge.bg-secondary,
+.badge.bg-success,
+.badge.bg-warning,
+.badge.bg-danger {
+  font-size: var(--fs-xs) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px !important;
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid;
+  background-image: none;
+  box-shadow: none;
+  line-height: 1.4;
+}
+
+.badge.bg-primary {
+  background-color: var(--accent-soft) !important;
+  color: var(--accent) !important;
+  border-color: rgba(88,166,255,0.3) !important;
+}
+.badge.bg-info {
+  background-color: var(--accent-soft) !important;
+  color: var(--accent) !important;
+  border-color: rgba(88,166,255,0.3) !important;
+}
+.badge.bg-secondary {
+  background-color: var(--surface-2) !important;
+  color: var(--text-2) !important;
+  border-color: var(--border-subtle) !important;
+}
+.badge.bg-success {
+  background-color: rgba(63,185,80,0.12) !important;
+  color: var(--success) !important;
+  border-color: rgba(63,185,80,0.3) !important;
+}
+.badge.bg-warning {
+  background-color: rgba(210,153,34,0.12) !important;
+  color: var(--warn) !important;
+  border-color: rgba(210,153,34,0.3) !important;
+}
+.badge.bg-warning.text-dark { color: var(--warn) !important; }   /* override Bootstrap’s text-dark on warning */
+.badge.bg-danger {
+  background-color: rgba(248,81,73,0.12) !important;
+  color: var(--danger) !important;
+  border-color: rgba(248,81,73,0.3) !important;
+}
+
+/* Bootstrap rounded-circle counter badges (used for "1 / 2 / 3 / 4"
+   step indicators in schedules and vulnerabilities help menus) —
+   keep the circle but remove the bright-blue Bootstrap fill. */
+.badge.bg-primary.rounded-circle,
+.badge.bg-secondary.rounded-circle {
+  background-color: var(--accent-soft) !important;
+  color: var(--accent) !important;
+  border: 1px solid rgba(88,166,255,0.3) !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+/* Misc one-off color classes used for badges (bg-purple/teal/orange
+   appear in schedules) — map onto the unified palette. */
+.badge.bg-purple { background-color: rgba(139,92,246,0.12) !important; color: #a78bfa !important; border: 1px solid rgba(139,92,246,0.3) !important; }
+.badge.bg-teal   { background-color: rgba(20,184,166,0.12) !important; color: #2dd4bf !important; border: 1px solid rgba(20,184,166,0.3) !important; }
+.badge.bg-orange { background-color: rgba(249,115,22,0.12) !important; color: #fb923c !important; border: 1px solid rgba(249,115,22,0.3) !important; }
+
+/* Fix legacy "fs-6" badge sizing some templates apply (1rem text) —
+   the harmonized look is intentionally small. */
+.badge.fs-6 { font-size: var(--fs-xs) !important; }
+
+/* Port chips on host_detail / search results pages.
+   Used inside data tables where a slightly more substantial chip
+   reads better than the tighter .cy-badge. Mono + accent + subtle
+   surface fill so it reads as "data" not "label". */
+.port-badge,
+.badge.port-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  background: var(--surface-2);
+  color: var(--accent);
+  border: 1px solid var(--border-subtle);
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  text-transform: none;
+  letter-spacing: 0;
+  min-width: 64px;
+  text-align: center;
+  line-height: 1.3;
+}

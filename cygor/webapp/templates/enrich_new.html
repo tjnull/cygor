@@ -1,0 +1,1963 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container-fluid py-3">
+  <!-- Page header -->
+  <div class="cy-page-header">
+    <a href="/tasks" class="cy-btn cy-btn-icon" title="Back to Tasks">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <h1><i class="bi bi-binoculars"></i>IOC Enrichment</h1>
+    <span class="cy-page-subtitle">Gather threat intel for IPs, domains, and hashes</span>
+  </div>
+
+  <!-- About Enrichment & Quick Guide (Collapsible) -->
+  <div class="card bg-dark mb-4">
+    <div class="card-header" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#enrichGuide">
+      <h5 class="mb-0 d-flex justify-content-between align-items-center" style="font-size: 1.25rem;">
+        <span>
+          <svg class="me-2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          About IOC Enrichment & Quick Guide
+        </span>
+        <i class="bi bi-chevron-down"></i>
+      </h5>
+    </div>
+    <div id="enrichGuide" class="collapse">
+      <div class="card-body">
+        <p class="text-light mb-4" style="font-size: 1.05rem; line-height: 1.7;">
+          IOC Enrichment uses passive reconnaissance and threat intelligence APIs to gather information about IPs, domains, and file hashes.
+          This helps identify malicious infrastructure, track threat actors, and understand attack patterns without active scanning.
+        </p>
+        <h5 class="text-secondary mb-3" style="font-size: 1.15rem; font-weight: 600;">Supported IOC Types:</h5>
+        <ul class="mb-4 text-light" style="font-size: 1rem; line-height: 1.8; padding-left: 1.5rem;">
+          <li class="mb-2"><strong>IP Addresses:</strong> IPv4 addresses (e.g., 192.168.1.1, 8.8.8.8)</li>
+          <li class="mb-2"><strong>Domains:</strong> Domain names (e.g., example.com, malware-c2.net)</li>
+          <li class="mb-2"><strong>File Hashes:</strong> MD5, SHA1, or SHA256 hashes</li>
+          <li class="mb-2"><strong>URLs:</strong> Full URLs for reputation checking</li>
+        </ul>
+        <h5 class="text-secondary mb-3" style="font-size: 1.15rem; font-weight: 600;">Output Formats:</h5>
+        <ul class="mb-0 text-light" style="font-size: 1rem; line-height: 1.8; padding-left: 1.5rem;">
+          <li class="mb-2"><strong>JSON:</strong> Structured data with all enrichment details</li>
+          <li class="mb-2"><strong>CSV:</strong> Spreadsheet-compatible tabular format</li>
+          <li class="mb-2"><strong>XML:</strong> Hierarchical markup format</li>
+          <li class="mb-2"><strong>Text:</strong> Human-readable summary</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <form id="enrichForm">
+    <div class="row g-4">
+      <!-- ==================== LEFT: TAB NAVIGATION ==================== -->
+      <div class="col-lg-3 col-xl-2">
+        <div class="enrich-nav-container">
+          <nav class="enrich-nav">
+            <button type="button" class="enrich-nav-item" data-tab="info">
+              <span class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                  <line x1="8" y1="6" x2="16" y2="6"/>
+                  <line x1="8" y1="10" x2="16" y2="10"/>
+                  <line x1="8" y1="14" x2="12" y2="14"/>
+                </svg>
+              </span>
+              <span class="nav-text">Info & Help</span>
+            </button>
+            <button type="button" class="enrich-nav-item active" data-tab="iocs">
+              <span class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 0 0 8 11a4 4 0 1 1 8 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0 0 15.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 0 0 8 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4"/>
+                </svg>
+              </span>
+              <span class="nav-text">IOC Input</span>
+            </button>
+            <button type="button" class="enrich-nav-item" data-tab="sources">
+              <span class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                </svg>
+              </span>
+              <span class="nav-text">Sources</span>
+            </button>
+            <button type="button" class="enrich-nav-item" data-tab="output">
+              <span class="nav-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+              </span>
+              <span class="nav-text">Output</span>
+            </button>
+          </nav>
+
+          <!-- API Keys Card in Sidebar -->
+          <div class="api-card mt-4">
+            <div class="api-card-header">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+              </svg>
+              <span>API Keys</span>
+            </div>
+            <div class="api-card-body">
+              <p class="small text-secondary mb-2">Configure API keys for threat intelligence sources</p>
+              <a href="/settings/enrich" class="btn btn-sm btn-outline-primary w-100">
+                <svg class="me-1" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                Configure
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== RIGHT: TAB CONTENT ==================== -->
+      <div class="col-lg-9 col-xl-10">
+        <!-- TAB: IOC Input -->
+        <div class="enrich-tab active" id="tab-iocs">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 0 0 8 11a4 4 0 1 1 8 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0 0 15.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 0 0 8 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4"/>
+                </svg>
+                Indicators of Compromise
+              </h4>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Enter the IOCs you want to enrich. Supports IPs, domains, URLs, and file hashes.</p>
+
+              <!-- Input Method Toggle -->
+              <div class="input-method-toggle mb-4">
+                <button type="button" class="method-btn active" data-method="manual" data-target="iocs">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/>
+                    <path d="M18 8h.01"/><path d="M6 12h.01"/><path d="M10 12h.01"/>
+                    <path d="M14 12h.01"/><path d="M18 12h.01"/><path d="M6 16h12"/>
+                  </svg>
+                  Manual Input
+                </button>
+                <button type="button" class="method-btn" data-method="file" data-target="iocs">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                  </svg>
+                  Upload File
+                </button>
+              </div>
+
+              <!-- Manual Input -->
+              <div class="input-method" id="method-manual-iocs">
+                <textarea class="form-control ioc-input" id="iocInput" rows="12" placeholder="Enter IOCs, one per line:
+
+192.168.1.1
+8.8.8.8
+malware-domain.com
+44d88612fea8a8f36de82e1278abb02f
+https://suspicious-url.com/payload"></textarea>
+                <div class="ioc-hints">
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    IP Addresses
+                  </div>
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    Domains
+                  </div>
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    File Hashes (MD5/SHA1/SHA256)
+                  </div>
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    URLs
+                  </div>
+                  <div class="hint-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    Defanged IOCs (auto-refanged)
+                  </div>
+                </div>
+              </div>
+
+              <!-- File Upload -->
+              <div class="input-method" id="method-file-iocs" style="display:none;">
+                <div class="upload-zone" id="iocUploadZone">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  <p>Drag & drop your IOC list here</p>
+                  <span>or click to browse</span>
+                  <input type="file" id="iocFileInput" accept=".txt,.csv,.list" hidden>
+                </div>
+                <div class="file-info" id="iocFileInfo" style="display:none;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                  <span id="iocFileName"></span>
+                  <button type="button" class="btn-clear" id="clearIocFile">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Sources -->
+        <div class="enrich-tab" id="tab-sources">
+          <div class="card bg-dark">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                </svg>
+                Enrichment Sources
+              </h4>
+              <div class="source-mode-toggle">
+                <label class="mode-option">
+                  <input type="radio" name="sourceMode" value="all" checked>
+                  <span class="mode-label">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M2 12h20"/>
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                    </svg>
+                    All Sources
+                  </span>
+                </label>
+                <label class="mode-option">
+                  <input type="radio" name="sourceMode" value="custom">
+                  <span class="mode-label">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 20h9"/>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                    </svg>
+                    Custom Selection
+                  </span>
+                </label>
+              </div>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Select threat intelligence sources to query. Only sources with configured API keys will return results.</p>
+
+              <!-- Threat Intelligence Sources -->
+              <div class="tool-section">
+                <div class="tool-section-header">
+                  <div class="tool-section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc3545" stroke-width="2">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    Threat Intelligence
+                  </div>
+                </div>
+                <div class="tool-grid" id="sourcesGrid">
+                  <label class="tool-card selected">
+                    <input type="checkbox" class="source-checkbox" value="shodan" checked>
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">Shodan</span>
+                        <a href="https://www.shodan.io/" target="_blank" class="tool-link" title="Visit Shodan">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Exposed services and ports</li>
+                        <li>Vulnerabilities (CVEs)</li>
+                        <li>SSL certificates and banners</li>
+                        <li>Historical data and changes</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <label class="tool-card selected">
+                    <input type="checkbox" class="source-checkbox" value="virustotal" checked>
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">VirusTotal</span>
+                        <a href="https://www.virustotal.com/" target="_blank" class="tool-link" title="Visit VirusTotal">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Malware detection scores</li>
+                        <li>File and URL relationships</li>
+                        <li>Community comments</li>
+                        <li>Behavior analysis</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <label class="tool-card selected">
+                    <input type="checkbox" class="source-checkbox" value="abuseipdb" checked>
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">AbuseIPDB</span>
+                        <a href="https://www.abuseipdb.com/" target="_blank" class="tool-link" title="Visit AbuseIPDB">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Abuse reports and history</li>
+                        <li>Confidence scores</li>
+                        <li>Threat categories</li>
+                        <li>ISP and country data</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <label class="tool-card selected">
+                    <input type="checkbox" class="source-checkbox" value="otx" checked>
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">LevelBlue OTX</span>
+                        <a href="https://otx.alienvault.com/" target="_blank" class="tool-link" title="Visit OTX">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Threat intelligence pulses</li>
+                        <li>Related indicators</li>
+                        <li>Adversary tracking</li>
+                        <li>Community contributions</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <label class="tool-card selected">
+                    <input type="checkbox" class="source-checkbox" value="greynoise" checked>
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">GreyNoise</span>
+                        <a href="https://www.greynoise.io/" target="_blank" class="tool-link" title="Visit GreyNoise">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Internet noise vs threats</li>
+                        <li>Mass scanner identification</li>
+                        <li>Benign service detection</li>
+                        <li>Actor classification</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <label class="tool-card selected">
+                    <input type="checkbox" class="source-checkbox" value="censys" checked>
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">Censys</span>
+                        <a href="https://censys.io/" target="_blank" class="tool-link" title="Visit Censys">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Internet-wide scanning data</li>
+                        <li>Certificate transparency</li>
+                        <li>Protocol analysis</li>
+                        <li>Host and service discovery</li>
+                      </ul>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Additional Sources -->
+              <div class="tool-section mt-5">
+                <div class="tool-section-header">
+                  <div class="tool-section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="2" y1="12" x2="22" y2="12"/>
+                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                    </svg>
+                    Additional Sources
+                  </div>
+                </div>
+                <div class="tool-grid">
+                  <label class="tool-card selected">
+                    <input type="checkbox" class="source-checkbox" value="urlscan" checked>
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">URLScan.io</span>
+                        <a href="https://urlscan.io/" target="_blank" class="tool-link" title="Visit URLScan">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Domain reputation analysis</li>
+                        <li>Website screenshots</li>
+                        <li>Resource loading analysis</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <label class="tool-card selected">
+                    <input type="checkbox" class="source-checkbox" value="spur" checked>
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">Spur</span>
+                        <a href="https://spur.us/" target="_blank" class="tool-link" title="Visit Spur">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>VPN and proxy detection</li>
+                        <li>Tor exit node identification</li>
+                        <li>Anonymous infrastructure</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <label class="tool-card selected">
+                    <input type="checkbox" class="source-checkbox" value="bazaar" checked>
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">MalwareBazaar</span>
+                        <a href="https://bazaar.abuse.ch/" target="_blank" class="tool-link" title="Visit MalwareBazaar">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Malware sample repository</li>
+                        <li>C2 infrastructure data</li>
+                        <li>Hash lookups</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <label class="tool-card selected">
+                    <input type="checkbox" class="source-checkbox" value="wayback" checked>
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">Wayback Machine</span>
+                        <a href="https://web.archive.org/" target="_blank" class="tool-link" title="Visit Wayback">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Historical web snapshots</li>
+                        <li>Archived content</li>
+                        <li>Timeline analysis</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <label class="tool-card">
+                    <input type="checkbox" class="source-checkbox" value="dehashed">
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">Dehashed</span>
+                        <span class="tool-badge tool-badge-premium">Premium</span>
+                        <a href="https://www.dehashed.com/" target="_blank" class="tool-link" title="Visit Dehashed">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Breach data intelligence</li>
+                        <li>Credential exposure</li>
+                        <li>Email and domain search</li>
+                      </ul>
+                    </div>
+                  </label>
+                  <label class="tool-card">
+                    <input type="checkbox" class="source-checkbox" value="prospeo">
+                    <div class="tool-card-content">
+                      <div class="tool-card-header">
+                        <span class="tool-name">Prospeo</span>
+                        <span class="tool-badge tool-badge-premium">Premium</span>
+                        <a href="https://prospeo.io/" target="_blank" class="tool-link" title="Visit Prospeo">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                        </a>
+                      </div>
+                      <ul class="tool-features">
+                        <li>Email discovery</li>
+                        <li>Company information</li>
+                        <li>Domain intelligence</li>
+                      </ul>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Output -->
+        <div class="enrich-tab" id="tab-output">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                Output Options
+              </h4>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Configure the output format and pentesting features for your enrichment results.</p>
+
+              <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                  <label class="form-label">Output Format</label>
+                  <select class="form-select" id="outputFormat">
+                    <option value="json" selected>JSON — Structured data with all enrichments</option>
+                    <option value="csv">CSV — Spreadsheet-compatible tabular format</option>
+                    <option value="xml">XML — Hierarchical markup format</option>
+                    <option value="text">Text — Human-readable summary</option>
+                  </select>
+                  <small class="form-text text-secondary">Choose JSON for APIs, CSV for Excel, or Text for readability</small>
+                </div>
+              </div>
+
+              <!-- Pentester Features Section -->
+              <div class="tool-section mt-5">
+                <div class="tool-section-header">
+                  <div class="tool-section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc3545" stroke-width="2">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    Pentester Features
+                  </div>
+                </div>
+                <p class="text-secondary mb-4">Enable additional data extraction features for penetration testing and red team engagements.</p>
+
+                <div class="row g-4">
+                  <div class="col-md-6">
+                    <label class="feature-card">
+                      <input type="checkbox" id="extractSubdomains">
+                      <div class="feature-card-content">
+                        <div class="feature-card-header">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="2" y1="12" x2="22" y2="12"/>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                          </svg>
+                          <span class="feature-name">Extract Subdomains</span>
+                        </div>
+                        <p class="feature-desc">Discover subdomains from Wayback Machine and CommonCrawl data. Results saved to subdomains/ folder.</p>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="feature-card">
+                      <input type="checkbox" id="sprayLists">
+                      <div class="feature-card-content">
+                        <div class="feature-card-header">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                          </svg>
+                          <span class="feature-name">Generate Spray Lists</span>
+                        </div>
+                        <p class="feature-desc">Extract credentials from Dehashed and generate userlist/passlist files for CredRecon spray attacks.</p>
+                      </div>
+                    </label>
+                  </div>
+
+                </div>
+
+                <div class="mt-3">
+                  <small class="text-secondary">
+                    <svg class="me-1" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="16" x2="12" y2="12"/>
+                      <line x1="12" y1="8" x2="12.01" y2="8"/>
+                    </svg>
+                    Results are streamed in real-time as each source completes
+                  </small>
+                </div>
+              </div>
+
+              <!-- Advanced Settings Section -->
+              <div class="tool-section mt-5">
+                <div class="tool-section-header">
+                  <div class="tool-section-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                      <circle cx="12" cy="12" r="3"/>
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                    Advanced Settings
+                  </div>
+                </div>
+                <p class="text-secondary mb-4">Fine-tune timeout and retry behavior for API requests.</p>
+
+                <div class="row g-4">
+                  <div class="col-md-4">
+                    <label class="form-label">Timeout (seconds)</label>
+                    <input type="number" class="form-control" id="timeout" placeholder="30" min="5" max="120" value="30">
+                    <small class="form-text text-secondary">Default timeout per source (5-120s)</small>
+                  </div>
+
+                  <div class="col-md-4">
+                    <label class="form-label">Max Retries</label>
+                    <input type="number" class="form-control" id="retries" placeholder="3" min="0" max="5" value="3">
+                    <small class="form-text text-secondary">Retry attempts on failure (0-5)</small>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Format Info Cards -->
+              <div class="format-info-grid">
+                <div class="format-card">
+                  <div class="format-icon" style="color: #22c55e;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                  </div>
+                  <div class="format-content">
+                    <strong>JSON</strong>
+                    <span>Best for API integration and programmatic access. Contains full enrichment data with nested structures.</span>
+                  </div>
+                </div>
+                <div class="format-card">
+                  <div class="format-icon" style="color: #0d6efd;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <line x1="3" y1="9" x2="21" y2="9"/>
+                      <line x1="9" y1="21" x2="9" y2="9"/>
+                    </svg>
+                  </div>
+                  <div class="format-content">
+                    <strong>CSV</strong>
+                    <span>Perfect for Excel and spreadsheet analysis. Flattened tabular format with one row per IOC.</span>
+                  </div>
+                </div>
+                <div class="format-card">
+                  <div class="format-icon" style="color: #f59e0b;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="16 18 22 12 16 6"/>
+                      <polyline points="8 6 2 12 8 18"/>
+                    </svg>
+                  </div>
+                  <div class="format-content">
+                    <strong>XML</strong>
+                    <span>Hierarchical markup format for XML parsers and SIEM integration.</span>
+                  </div>
+                </div>
+                <div class="format-card">
+                  <div class="format-icon" style="color: #8b5cf6;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="17" y1="10" x2="3" y2="10"/>
+                      <line x1="21" y1="6" x2="3" y2="6"/>
+                      <line x1="21" y1="14" x2="3" y2="14"/>
+                      <line x1="17" y1="18" x2="3" y2="18"/>
+                    </svg>
+                  </div>
+                  <div class="format-content">
+                    <strong>Text</strong>
+                    <span>Human-readable summary for quick review. Best for reports and documentation.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: Info & Help -->
+        <div class="enrich-tab" id="tab-info">
+          <div class="card bg-dark">
+            <div class="card-header">
+              <h4 class="mb-0 fw-bold">
+                <svg class="me-2" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                  <line x1="8" y1="6" x2="16" y2="6"/>
+                  <line x1="8" y1="10" x2="16" y2="10"/>
+                  <line x1="8" y1="14" x2="12" y2="14"/>
+                </svg>
+                IOC Enrichment Documentation
+              </h4>
+            </div>
+            <div class="card-body">
+              <p class="text-secondary mb-4">Learn how to use Cygor's IOC enrichment effectively with these guides and examples.</p>
+
+              <!-- How It Works -->
+              <div class="info-section">
+                <h5 class="info-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d6efd" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  How IOC Enrichment Works
+                </h5>
+                <div class="info-content">
+                  <ol class="workflow-steps">
+                    <li>
+                      <strong>IOC Parsing</strong>
+                      <p>Your input is parsed and IOC types are automatically detected (IP, domain, hash, URL). Defanged IOCs are refanged.</p>
+                    </li>
+                    <li>
+                      <strong>Source Querying</strong>
+                      <p>Each IOC is queried against selected threat intelligence sources in parallel. Rate limits are respected.</p>
+                    </li>
+                    <li>
+                      <strong>Data Aggregation</strong>
+                      <p>Results from all sources are combined, deduplicated, and enriched with metadata.</p>
+                    </li>
+                    <li>
+                      <strong>Output Generation</strong>
+                      <p>Final results are formatted according to your selection (JSON, CSV, XML, or Text) and saved.</p>
+                    </li>
+                  </ol>
+                </div>
+              </div>
+
+              <!-- CLI Options Reference -->
+              <div class="info-section mt-5">
+                <h5 class="info-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                    <path d="M6 8l4 4-4 4"/>
+                    <line x1="12" y1="16" x2="18" y2="16"/>
+                  </svg>
+                  Command Line Options
+                </h5>
+                <div class="cli-options-grid">
+                  <div class="cli-option-group">
+                    <h6>Input Options</h6>
+                    <div class="cli-option">
+                      <code>-i, --iocs</code>
+                      <span>IOCs to enrich (comma or space separated)</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>-f, --file</code>
+                      <span>Path to file containing IOCs (one per line)</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--stdin</code>
+                      <span>Read IOCs from standard input</span>
+                    </div>
+                  </div>
+                  <div class="cli-option-group">
+                    <h6>Source Selection</h6>
+                    <div class="cli-option">
+                      <code>--sources</code>
+                      <span>Comma-separated list of sources to query</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--all-sources</code>
+                      <span>Query all available sources (default)</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--exclude</code>
+                      <span>Sources to exclude from queries</span>
+                    </div>
+                  </div>
+                  <div class="cli-option-group">
+                    <h6>Output Options</h6>
+                    <div class="cli-option">
+                      <code>--format</code>
+                      <span>Output format: json, csv, xml, text</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>-o, --output</code>
+                      <span>Output file path</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--pretty</code>
+                      <span>Pretty-print JSON output</span>
+                    </div>
+                  </div>
+                  <div class="cli-option-group">
+                    <h6>Pentester Features</h6>
+                    <div class="cli-option">
+                      <code>--extract-subdomains</code>
+                      <span>Extract subdomains from Wayback/CommonCrawl</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--spray-lists</code>
+                      <span>Generate credential spray lists from Dehashed</span>
+                    </div>
+                  </div>
+                  <div class="cli-option-group">
+                    <h6>Advanced</h6>
+                    <div class="cli-option">
+                      <code>--timeout</code>
+                      <span>API request timeout in seconds (default: 30)</span>
+                    </div>
+                    <div class="cli-option">
+                      <code>--retries</code>
+                      <span>Max retry attempts per source (default: 3)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Examples -->
+              <div class="info-section mt-5">
+                <h5 class="info-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                  </svg>
+                  Example Commands
+                </h5>
+                <div class="examples-list">
+                  <div class="example-item">
+                    <div class="example-desc">Enrich a single IP address</div>
+                    <code class="example-code">cygor enrich 8.8.8.8</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">Enrich domain with subdomain extraction</div>
+                    <code class="example-code">cygor enrich target.com --extract-subdomains --sources wayback,commoncrawl</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">Generate spray lists from breach data</div>
+                    <code class="example-code">cygor enrich target.com --sources dehashed --spray-lists</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">Enrich from file with specific sources</div>
+                    <code class="example-code">cygor enrich -f iocs.txt --sources shodan,virustotal,abuseipdb</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">Full pentest enrichment with all features</div>
+                    <code class="example-code">cygor enrich target.com --extract-subdomains --spray-lists</code>
+                  </div>
+                  <div class="example-item">
+                    <div class="example-desc">Custom timeout and retry settings</div>
+                    <code class="example-code">cygor enrich -f targets.txt --timeout 60 --retries 5</code>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Source Links -->
+              <div class="info-section mt-5">
+                <h5 class="info-section-title">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                  </svg>
+                  Source Documentation
+                </h5>
+                <div class="tool-links-grid">
+                  <a href="https://developer.shodan.io/" target="_blank" class="tool-doc-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                    </svg>
+                    <span>Shodan API</span>
+                  </a>
+                  <a href="https://developers.virustotal.com/" target="_blank" class="tool-doc-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                    </svg>
+                    <span>VirusTotal API</span>
+                  </a>
+                  <a href="https://docs.abuseipdb.com/" target="_blank" class="tool-doc-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                    </svg>
+                    <span>AbuseIPDB API</span>
+                  </a>
+                  <a href="https://otx.alienvault.com/api" target="_blank" class="tool-doc-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                    </svg>
+                    <span>OTX API</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Submit Bar -->
+        <div class="submit-bar mt-4">
+          <a href="/tasks" class="btn btn-outline-secondary btn-lg px-4">
+            <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+            Cancel
+          </a>
+          <button type="submit" class="btn btn-primary btn-lg px-5">
+            <svg class="me-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="M21 21l-4.35-4.35"/>
+            </svg>
+            Enrich IOCs
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Custom Alert Modals -->
+<div class="modal fade" id="cygorAlertModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-secondary">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title text-white">
+          <svg class="me-2" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          Notification
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="cygorAlertMessage"></p>
+      </div>
+      <div class="modal-footer border-secondary">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="cygorSuccessModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-success">
+      <div class="modal-header border-success">
+        <h5 class="modal-title text-white">
+          <svg class="me-2 text-success" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          Success
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="cygorSuccessMessage"></p>
+      </div>
+      <div class="modal-footer border-success">
+        <button type="button" class="btn btn-success" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="cygorErrorModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark border border-danger">
+      <div class="modal-header border-danger">
+        <h5 class="modal-title text-white">
+          <svg class="me-2 text-danger" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="15" y1="9" x2="9" y2="15"/>
+            <line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+          Error
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-light">
+        <p class="mb-0" id="cygorErrorMessage"></p>
+      </div>
+      <div class="modal-footer border-danger">
+        <button type="button" class="btn btn-danger" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* ==================== ENRICH NAV ==================== */
+.enrich-nav-container {
+  position: sticky;
+  top: 80px;
+}
+
+.enrich-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.enrich-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: #adb5bd;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+  font-size: 1.05rem;
+}
+
+.enrich-nav-item:hover {
+  background: rgba(13, 110, 253, 0.1);
+  border-color: rgba(13, 110, 253, 0.3);
+  color: #fff;
+}
+
+.enrich-nav-item.active {
+  background: rgba(13, 110, 253, 0.15);
+  border-color: #0d6efd;
+  color: #fff;
+}
+
+.enrich-nav-item .nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.enrich-nav-item .nav-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.enrich-nav-item .nav-text {
+  flex: 1;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+/* ==================== API CARD ==================== */
+.api-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.api-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: rgba(13, 110, 253, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: #0d6efd;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.api-card-body {
+  padding: 1.25rem;
+}
+
+/* ==================== TABS ==================== */
+.enrich-tab {
+  display: none;
+}
+
+.enrich-tab.active {
+  display: block;
+}
+
+/* ==================== SOURCE MODE TOGGLE ==================== */
+.source-mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mode-option {
+  cursor: pointer;
+}
+
+.mode-option input {
+  display: none;
+}
+
+.mode-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  color: #adb5bd;
+  transition: all 0.2s;
+}
+
+.mode-option:hover .mode-label {
+  border-color: rgba(13, 110, 253, 0.3);
+  color: #fff;
+}
+
+.mode-option input:checked + .mode-label {
+  background: rgba(13, 110, 253, 0.15);
+  border-color: #0d6efd;
+  color: #fff;
+}
+
+/* ==================== INPUT METHOD TOGGLE ==================== */
+.input-method-toggle {
+  display: flex;
+  gap: 1rem;
+}
+
+.method-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #adb5bd;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 1rem;
+}
+
+.method-btn:hover {
+  border-color: rgba(13, 110, 253, 0.5);
+  color: #fff;
+}
+
+.method-btn.active {
+  background: rgba(13, 110, 253, 0.15);
+  border-color: #0d6efd;
+  color: #fff;
+}
+
+/* ==================== IOC INPUT ==================== */
+.ioc-input {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  font-size: 1rem;
+  background: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 4px !important;
+  line-height: 1.7;
+  padding: 1rem !important;
+}
+
+.ioc-input:focus {
+  border-color: #0d6efd !important;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15) !important;
+}
+
+.ioc-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.hint-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
+  color: #9ca3af;
+}
+
+/* ==================== UPLOAD ZONE ==================== */
+.upload-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.upload-zone:hover {
+  border-color: #0d6efd;
+  background: rgba(13, 110, 253, 0.05);
+}
+
+.upload-zone svg {
+  color: #6b7280;
+  margin-bottom: 1.25rem;
+}
+
+.upload-zone p {
+  margin: 0;
+  color: #9ca3af;
+  font-size: 1rem;
+}
+
+.upload-zone span {
+  color: #0d6efd;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 4px;
+}
+
+.file-info span {
+  flex: 1;
+  font-family: monospace;
+  font-size: 1rem;
+  color: #22c55e;
+}
+
+.btn-clear {
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.btn-clear:hover {
+  background: rgba(220, 53, 69, 0.2);
+  color: #dc3545;
+}
+
+/* ==================== TOOL SECTIONS ==================== */
+.tool-section {
+  margin-bottom: 2rem;
+}
+
+.tool-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.tool-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.tool-section-title svg {
+  width: 24px;
+  height: 24px;
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+}
+
+@media (max-width: 1200px) {
+  .tool-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .tool-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1900px) {
+  .tool-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* ==================== TOOL CARDS ==================== */
+.tool-card {
+  display: block;
+  cursor: pointer;
+}
+
+.tool-card input {
+  display: none;
+}
+
+.tool-card-content {
+  padding: 1.25rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  transition: all 0.2s;
+  height: 100%;
+}
+
+.tool-card:hover .tool-card-content {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.tool-card.selected .tool-card-content,
+.tool-card input:checked + .tool-card-content {
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.tool-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.tool-name {
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.tool-badge {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  background: #f59e0b;
+  color: #000;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.tool-badge-premium {
+  background: #8b5cf6;
+  color: #fff;
+}
+
+.tool-link {
+  margin-left: auto;
+  color: #6b7280;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.tool-link:hover {
+  color: #0d6efd;
+  background: rgba(13, 110, 253, 0.1);
+}
+
+.tool-features {
+  margin: 0;
+  padding: 0 0 0 1rem;
+  list-style: disc;
+}
+
+.tool-features li {
+  font-size: 0.85rem;
+  color: #9ca3af;
+  margin-bottom: 0.35rem;
+  line-height: 1.4;
+}
+
+/* ==================== FEATURE CARDS ==================== */
+.feature-card {
+  display: block;
+  cursor: pointer;
+}
+
+.feature-card input {
+  display: none;
+}
+
+.feature-card-content {
+  padding: 1.25rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  transition: all 0.2s;
+  height: 100%;
+}
+
+.feature-card:hover .feature-card-content {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.feature-card input:checked + .feature-card-content {
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.feature-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.feature-card-header svg {
+  color: #6b7280;
+  transition: color 0.2s;
+}
+
+.feature-card input:checked + .feature-card-content .feature-card-header svg {
+  color: #22c55e;
+}
+
+.feature-name {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.feature-desc {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ==================== FORMAT INFO GRID ==================== */
+.format-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .format-info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.format-card {
+  display: flex;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+
+.format-icon {
+  flex-shrink: 0;
+}
+
+.format-content strong {
+  display: block;
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.format-content span {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  line-height: 1.5;
+}
+
+/* ==================== INFO SECTIONS ==================== */
+.info-section {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 1.5rem;
+}
+
+.info-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.workflow-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.workflow-steps li {
+  position: relative;
+  padding-left: 3rem;
+  margin-bottom: 1.5rem;
+  counter-increment: step;
+}
+
+.workflow-steps li:before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2rem;
+  height: 2rem;
+  background: rgba(13, 110, 253, 0.2);
+  border: 2px solid #0d6efd;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #0d6efd;
+}
+
+.workflow-steps li strong {
+  display: block;
+  font-size: 1rem;
+  color: #e5e7eb;
+  margin-bottom: 0.25rem;
+}
+
+.workflow-steps li p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #9ca3af;
+  line-height: 1.5;
+}
+
+/* CLI Options */
+.cli-options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 992px) {
+  .cli-options-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cli-option-group h6 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #60a5fa;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cli-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.625rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.cli-option code {
+  font-family: 'SF Mono', 'Monaco', monospace;
+  font-size: 0.875rem;
+  color: #22c55e;
+  background: transparent;
+}
+
+.cli-option span {
+  font-size: 0.8125rem;
+  color: #9ca3af;
+}
+
+/* Examples */
+.examples-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.example-item {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  padding: 1rem;
+}
+
+.example-desc {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin-bottom: 0.5rem;
+}
+
+.example-code {
+  display: block;
+  font-family: 'SF Mono', 'Monaco', monospace;
+  font-size: 0.875rem;
+  color: #22c55e;
+  background: transparent;
+  padding: 0;
+  word-break: break-all;
+}
+
+/* Tool Links */
+.tool-links-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .tool-links-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.tool-doc-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #adb5bd;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.tool-doc-link:hover {
+  background: rgba(13, 110, 253, 0.1);
+  border-color: rgba(13, 110, 253, 0.3);
+  color: #fff;
+}
+
+.tool-doc-link span {
+  font-weight: 500;
+}
+
+/* ==================== SUBMIT BAR ==================== */
+.submit-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 0;
+}
+
+.submit-bar .btn {
+  padding: 0.875rem 2rem;
+  font-size: 1rem;
+}
+
+/* ==================== FORM CONTROLS ==================== */
+.form-control, .form-select {
+  background: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 4px !important;
+  color: #e5e7eb !important;
+  font-size: 0.9375rem;
+  padding: 0.75rem 1rem;
+}
+
+.form-control:focus, .form-select:focus {
+  border-color: #0d6efd !important;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15) !important;
+}
+
+.form-control::placeholder {
+  color: #6b7280 !important;
+}
+
+.form-label {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.form-text {
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+/* ==================== CARD OVERRIDES ==================== */
+.card.bg-dark {
+  border-radius: 4px !important;
+}
+
+.card-header {
+  padding: 1.25rem 1.5rem;
+  border-radius: 4px 4px 0 0 !important;
+}
+
+.card-header h4 {
+  font-size: 1.25rem;
+}
+
+.card-header h4 svg {
+  width: 28px;
+  height: 28px;
+}
+
+.card-body {
+  padding: 1.75rem;
+}
+
+.card-body > p.text-secondary {
+  font-size: 1rem;
+  margin-bottom: 1.5rem !important;
+}
+</style>
+
+<script>
+// ==================== STATE ====================
+let uploadedIocContent = null;
+
+// ==================== TAB NAVIGATION ====================
+document.querySelectorAll('.enrich-nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.enrich-nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    const tabId = btn.dataset.tab;
+    document.querySelectorAll('.enrich-tab').forEach(tab => tab.classList.remove('active'));
+    document.getElementById(`tab-${tabId}`).classList.add('active');
+  });
+});
+
+// ==================== INPUT METHOD TOGGLE ====================
+document.querySelectorAll('.method-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.target;
+    const method = btn.dataset.method;
+
+    document.querySelectorAll(`.method-btn[data-target="${target}"]`).forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    document.getElementById(`method-manual-${target}`).style.display = method === 'manual' ? 'block' : 'none';
+    document.getElementById(`method-file-${target}`).style.display = method === 'file' ? 'block' : 'none';
+  });
+});
+
+// ==================== TOOL CARD SELECTION ====================
+document.querySelectorAll('.tool-card input[type="checkbox"]').forEach(checkbox => {
+  checkbox.addEventListener('change', (e) => {
+    const card = e.target.closest('.tool-card');
+    card.classList.toggle('selected', e.target.checked);
+  });
+});
+
+// ==================== SOURCE MODE TOGGLE ====================
+document.querySelectorAll('input[name="sourceMode"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    const isAll = e.target.value === 'all';
+    const checkboxes = document.querySelectorAll('.source-checkbox');
+
+    if (isAll) {
+      checkboxes.forEach(cb => {
+        cb.checked = true;
+        cb.closest('.tool-card').classList.add('selected');
+      });
+    }
+  });
+});
+
+// ==================== IOC FILE UPLOAD ====================
+const iocUploadZone = document.getElementById('iocUploadZone');
+const iocFileInput = document.getElementById('iocFileInput');
+
+if (iocUploadZone && iocFileInput) {
+  iocUploadZone.addEventListener('click', () => iocFileInput.click());
+  iocUploadZone.addEventListener('dragover', (e) => { e.preventDefault(); iocUploadZone.style.borderColor = '#0d6efd'; });
+  iocUploadZone.addEventListener('dragleave', () => { iocUploadZone.style.borderColor = ''; });
+  iocUploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    iocUploadZone.style.borderColor = '';
+    if (e.dataTransfer.files.length) handleIocFile(e.dataTransfer.files[0]);
+  });
+  iocFileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) handleIocFile(e.target.files[0]);
+  });
+}
+
+function handleIocFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    uploadedIocContent = e.target.result;
+    document.getElementById('iocFileName').textContent = file.name;
+    if (iocUploadZone) iocUploadZone.style.display = 'none';
+    document.getElementById('iocFileInfo').style.display = 'flex';
+  };
+  reader.readAsText(file);
+}
+
+const clearIocFile = document.getElementById('clearIocFile');
+if (clearIocFile) {
+  clearIocFile.addEventListener('click', () => {
+    uploadedIocContent = null;
+    if (iocFileInput) iocFileInput.value = '';
+    if (iocUploadZone) iocUploadZone.style.display = 'flex';
+    document.getElementById('iocFileInfo').style.display = 'none';
+  });
+}
+
+// ==================== FORM SUBMISSION ====================
+const enrichForm = document.getElementById('enrichForm');
+if (enrichForm) {
+  enrichForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    // Get IOCs
+    const isFileMethod = document.querySelector('.method-btn[data-target="iocs"][data-method="file"]').classList.contains('active');
+    let iocs = [];
+
+    if (isFileMethod && uploadedIocContent) {
+      iocs = uploadedIocContent.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    } else {
+      const manual = document.getElementById('iocInput').value.trim();
+      if (!manual) {
+        showAlert('Please enter at least one IOC', 'error');
+        return;
+      }
+      iocs = manual.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    }
+
+    if (iocs.length === 0) {
+      showAlert('No valid IOCs found', 'error');
+      return;
+    }
+
+    // Get selected sources
+    const sources = [];
+    document.querySelectorAll('.source-checkbox:checked').forEach(cb => {
+      sources.push(cb.value);
+    });
+
+    if (sources.length === 0) {
+      showAlert('Please select at least one enrichment source', 'error');
+      return;
+    }
+
+    const outputFormat = document.getElementById('outputFormat').value;
+
+    // Get pentester feature options
+    const extractSubdomains = document.getElementById('extractSubdomains').checked;
+    const sprayLists = document.getElementById('sprayLists').checked;
+
+    // Get advanced settings
+    const timeout = parseInt(document.getElementById('timeout').value) || 30;
+    const retries = parseInt(document.getElementById('retries').value) || 3;
+
+    const enrichData = {
+      iocs: iocs,
+      sources: sources,
+      format: outputFormat,
+      extract_subdomains: extractSubdomains,
+      spray_lists: sprayLists,
+      timeout: timeout,
+      retries: retries
+    };
+
+    const btn = e.target.querySelector('button[type="submit"]');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Starting...';
+
+    try {
+      const response = await fetch('/api/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(enrichData)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to create enrichment task');
+      }
+
+      const result = await response.json();
+      showAlert(`Enrichment task created successfully!<br><br><strong>Task ID:</strong> ${result.task_id}<br><br>Enriching ${iocs.length} IOC(s)...`, 'success', true);
+
+      setTimeout(() => {
+        window.location.href = `/tasks/${result.task_id}`;
+      }, 2000);
+
+    } catch (error) {
+      showAlert('Error: ' + error.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  });
+}
+
+// ==================== ALERT FUNCTION ====================
+function showAlert(message, type = 'info', isHTML = false) {
+  let modalId, messageId;
+
+  if (type === 'success') {
+    modalId = 'cygorSuccessModal';
+    messageId = 'cygorSuccessMessage';
+  } else if (type === 'error') {
+    modalId = 'cygorErrorModal';
+    messageId = 'cygorErrorMessage';
+  } else {
+    modalId = 'cygorAlertModal';
+    messageId = 'cygorAlertMessage';
+  }
+
+  const messageElement = document.getElementById(messageId);
+  if (messageElement) {
+    if (isHTML) {
+      messageElement.innerHTML = message;
+    } else {
+      messageElement.textContent = message;
+    }
+    const modal = new bootstrap.Modal(document.getElementById(modalId));
+    modal.show();
+  } else {
+    console.warn('showAlert fallback — modal not found for:', message);
+  }
+}
+</script>
+
+{% endblock %}
