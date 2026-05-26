@@ -119,12 +119,13 @@ echo '  Build complete!'
 ls -lh /src/cygor-${CYGOR_VERSION}-1.el9.${RPM_ARCH}.rpm
 echo '============================================'
 
+
 # Restore host ownership of artifacts created during the build, so the
 # host-side cleanup step can remove dist/ / cygor_entry.py / cygor.spec
 # without sudo. /src is bind-mounted from the host, so its uid:gid
 # matches the host user that started the container.
-HOST_OWNER="$(stat -c %u:%g /src)"
-chown -R "$HOST_OWNER" /src 2>/dev/null || true
+HOST_OWNER="\$(stat -c %u:%g /src)"
+chown -R "\$HOST_OWNER" /src 2>/dev/null || true
 INNER_FOOTER
 # ── Build inside Docker ──────────────────────────────────────────────────────
 cd "$REPO_ROOT"
