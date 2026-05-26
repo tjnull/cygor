@@ -174,7 +174,6 @@ $hiddenImports = @(
 $addData = @(
     "--add-data", "cygor/webapp/templates;cygor/webapp/templates"
     "--add-data", "cygor/credrecon;cygor/credrecon"
-    "--add-data", "cygor/banner.txt;cygor"
 )
 
 # Metadata and hooks

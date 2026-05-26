@@ -89,7 +89,6 @@ PYINSTALLER_HIDDEN_IMPORTS=(
 PYINSTALLER_ADD_DATA=(
   --add-data "cygor/webapp/templates:cygor/webapp/templates"
   --add-data "cygor/credrecon:cygor/credrecon"
-  --add-data "cygor/banner.txt:cygor"
 )
 
 PYINSTALLER_METADATA=(
