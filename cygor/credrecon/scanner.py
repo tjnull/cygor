@@ -3874,7 +3874,7 @@ def credrecon(input_file: str = None, target: str = None, output_dir: str = None
                     smb_hash=smb_hash or '', domain=domain or '', badkeys=badkeys,
                 )
 
-                _src_ip = None  # IP rotation is enterprise-only
+                _src_ip = None  # IP rotation not available in this build
 
                 # Submit scan_target per group (one target/service combo, multiple creds)
                 if target_service == 'http':
@@ -4027,7 +4027,7 @@ def credrecon(input_file: str = None, target: str = None, output_dir: str = None
                     smb_hash=smb_hash or '', domain=domain or '', badkeys=badkeys,
                 )
 
-                _src_ip = None  # IP rotation is enterprise-only
+                _src_ip = None  # IP rotation not available in this build
 
                 # Pass scheme information for HTTP testing
                 if detected_proto == 'http' and scheme:

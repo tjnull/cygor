@@ -159,7 +159,7 @@ sudo cygor scan -i eth0 -f scope.txt --discover naabu
 cygor web start -H 0.0.0.0 -p 8080
 ```
 
-> The OSS edition has no authentication. Don't expose `0.0.0.0:8080` to untrusted networks. For team / multi-user / SSO scenarios, see Cygor Enterprise.
+> Cygor has no built-in authentication. Don't expose `0.0.0.0:8080` to untrusted networks — keep it on localhost, behind a VPN, or behind a reverse proxy with auth.
 
 ## Troubleshooting
 

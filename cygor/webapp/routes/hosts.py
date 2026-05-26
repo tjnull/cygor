@@ -184,11 +184,6 @@ async def get_host_tags(host_id: int, session: AsyncSession = Depends(get_sessio
 @router.post("/api/hosts/{host_id}/tags")
 async def add_host_tags(host_id: int, request: Request, session: AsyncSession = Depends(get_session)):
     """Add tag(s) to a host."""
-    from ..simple_auth import get_current_user_from_request
-    current_user = await get_current_user_from_request(request)
-    if not current_user:
-        return JSONResponse({"error": "Unauthorized"}, status_code=403)
-
     body = await request.json()
     tag_names = body.get("tags", [])
     if isinstance(tag_names, str):
@@ -208,7 +203,7 @@ async def add_host_tags(host_id: int, request: Request, session: AsyncSession = 
         )
         if existing.scalar_one_or_none():
             continue
-        tag = HostTag(host_id=host_id, tag_name=tag_name, created_by=current_user.get("user_id"))
+        tag = HostTag(host_id=host_id, tag_name=tag_name, created_by=None)
         session.add(tag)
         added.append(tag_name)
 
@@ -220,11 +215,6 @@ async def add_host_tags(host_id: int, request: Request, session: AsyncSession = 
 async def remove_host_tag(host_id: int, tag_name: str, request: Request,
                           session: AsyncSession = Depends(get_session)):
     """Remove a tag from a host."""
-    from ..simple_auth import get_current_user_from_request
-    current_user = await get_current_user_from_request(request)
-    if not current_user:
-        return JSONResponse({"error": "Unauthorized"}, status_code=403)
-
     result = await session.execute(
         select(HostTag).where(HostTag.host_id == host_id, HostTag.tag_name == tag_name.lower())
     )
@@ -240,11 +230,6 @@ async def remove_host_tag(host_id: int, tag_name: str, request: Request,
 @router.post("/api/hosts/bulk-tag")
 async def bulk_tag_hosts(request: Request, session: AsyncSession = Depends(get_session)):
     """Bulk assign a tag to multiple hosts."""
-    from ..simple_auth import get_current_user_from_request
-    current_user = await get_current_user_from_request(request)
-    if not current_user:
-        return JSONResponse({"error": "Unauthorized"}, status_code=403)
-
     body = await request.json()
     tag_name = body.get("tag_name", "").strip().lower()
     host_ids = body.get("host_ids", [])
@@ -259,7 +244,7 @@ async def bulk_tag_hosts(request: Request, session: AsyncSession = Depends(get_s
         )
         if existing.scalar_one_or_none():
             continue
-        tag = HostTag(host_id=hid, tag_name=tag_name, created_by=current_user.get("user_id"))
+        tag = HostTag(host_id=hid, tag_name=tag_name, created_by=None)
         session.add(tag)
         added.append(hid)
 

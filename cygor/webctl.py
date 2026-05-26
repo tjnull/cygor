@@ -14,9 +14,6 @@ Examples:
   # Start web server on all interfaces, port 8080
   cygor web start -H 0.0.0.0 -p 8080
 
-  # Start with authentication enabled
-  cygor web start --auth-login
-
   # Start with custom results directory
   cygor web start --load-dir /path/to/results
 
@@ -33,7 +30,7 @@ Examples:
   cygor web start --clear-db
 
   # Start with all options
-  cygor web start -H 0.0.0.0 -p 8080 --auth-login --load-dir ~/scan-results -vv
+  cygor web start -H 0.0.0.0 -p 8080 --load-dir ~/scan-results -vv
 """
 from __future__ import annotations
 import argparse
@@ -641,8 +638,8 @@ Examples:
   # Start the web server
   cygor web start
 
-  # Start with authentication on port 8080
-  cygor web start --auth-login -p 8080
+  # Start on port 8080
+  cygor web start -p 8080
 
   # Check server status
   cygor web status
@@ -670,14 +667,8 @@ Examples:
   # Start on all interfaces, port 8080
   cygor web start -H 0.0.0.0 -p 8080
 
-  # Start with authentication enabled
-  cygor web start --auth-login
-
   # Start with HTTPS enabled (auto-generates self-signed certificate)
   cygor web start --use-https
-
-  # Start with HTTPS and authentication
-  cygor web start --use-https --auth-login -p 8443
 
   # Start with custom results directory
   cygor web start --load-dir /path/to/nmap/results
@@ -691,8 +682,8 @@ Examples:
   # Clear database (standalone operation, exits after clearing)
   cygor web start --clear-db
 
-  # Production setup with HTTPS and authentication
-  cygor web start -H 0.0.0.0 -p 8443 --use-https --auth-login --load-dir ~/scan-results
+  # Production setup with HTTPS
+  cygor web start -H 0.0.0.0 -p 8443 --use-https --load-dir ~/scan-results
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -828,11 +819,6 @@ Examples:
     # Security options
     security_group = p_start.add_argument_group("Security Options")
     security_group.add_argument(
-        "--auth-login",
-        action="store_true",
-        help="Enable authentication/login functionality. When enabled, users must log in with a token to access the web interface. An access token will be generated and displayed on first startup."
-    )
-    security_group.add_argument(
         "--use-https",
         action="store_true",
         help="Enable HTTPS with SSL/TLS encryption. A self-signed certificate will be auto-generated if no custom certificate is configured. Uses TLS 1.2+ (TLS 1.3 preferred)."
@@ -905,7 +891,6 @@ The command will display:
     p_install.add_argument("--user", default="root", help="User to run the service as (default: root)")
     p_install.add_argument("-H", "--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
     p_install.add_argument("-p", "--port", type=int, default=8443, help="Bind port (default: 8443)")
-    p_install.add_argument("--auth-login", action="store_true", help="Enable authentication")
     p_install.add_argument("--use-https", action="store_true", help="Enable HTTPS")
     p_install.add_argument("--start-postgres", action="store_true", help="Auto-start PostgreSQL")
     p_install.add_argument("--db-url", type=str, help="Database connection URL")
@@ -987,8 +972,6 @@ The command will display:
             os.environ["CYGOR_DEBUG"] = "1"
         if args.use_sudo_cleanup:
             os.environ["CYGOR_USE_SUDO_CLEANUP"] = "1"
-        if args.auth_login:
-            os.environ["CYGOR_AUTH_LOGIN"] = "1"
         if hasattr(args, 'db_backend') and args.db_backend:
             os.environ["CYGOR_DB_BACKEND"] = args.db_backend
         if hasattr(args, 'db_host') and args.db_host:
@@ -1013,8 +996,6 @@ The command will display:
             passthrough.append("--cleanup-db")
         if args.yes:
             passthrough.append("--yes")
-        if args.auth_login:
-            passthrough.append("--auth-login")
         if args.use_https:
             passthrough.append("--use-https")
         if args.debug:
@@ -1051,8 +1032,6 @@ The command will display:
     elif args.cmd == "install-service":
         from cygor.service import install_service
         extra = []
-        if args.auth_login:
-            extra.append("--auth-login")
         if args.use_https:
             extra.append("--use-https")
         if args.start_postgres:

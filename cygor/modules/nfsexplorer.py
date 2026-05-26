@@ -44,7 +44,7 @@ except ImportError:
 import socket as _socket_module
 import threading as _threading_module
 from contextlib import contextmanager
-# IP rotation is enterprise-only; provide a no-op shim on dev.
+# IP rotation is not available in this build; provide a no-op shim.
 def get_next_ip(*args, **kwargs):
     return None
 

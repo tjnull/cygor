@@ -168,19 +168,8 @@ async def list_scheduled_tasks(
     """List all scheduled tasks with optional filtering."""
     from sqlmodel import select
     from ..models import ScheduledTask
-    from ..simple_auth import get_current_user_from_request
-
-    current_user = None
-    try:
-        current_user = await get_current_user_from_request(request)
-    except Exception:
-        pass  # Public access allowed
 
     statement = select(ScheduledTask)
-
-    # Filter by user if not admin
-    if current_user and current_user.get("role") != "admin":
-        statement = statement.where(ScheduledTask.user_id == current_user.get("user_id"))
 
     # Apply filters
     if task_type:
@@ -231,13 +220,6 @@ async def create_scheduled_task(
 ):
     """Create a new scheduled task."""
     from ..scheduler import get_scheduler_manager
-    from ..simple_auth import get_current_user_from_request
-
-    current_user = None
-    try:
-        current_user = await get_current_user_from_request(request)
-    except Exception:
-        pass
 
     try:
         scheduler_mgr = get_scheduler_manager()
@@ -271,7 +253,7 @@ async def create_scheduled_task(
             config=req.config,
             schedule_type=req.schedule_type,
             schedule_config=req.schedule_config,
-            user_id=current_user.get("user_id") if current_user else None,
+            user_id=None,
             description=req.description,
             timezone_str=req.timezone,
             max_runs=req.max_runs,
@@ -317,13 +299,6 @@ async def get_scheduled_task(
     """Get details of a specific scheduled task."""
     from sqlmodel import select
     from ..models import ScheduledTask
-    from ..simple_auth import get_current_user_from_request
-
-    current_user = None
-    try:
-        current_user = await get_current_user_from_request(request)
-    except Exception:
-        pass
 
     statement = select(ScheduledTask).where(ScheduledTask.id == schedule_id)
     result = await session.execute(statement)
@@ -332,10 +307,6 @@ async def get_scheduled_task(
     if not scheduled_task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
-    # Check permissions
-    if current_user and current_user.get("role") != "admin":
-        if scheduled_task.user_id != current_user.get("user_id"):
-            raise HTTPException(status_code=403, detail="Access denied")
 
     return JSONResponse({
         "id": scheduled_task.id,
@@ -383,15 +354,7 @@ async def update_scheduled_task(
     from sqlmodel import select
     from ..models import ScheduledTask
     from ..scheduler import get_scheduler_manager
-    from ..simple_auth import get_current_user_from_request
 
-    current_user = None
-    try:
-        current_user = await get_current_user_from_request(request)
-    except Exception:
-        pass
-
-    # Check if task exists and user has permission
     statement = select(ScheduledTask).where(ScheduledTask.id == schedule_id)
     result = await session.execute(statement)
     scheduled_task = result.scalar_one_or_none()
@@ -399,9 +362,6 @@ async def update_scheduled_task(
     if not scheduled_task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
-    if current_user and current_user.get("role") != "admin":
-        if scheduled_task.user_id != current_user.get("user_id"):
-            raise HTTPException(status_code=403, detail="Access denied")
 
     try:
         scheduler_mgr = get_scheduler_manager()
@@ -459,15 +419,7 @@ async def delete_scheduled_task(
     from sqlmodel import select
     from ..models import ScheduledTask
     from ..scheduler import get_scheduler_manager
-    from ..simple_auth import get_current_user_from_request
 
-    current_user = None
-    try:
-        current_user = await get_current_user_from_request(request)
-    except Exception:
-        pass
-
-    # Check if task exists and user has permission
     statement = select(ScheduledTask).where(ScheduledTask.id == schedule_id)
     result = await session.execute(statement)
     scheduled_task = result.scalar_one_or_none()
@@ -475,9 +427,6 @@ async def delete_scheduled_task(
     if not scheduled_task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
-    if current_user and current_user.get("role") != "admin":
-        if scheduled_task.user_id != current_user.get("user_id"):
-            raise HTTPException(status_code=403, detail="Access denied")
 
     try:
         scheduler_mgr = get_scheduler_manager()
@@ -502,15 +451,7 @@ async def pause_scheduled_task(
     from sqlmodel import select
     from ..models import ScheduledTask
     from ..scheduler import get_scheduler_manager
-    from ..simple_auth import get_current_user_from_request
 
-    current_user = None
-    try:
-        current_user = await get_current_user_from_request(request)
-    except Exception:
-        pass
-
-    # Check permissions
     statement = select(ScheduledTask).where(ScheduledTask.id == schedule_id)
     result = await session.execute(statement)
     scheduled_task = result.scalar_one_or_none()
@@ -518,9 +459,6 @@ async def pause_scheduled_task(
     if not scheduled_task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
-    if current_user and current_user.get("role") != "admin":
-        if scheduled_task.user_id != current_user.get("user_id"):
-            raise HTTPException(status_code=403, detail="Access denied")
 
     try:
         scheduler_mgr = get_scheduler_manager()
@@ -545,15 +483,7 @@ async def resume_scheduled_task(
     from sqlmodel import select
     from ..models import ScheduledTask
     from ..scheduler import get_scheduler_manager
-    from ..simple_auth import get_current_user_from_request
 
-    current_user = None
-    try:
-        current_user = await get_current_user_from_request(request)
-    except Exception:
-        pass
-
-    # Check permissions
     statement = select(ScheduledTask).where(ScheduledTask.id == schedule_id)
     result = await session.execute(statement)
     scheduled_task = result.scalar_one_or_none()
@@ -561,9 +491,6 @@ async def resume_scheduled_task(
     if not scheduled_task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
-    if current_user and current_user.get("role") != "admin":
-        if scheduled_task.user_id != current_user.get("user_id"):
-            raise HTTPException(status_code=403, detail="Access denied")
 
     try:
         scheduler_mgr = get_scheduler_manager()
@@ -588,15 +515,7 @@ async def trigger_scheduled_task_now(
     from sqlmodel import select
     from ..models import ScheduledTask
     from ..scheduler import get_scheduler_manager
-    from ..simple_auth import get_current_user_from_request
 
-    current_user = None
-    try:
-        current_user = await get_current_user_from_request(request)
-    except Exception:
-        pass
-
-    # Check permissions
     statement = select(ScheduledTask).where(ScheduledTask.id == schedule_id)
     result = await session.execute(statement)
     scheduled_task = result.scalar_one_or_none()
@@ -604,9 +523,6 @@ async def trigger_scheduled_task_now(
     if not scheduled_task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
-    if current_user and current_user.get("role") != "admin":
-        if scheduled_task.user_id != current_user.get("user_id"):
-            raise HTTPException(status_code=403, detail="Access denied")
 
     try:
         scheduler_mgr = get_scheduler_manager()
@@ -636,13 +552,6 @@ async def reschedule_task(
     from sqlmodel import select
     from ..models import ScheduledTask
     from ..scheduler import get_scheduler_manager
-    from ..simple_auth import get_current_user_from_request
-
-    current_user = None
-    try:
-        current_user = await get_current_user_from_request(request)
-    except Exception:
-        pass
 
     statement = select(ScheduledTask).where(ScheduledTask.id == schedule_id)
     result = await session.execute(statement)
@@ -651,9 +560,6 @@ async def reschedule_task(
     if not scheduled_task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
-    if current_user and current_user.get("role") != "admin":
-        if scheduled_task.user_id != current_user.get("user_id"):
-            raise HTTPException(status_code=403, detail="Access denied")
 
     try:
         scheduler_mgr = get_scheduler_manager()
@@ -699,13 +605,6 @@ async def reactivate_task(
     from sqlmodel import select
     from ..models import ScheduledTask
     from ..scheduler import get_scheduler_manager
-    from ..simple_auth import get_current_user_from_request
-
-    current_user = None
-    try:
-        current_user = await get_current_user_from_request(request)
-    except Exception:
-        pass
 
     statement = select(ScheduledTask).where(ScheduledTask.id == schedule_id)
     result = await session.execute(statement)
@@ -714,9 +613,6 @@ async def reactivate_task(
     if not scheduled_task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
-    if current_user and current_user.get("role") != "admin":
-        if scheduled_task.user_id != current_user.get("user_id"):
-            raise HTTPException(status_code=403, detail="Access denied")
 
     try:
         scheduler_mgr = get_scheduler_manager()
@@ -755,15 +651,8 @@ async def clear_stuck_scheduled_task(
     from sqlmodel import select
     from ..models import ScheduledTask, ScheduledTaskHistory
     from ..scheduler import get_scheduler_manager
-    from ..simple_auth import get_current_user_from_request
 
-    current_user = None
-    try:
-        current_user = await get_current_user_from_request(request)
-    except Exception:
-        pass
 
-    # Check permissions
     statement = select(ScheduledTask).where(ScheduledTask.id == schedule_id)
     result = await session.execute(statement)
     scheduled_task = result.scalar_one_or_none()
@@ -771,9 +660,6 @@ async def clear_stuck_scheduled_task(
     if not scheduled_task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
-    if current_user and current_user.get("role") != "admin":
-        if scheduled_task.user_id != current_user.get("user_id"):
-            raise HTTPException(status_code=403, detail="Access denied")
 
     try:
         scheduler_mgr = get_scheduler_manager()
@@ -831,15 +717,7 @@ async def get_scheduled_task_history(
     from sqlmodel import select
     from ..models import ScheduledTask
     from ..scheduler import get_scheduler_manager
-    from ..simple_auth import get_current_user_from_request
 
-    current_user = None
-    try:
-        current_user = await get_current_user_from_request(request)
-    except Exception:
-        pass
-
-    # Check permissions
     statement = select(ScheduledTask).where(ScheduledTask.id == schedule_id)
     result = await session.execute(statement)
     scheduled_task = result.scalar_one_or_none()
@@ -847,9 +725,6 @@ async def get_scheduled_task_history(
     if not scheduled_task:
         raise HTTPException(status_code=404, detail="Scheduled task not found")
 
-    if current_user and current_user.get("role") != "admin":
-        if scheduled_task.user_id != current_user.get("user_id"):
-            raise HTTPException(status_code=403, detail="Access denied")
 
     try:
         scheduler_mgr = get_scheduler_manager()

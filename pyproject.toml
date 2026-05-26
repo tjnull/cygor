@@ -47,10 +47,7 @@ dependencies = [
   "jinja2>=3.1.4",
   "python-multipart>=0.0.18",
 
-  # Authentication (token-based simple auth + JWT)
-  "python-jose[cryptography]>=3.3.0",  # JWT for simple_auth.py
-  "passlib[bcrypt]>=1.7.4",            # password hashing primitives
-  "bcrypt>=4.2.0",
+  # Crypto + protocol auth (CredRecon, jumpbox config encryption, SSH key handling)
   "httpx>=0.28.0",
   "cryptography>=44.0.0",              # SSH key handling, jumpbox config encryption
   "ldap3>=2.9.0",                      # LDAP/AD credential testing in CredRecon
@@ -74,15 +71,10 @@ dependencies = [
   "lxml>=5.3",
   "watchfiles>=1.0.0",
   "PyYAML>=6.0.1",
-  "pandas>=2.2",
-  "openpyxl>=3.1",
+  "markdown>=3.5",           # Renders cygor/wiki/*.md for the /docs web route
 
-  # Report Generation (markdown / DOCX / PDF / PPTX export, charts)
-  "weasyprint>=63.0",       # HTML → PDF
-  "python-docx>=1.1.2",     # DOCX export
-  "python-pptx>=1.0.2",     # PPTX export
-  "Pillow>=11.0.0",         # Image processing for reports
-  "matplotlib>=3.9.0",      # Charts for reports
+  # Imaging (lockon screenshot processing)
+  "Pillow>=11.0.0",
 
   # NFS Client (pinned to specific commit - no PyPI release available)
   # Source: https://github.com/Pennyw0rth/NfsClient - fork with Python 3.x fixes

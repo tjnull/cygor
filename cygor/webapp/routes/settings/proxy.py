@@ -5,7 +5,7 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 
@@ -50,13 +50,6 @@ def _save_proxy_config(config: dict) -> None:
 @router.get("/api/settings/proxy")
 async def get_proxy_settings(request: Request):
     """Get proxy configuration."""
-    auth_enabled = os.getenv("CYGOR_AUTH_LOGIN") == "1"
-    if auth_enabled:
-        from ...simple_auth import get_current_user_from_request
-        user = await get_current_user_from_request(request)
-        if not user or user.get('role') != 'admin':
-            raise HTTPException(status_code=403, detail="Admin access required")
-
     try:
         config = _load_proxy_config()
 
@@ -93,13 +86,6 @@ async def get_proxy_settings(request: Request):
 @router.post("/api/settings/proxy")
 async def save_proxy_settings(request: Request):
     """Save proxy configuration."""
-    auth_enabled = os.getenv("CYGOR_AUTH_LOGIN") == "1"
-    if auth_enabled:
-        from ...simple_auth import get_current_user_from_request
-        user = await get_current_user_from_request(request)
-        if not user or user.get('role') != 'admin':
-            raise HTTPException(status_code=403, detail="Admin access required")
-
     try:
         data = await request.json()
 
@@ -136,13 +122,6 @@ async def save_proxy_settings(request: Request):
 @router.post("/api/settings/proxy/test")
 async def test_proxy_connection(request: Request):
     """Test proxy connection by fetching external IP."""
-    auth_enabled = os.getenv("CYGOR_AUTH_LOGIN") == "1"
-    if auth_enabled:
-        from ...simple_auth import get_current_user_from_request
-        user = await get_current_user_from_request(request)
-        if not user or user.get('role') != 'admin':
-            raise HTTPException(status_code=403, detail="Admin access required")
-
     try:
         import requests as req_lib
 

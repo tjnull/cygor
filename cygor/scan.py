@@ -29,7 +29,7 @@ init(autoreset=True, strip=False)
 # Proxy support for jumpbox routing
 from cygor.proxy_config import wrap_command_if_needed, is_jumpbox_routing_active
 
-# IP rotation is an enterprise-only feature; provide a no-op shim on dev so the
+# IP rotation is not available in this build; provide a no-op shim
 # call sites below can stay structurally identical between branches.
 def get_next_ip(target_ip=None, context=None):
     return None

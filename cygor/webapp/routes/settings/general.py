@@ -302,24 +302,14 @@ async def authenticate_sudo(request: Request, req: Dict[str, Any]):
 
 @router.get("/api/settings/tasks")
 async def get_task_settings(request: Request):
-    """Get task settings (admin only)."""
-    from ...simple_auth import get_current_user_from_request
-    user = await get_current_user_from_request(request)
-    if not user or user.get('role') != 'admin':
-        raise HTTPException(status_code=403, detail="Admin access required")
-
+    """Get task settings."""
     from ...task_config import get_task_config
     return JSONResponse(get_task_config())
 
 
 @router.post("/api/settings/tasks")
 async def set_task_settings(request: Request):
-    """Set task settings (admin only)."""
-    from ...simple_auth import get_current_user_from_request
-    user = await get_current_user_from_request(request)
-    if not user or user.get('role') != 'admin':
-        raise HTTPException(status_code=403, detail="Admin access required")
-
+    """Set task settings."""
     data = await request.json()
     track_user_tasks = data.get("track_user_tasks", False)
 

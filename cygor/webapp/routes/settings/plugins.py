@@ -30,11 +30,6 @@ def _get_discovered_modules():
 @router.get("/api/plugins")
 async def list_plugins(request: Request):
     """List all discovered modules and plugins."""
-    from ...simple_auth import get_current_user_from_request
-    user = await get_current_user_from_request(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
     modules = []
     for spec in _get_discovered_modules():
         modules.append({
@@ -56,11 +51,6 @@ async def list_plugins(request: Request):
 @router.post("/api/plugins/reload")
 async def reload_plugins(request: Request):
     """Re-scan plugin directories and reload module registry."""
-    from ...simple_auth import get_current_user_from_request
-    user = await get_current_user_from_request(request)
-    if not user or user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
     import cygor.webapp.main as main_module
     from cygor.module_loader import discover_modules
     from cygor.plugin_loader import get_plugin_errors
@@ -78,11 +68,6 @@ async def reload_plugins(request: Request):
 @router.get("/api/plugins/errors")
 async def list_plugin_errors(request: Request):
     """Return errors recorded during the most recent plugin discovery."""
-    from ...simple_auth import get_current_user_from_request
-    user = await get_current_user_from_request(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
     from cygor.plugin_loader import get_plugin_errors
     return JSONResponse({"errors": get_plugin_errors()})
 
@@ -118,11 +103,6 @@ async def validate_plugin_upload(request: Request, file: UploadFile = File(...))
 
     Returns the same shape as cygor.plugin_loader.validate_plugin().
     """
-    from ...simple_auth import get_current_user_from_request
-    user = await get_current_user_from_request(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
     from cygor.plugin_loader import validate_plugin
 
     safe_name = _safe_plugin_filename(file.filename or "")
@@ -142,13 +122,8 @@ async def install_plugin_upload(request: Request, file: UploadFile = File(...)):
     """
     Validate and install an uploaded plugin to ~/.cygor/plugins/.
 
-    Admin only. Refuses to overwrite an existing file.
+    Refuses to overwrite an existing file.
     """
-    from ...simple_auth import get_current_user_from_request
-    user = await get_current_user_from_request(request)
-    if not user or user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
     from cygor.plugin_loader import validate_plugin, PLUGIN_DIRS
 
     safe_name = _safe_plugin_filename(file.filename or "")
@@ -201,11 +176,6 @@ async def update_plugin(slug: str, request: Request):
     Update a single plugin: git pull if it lives in a git checkout, otherwise
     re-validate (so the fingerprint and gates refresh).
     """
-    from ...simple_auth import get_current_user_from_request
-    user = await get_current_user_from_request(request)
-    if not user or user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
     from cygor.plugin_loader import validate_plugin
     import subprocess
 
@@ -273,12 +243,7 @@ async def update_plugin(slug: str, request: Request):
 
 @router.delete("/api/plugins/{slug}")
 async def uninstall_plugin(slug: str, request: Request):
-    """Delete a plugin file by slug. Admin only. Built-ins are not removable."""
-    from ...simple_auth import get_current_user_from_request
-    user = await get_current_user_from_request(request)
-    if not user or user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
+    """Delete a plugin file by slug. Built-ins are not removable."""
     target = None
     for spec in _get_discovered_modules():
         if spec.slug == slug:
@@ -307,11 +272,6 @@ async def uninstall_plugin(slug: str, request: Request):
 @router.get("/api/plugins/{slug}/info")
 async def get_plugin_info(slug: str, request: Request):
     """Get detailed info for a specific plugin/module."""
-    from ...simple_auth import get_current_user_from_request
-    user = await get_current_user_from_request(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-
     for spec in _get_discovered_modules():
         if spec.slug == slug:
             return JSONResponse({

@@ -23,14 +23,6 @@ router = APIRouter(tags=["database"])
 @router.get("/api/settings/database")
 async def get_database_info(request: Request):
     """Get database connection information."""
-    # Allow access when auth is disabled, or require admin when auth is enabled
-    auth_enabled = os.getenv("CYGOR_AUTH_LOGIN") == "1"
-    if auth_enabled:
-        from ...simple_auth import get_current_user_from_request
-        user = await get_current_user_from_request(request)
-        if not user or user.get('role') != 'admin':
-            raise HTTPException(status_code=403, detail="Admin access required")
-
     from ... import db as db_module
 
     # Get database information from the manager
@@ -357,16 +349,7 @@ async def clear_database(request: Request):
     Mirrors ``cygor web start --clear-db``. Takes an automatic snapshot
     before destroying anything, requires the caller to send
     ``confirm: "CYGOR"`` in the JSON body, and logs an audit entry.
-
-    Admin-only when authentication is enabled.
     """
-    auth_enabled = os.getenv("CYGOR_AUTH_LOGIN") == "1"
-    if auth_enabled:
-        from ...simple_auth import get_current_user_from_request
-        user = await get_current_user_from_request(request)
-        if not user or user.get('role') != 'admin':
-            raise HTTPException(status_code=403, detail="Admin access required")
-
     try:
         data = await request.json()
     except Exception:

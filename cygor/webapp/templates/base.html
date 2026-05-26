@@ -1101,32 +1101,6 @@
       color: #3b82f6;
     }
 
-    .logout-btn {
-      background: transparent;
-      border: 1px solid #dc3545;
-      color: #dc3545;
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.8125rem;
-      text-decoration: none;
-      transition: all 0.2s ease;
-      display: inline-flex;
-      align-items: center;
-    }
-    .logout-btn:hover {
-      background: #dc3545;
-      color: #ffffff;
-      border-color: #dc3545;
-    }
-    body.light-theme .logout-btn {
-      border-color: #dc3545;
-      color: #dc3545;
-    }
-    body.light-theme .logout-btn:hover {
-      background: #dc3545;
-      color: #ffffff;
-    }
-
     /* Sync icon animation */
     @keyframes spin {
       from { transform: rotate(0deg); }
@@ -1948,18 +1922,6 @@
   <nav id="sidebar" class="sidebar collapsed">
     <!-- Sidebar Header -->
     <div class="sidebar-header">
-      {% if request.state.auth_enabled and request.state.current_user %}
-      <div class="sidebar-user-info" style="flex: 1; margin-right: 0.5rem;">
-        <div style="font-size: 0.75rem; color: #71717a; margin-bottom: 0.25rem;">Logged in as</div>
-        <div style="font-size: 0.875rem; font-weight: 600; color: #ffffff; display: flex; align-items: center; gap: 0.5rem;">
-          <i class="bi bi-person-circle" style="font-size: 1rem;"></i>
-          <span>{{ request.state.current_user.get('username', 'User') }}</span>
-          {% if request.state.current_user.get('role') == 'admin' %}
-          <span class="badge" style="background: #dc3545; color: #ffffff; font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 3px;">Admin</span>
-          {% endif %}
-        </div>
-      </div>
-      {% else %}
       <div class="sidebar-user-info" style="flex: 1; margin-right: 0.5rem;">
         <div style="font-size: 0.75rem; color: #71717a; margin-bottom: 0.25rem;">Access Mode</div>
         <div style="font-size: 0.875rem; font-weight: 600; color: #71717a; display: flex; align-items: center; gap: 0.5rem;">
@@ -1967,7 +1929,6 @@
           <span>Public Access</span>
         </div>
       </div>
-      {% endif %}
       <button id="sidebarClose" class="sidebar-close-btn" title="Close menu" aria-label="Close menu">
         <i class="bi bi-x"></i>
       </button>

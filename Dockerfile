@@ -49,16 +49,11 @@ RUN apt-get update && \
     libkrb5-dev \
     libxml2-dev \
     libxslt1-dev \
-    xmlsec1 \
-    libxmlsec1-dev \
     libffi-dev \
     libssl-dev \
     libjpeg-dev \
     libpng-dev \
     zlib1g-dev \
-    libcairo2-dev \
-    libpango1.0-dev \
-    libgdk-pixbuf2.0-dev \
     pkg-config
 
 # Remove junk to save space:

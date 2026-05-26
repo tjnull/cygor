@@ -623,7 +623,7 @@ async def add_modules_to_request(request: Request, call_next):
     # Sidebar gating: list only modules that have data in the active workspace.
     # Skip the filesystem check on asset/API requests (no sidebar there).
     _combined = {"lockon", "smbexplorer", "nfsexplorer"}
-    if request.url.path.startswith(("/static", "/api", "/auth")):
+    if request.url.path.startswith(("/static", "/api")):
         _data = set()
     else:
         _data = _enum_modules_with_data(request.state.modules)
@@ -633,8 +633,6 @@ async def add_modules_to_request(request: Request, call_next):
         (m for m in request.state.modules if m.slug in _data and m.slug not in _combined),
         key=lambda m: m.name)
 
-    request.state.auth_enabled = False
-    request.state.current_user = None
     return await call_next(request)
 
 

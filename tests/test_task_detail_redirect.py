@@ -92,7 +92,7 @@ async def test_unknown_task_renders_detail_page(client):
 
 @pytest.mark.asyncio
 async def test_info_card_collapsed_by_default(client):
-    """The 'enterprise grade' redesign defaults the metadata card to
+    """The redesigned task-detail layout defaults the metadata card to
     collapsed (was ``collapse show`` before, now bare ``collapse``) so the
     live console sits above the fold instead of being pushed below ~700px
     of redundant metadata."""

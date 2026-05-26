@@ -47,7 +47,7 @@ from requests.exceptions import ConnectionError, HTTPError, RequestException
 from cygor.proxy_config import get_playwright_proxy, get_requests_proxies, is_jumpbox_routing_active
 
 # IP rotation support
-# IP rotation is enterprise-only; provide a no-op shim on dev.
+# IP rotation is not available in this build; provide a no-op shim.
 def get_next_ip(*args, **kwargs):
     return None
 
