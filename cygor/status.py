@@ -19,8 +19,11 @@ from . import __version__
 from . import workspace as ws
 
 
-# ── External tools each module wraps (slug → list of (binary, role)) ────────
-# Order chosen for output readability, not importance.
+# ── External tools each module actually invokes (slug → list of (binary, role)) ──
+# Only list binaries that the code shells out to. Python libraries that ship
+# with cygor (impacket, smbmap, pyNfsClient, aardwolf, …) don't belong here —
+# they're tracked by the installer, not by status. Order chosen for output
+# readability, not importance.
 TOOL_GROUPS: list[Tuple[str, list[Tuple[str, str]]]] = [
     ("Scanning", [
         ("nmap",            "cygor scan (Nmap engine)"),
@@ -34,16 +37,25 @@ TOOL_GROUPS: list[Tuple[str, list[Tuple[str, str]]]] = [
         ("dirsearch",       "webenum --tools all"),
     ]),
     ("Enumeration modules", [
-        ("smbclient",       "smbexplorer"),
-        ("showmount",       "nfsexplorer"),
-        ("rpcclient",       "rpcexplorer"),
+        ("rpcclient",       "rpcexplorer (MSRPC enumeration)"),
         ("polenum",         "rpcexplorer (password policy)"),
-        ("ldapsearch",      "ldapexplorer"),
+        ("ldapsearch",      "ldapexplorer (anonymous / authenticated queries)"),
         ("ldapdomaindump",  "ldapexplorer (authenticated dump)"),
-        ("snmpwalk",        "snmpexplorer"),
+        ("snmpwalk",        "snmpexplorer (MIB walk)"),
+        ("snmpget",         "snmpexplorer (single OID fetch)"),
         ("onesixtyone",     "snmpexplorer (community brute)"),
         ("dig",             "dnsexplorer"),
         ("dnsrecon",        "dnsexplorer (zone transfer / brute)"),
+        ("psql",            "dbprobe (Postgres unauth probe)"),
+    ]),
+    ("Lockon optional helpers", [
+        # All optional — lockon's native backends (aardwolf for RDP, the
+        # built-in VNC client, Playwright for web) handle the work when these
+        # aren't present. They're listed so users know what to install if
+        # the native path is unavailable on their box.
+        ("xfreerdp",        "lockon (RDP fallback when aardwolf is unusable)"),
+        ("vncsnapshot",     "lockon (VNC fallback)"),
+        ("xwd",             "lockon (X11 screenshot capture)"),
     ]),
 ]
 
@@ -159,10 +171,21 @@ def _section_tools(lines: list[str], issues: list[str]) -> None:
     any_missing_default = False
     for group, tools in TOOL_GROUPS:
         lines.append(f"  {Style.BRIGHT}{group}{Style.RESET_ALL}")
+        # Groups whose tools are nice-to-have rather than required: a missing
+        # entry shouldn't render as a red ✗ that nags the user. The Lockon
+        # native backends already cover these protocols without the helper
+        # binaries.
+        optional_group = group.endswith("optional helpers")
         for binary, role in tools:
             present = bool(shutil.which(binary))
             label = f"{binary:<16}  {Style.DIM}{role}{Style.RESET_ALL}"
-            lines.append("    " + (_ok(label) if present else _miss(label)))
+            if present:
+                marker = _ok
+            elif optional_group:
+                marker = _info  # cyan "i" — informational, not an issue
+            else:
+                marker = _miss
+            lines.append("    " + marker(label))
             if not present and binary in {"nmap", "ffuf", "feroxbuster", "gobuster"}:
                 any_missing_default = True
     if any_missing_default:
