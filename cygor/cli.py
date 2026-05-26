@@ -97,7 +97,7 @@ def _print_help():
         ws_line.append("not set", style="bold yellow")
         console.print(ws_line)
         hint = Text("              set one with: ", style=DIM)
-        hint.append("cygor workspace init <path> --default", style=f"bold {BLUE}")
+        hint.append("cygor workspace init <path>", style=f"bold {BLUE}")
         console.print(hint)
     console.print()
 
@@ -119,7 +119,7 @@ def _print_help():
             ("credrecon", "Test default/weak credentials across protocols", ""),
         ]),
         ("Management", [
-            ("workspace", "Manage workspaces (init / set-default / show)", ""),
+            ("workspace", "Manage workspaces (init / switch / list / current)", ""),
             ("proxy", "Configure HTTP/HTTPS proxy", ""),
             ("plugin", "Manage community plugins", ""),
             ("sync", "Refresh data sources (fingerprints / plugins)", ""),
@@ -182,6 +182,28 @@ def _print_help():
     console.print(footer)
     console.print()
 
+    # ── Getting Started (only when there's no workspace yet) ──
+    # The list above is comprehensive but doesn't tell a first-time user
+    # WHICH command to run first. Surface a tight 3-step path that gets
+    # them to actual results, only when they haven't set up a workspace.
+    if not ws:
+        console.print(f"  [{HEADER}]Getting Started[/{HEADER}]")
+        steps = [
+            ("1.", "Set a workspace:",      "cygor workspace init ~/cygor-engagement-1"),
+            ("2.", "Run your first scan:",  "sudo cygor scan -i eth0 -ips 192.168.1.0/24 --discover naabu"),
+            ("3.", "View results:",         "cygor web start"),
+        ]
+        steps_table = Table(show_header=False, box=None, padding=(0, 0, 0, 0),
+                            pad_edge=False, collapse_padding=True)
+        steps_table.add_column("indent", width=4)
+        steps_table.add_column("n", style=DIM, width=4, no_wrap=True)
+        steps_table.add_column("label", style="white", width=24, no_wrap=True)
+        steps_table.add_column("cmd", style=f"bold {BLUE}", no_wrap=True)
+        for n, label, cmd in steps:
+            steps_table.add_row("", n, label, cmd)
+        console.print(steps_table)
+        console.print()
+
 
 def _format_usage_plain():
     """Plain-text fallback when Rich is not available."""
@@ -200,7 +222,7 @@ def _format_usage_plain():
     commands += f"    {'enum':<{cmd_width}}Load enumeration modules from cygor modules directory\n"
     commands += f"    {'credrecon':<{cmd_width}}Test default/weak credentials across protocols (HTTP, SSH, FTP, databases)\n\n"
     commands += "  Management & Interface:\n"
-    commands += f"    {'workspace':<{cmd_width}}Manage workspaces (init/set-default/show)\n"
+    commands += f"    {'workspace':<{cmd_width}}Manage workspaces (init/switch/list/current)\n"
     commands += f"    {'proxy':<{cmd_width}}Configure HTTP/HTTPS proxy settings (status/set/enable/disable/test)\n"
     commands += f"    {'plugin':<{cmd_width}}Manage community plugins (list/install/validate/create/remove)\n"
     commands += f"    {'sync':<{cmd_width}}Refresh data sources: fingerprints, plugins (run with --help for subcommands)\n"
@@ -237,7 +259,7 @@ def _workspace_status_plain() -> str:
         return f"  Workspace: {ws}\n"
     return (
         "  Workspace: not set\n"
-        "    Set one with: cygor workspace init <path> --default\n"
+        "    Set one with: cygor workspace init <path>\n"
     )
 
 # ---- Workspace helpers ----
@@ -757,7 +779,22 @@ def main():
         sys.stderr.flush()
         os._exit(0)
 
-    _print_help()
+    # ── Unknown command ──
+    # Tell the user what they typed wasn't recognized and suggest the closest
+    # real subcommand before dumping the full banner (which is huge).
+    _KNOWN_COMMANDS = (
+        "scan", "parse", "enrich", "enum", "credrecon", "workspace", "proxy",
+        "plugin", "sync", "web", "setup-privileges", "banner", "precheck",
+    )
+    import difflib
+    suggestion = difflib.get_close_matches(cmd, _KNOWN_COMMANDS, n=1, cutoff=0.6)
+    print(f"{Fore.RED}[!] Unknown command: {cmd!r}{Style.RESET_ALL}", file=sys.stderr)
+    if suggestion:
+        print(f"{Fore.YELLOW}[?] Did you mean {Fore.CYAN}cygor {suggestion[0]}"
+              f"{Fore.YELLOW}?{Style.RESET_ALL}", file=sys.stderr)
+    print(f"{Style.DIM}    Run {Fore.CYAN}cygor{Style.RESET_ALL}"
+          f"{Style.DIM} for the full list of commands.{Style.RESET_ALL}",
+          file=sys.stderr)
     sys.exit(2)
 
 
