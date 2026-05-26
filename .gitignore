@@ -260,3 +260,4 @@ ferox-*.state
 
 # Design/implementation plans: keep locally, never commit
 docs/plans/
+cygor-*-linux-*/

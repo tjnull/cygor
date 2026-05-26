@@ -1,0 +1,58 @@
+Name:           cygor
+Version:        @@VERSION@@
+Release:        1%{?dist}
+Summary:        Cygor security enumeration tool
+License:        See LICENSE
+URL:            https://github.com/tjnull/cygor
+Group:          Applications/Security
+
+# The binary is pre-built by PyInstaller; disable automatic dependency scanning
+# to avoid false requirements on system Python libraries.
+AutoReqProv:    no
+
+# nmap is in base repos on all RHEL/Fedora
+Requires:       nmap
+
+# masscan needs EPEL on RHEL derivatives
+Suggests:       masscan
+
+%description
+Automated scanner and enumeration framework for security assessments.
+Provides network scanning, parsing, credential testing, and vulnerability
+assessment capabilities.
+
+%install
+mkdir -p %{buildroot}/usr/local/bin
+cp %{_sourcedir}/cygor %{buildroot}/usr/local/bin/cygor
+chmod 0755 %{buildroot}/usr/local/bin/cygor
+mkdir -p %{buildroot}/var/lib/cygor
+mkdir -p %{buildroot}/var/log/cygor
+
+%files
+%attr(0755,root,root) /usr/local/bin/cygor
+%dir %attr(0755,root,root) /var/lib/cygor
+%dir %attr(0755,root,root) /var/log/cygor
+
+%post
+echo ""
+echo "============================================"
+echo "  Cygor installed successfully!"
+echo ""
+echo "  Quick start:"
+echo "    cygor --help"
+echo "    cygor scan --help"
+echo "    cygor web start"
+echo ""
+echo "  Data directory: /var/lib/cygor"
+echo "  Log directory:  /var/log/cygor"
+echo "============================================"
+echo ""
+
+%preun
+if [ -f /var/lib/cygor/cygor-web.pid ]; then
+    kill "$(cat /var/lib/cygor/cygor-web.pid)" 2>/dev/null || true
+    rm -f /var/lib/cygor/cygor-web.pid
+fi
+if systemctl is-active cygor >/dev/null 2>&1; then
+    systemctl stop cygor || true
+fi
