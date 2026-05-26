@@ -126,8 +126,14 @@ echo '============================================'
 echo '  Build complete!'
 ls -lh /src/${TARBALL_FILE}
 echo '============================================'
-INNER_FOOTER
 
+# Restore host ownership of artifacts created during the build, so the
+# host-side cleanup step can remove dist/ / cygor_entry.py / cygor.spec
+# without sudo. /src is bind-mounted from the host, so its uid:gid
+# matches the host user that started the container.
+HOST_OWNER="$(stat -c %u:%g /src)"
+chown -R "$HOST_OWNER" /src 2>/dev/null || true
+INNER_FOOTER
 # ── Build inside Docker ──────────────────────────────────────────────────────
 cd "$REPO_ROOT"
 
