@@ -63,11 +63,15 @@ TOOL_GROUPS: list[Tuple[str, list[Tuple[str, str]]]] = [
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
+# Palette: headers cyan (matches the rest of cli.py for body sections),
+# status markers stay green/yellow/cyan so they're scannable at a glance.
+# Role descriptions render at normal foreground -- Style.DIM is unreadable on
+# some terminal themes (gnome-terminal dark, Kali default).
 def _ok(text: str) -> str:  return f"{Fore.GREEN}✓{Style.RESET_ALL} {text}"
 def _miss(text: str) -> str: return f"{Fore.YELLOW}✗{Style.RESET_ALL} {text}"
 def _warn(text: str) -> str: return f"{Fore.YELLOW}!{Style.RESET_ALL} {text}"
 def _info(text: str) -> str: return f"{Fore.CYAN}i{Style.RESET_ALL} {text}"
-def _header(text: str) -> str: return f"\n{Fore.MAGENTA}{text}{Style.RESET_ALL}"
+def _header(text: str) -> str: return f"\n{Fore.CYAN}{Style.BRIGHT}{text}{Style.RESET_ALL}"
 
 
 def _playwright_chromium_installed() -> bool:
@@ -250,7 +254,9 @@ def _section_tools(lines: list[str], issues: list[str]) -> None:
         optional_group = group.endswith("optional helpers")
         for binary, role in tools:
             present = bool(shutil.which(binary))
-            label = f"{binary:<16}  {Style.DIM}{role}{Style.RESET_ALL}"
+            # Role at normal brightness -- Style.DIM here was illegible on
+            # several common terminal themes.
+            label = f"{binary:<16}  {role}"
             if present:
                 marker = _ok
             elif optional_group:
