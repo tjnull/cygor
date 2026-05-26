@@ -13,27 +13,30 @@ A workspace is a directory that contains:
 
 ## Workspace Commands
 
-Running `cygor workspace` with no arguments shows the active workspace, any
-others you've registered, and the commands available -- start there.
+The command syntax mirrors msfconsole's `workspace`. Bare `cygor workspace`
+lists, `cygor workspace <name>` switches, flags handle the rest. There is
+always exactly one active workspace -- `default` is auto-created on first
+use under `~/.cygor/workspaces/` (override the root with the
+`$CYGOR_WORKSPACES_ROOT` environment variable).
 
-### Create a Workspace
+### Add a Workspace
 
 ```bash
-# Create a new workspace (the first one becomes active automatically)
-cygor workspace create ~/cygor-workspace
+# Add a workspace (created at the default root and activated immediately)
+cygor workspace -a my-engagement
 
-# Or specify a custom path
-cygor workspace create /opt/cygor/project-alpha
+# Or pin it to a custom path (shared drive, large engagement folder, …)
+cygor workspace -a my-engagement --path /mnt/engagements/acme
 ```
 
 This creates the directory structure:
 ```
-workspace/
+my-engagement/
 ├── nmap/                       # Nmap scan results
 ├── parsed-hostlists/           # Parsed hostlists by service
 ├── credrecon/                  # Credential reconnaissance output
 ├── schedule-scans/             # Scheduled / automated scans
-├── cygor-enumeration-modules/  # Per-module output (lockon, smbexplorer, ...)
+├── cygor-enumeration-modules/  # Per-module output (lockon, smbexplorer, …)
 ├── logs/                       # Runtime logs
 └── cygor.db                    # SQLite database (if used)
 ```
@@ -41,25 +44,34 @@ workspace/
 ### Switch the Active Workspace
 
 ```bash
-# Activate one by name
-cygor workspace use project-alpha
-
-# Or point at any directory -- if it isn't registered yet, cygor
-# registers it on the fly (initializing the layout if needed)
-cygor workspace use ~/engagements/acme
+# Switch by name (msfconsole-style bare positional)
+cygor workspace my-engagement
 ```
 
-### View the Active Workspace
+### List, View, and Use in Scripts
 
 ```bash
-# Status overview: active + others + available commands
+# List workspaces -- the active one is marked with *
 cygor workspace
 
-# Just the active path (designed for shell substitution)
-cd "$(cygor workspace path)"
+# Detail view of one workspace (size, subdir file counts, timestamps)
+cygor workspace --info my-engagement
 
-# Detail view of one workspace (size, subdirectory file counts, timestamps)
-cygor workspace info project-alpha
+# Just the active path (designed for shell substitution)
+cd "$(cygor workspace --print-path)"
+```
+
+### Delete / Rename
+
+```bash
+# Delete from the registry (directory on disk is preserved)
+cygor workspace -d my-engagement
+
+# Delete *and* wipe the directory on disk (asks for confirmation)
+cygor workspace -d my-engagement --purge
+
+# Rename
+cygor workspace -r old-name new-name
 ```
 
 ## Using Workspaces
@@ -106,9 +118,9 @@ echo 'export CYGOR_WORKSPACE=~/cygor-workspace' >> ~/.bashrc
 Create separate workspaces for different projects:
 
 ```bash
-cygor workspace create ~/workspaces/client-alpha
-cygor workspace create ~/workspaces/client-beta
-cygor workspace create ~/workspaces/internal-pentest
+cygor workspace -a client-alpha
+cygor workspace -a client-beta
+cygor workspace -a internal-pentest
 ```
 
 ### 2. Shared vs. Personal Workspaces
@@ -199,7 +211,7 @@ Edit the config file directly:
 ls -la ~/cygor-workspace
 
 # Re-create if needed (also re-registers and re-activates)
-cygor workspace create ~/cygor-workspace
+cygor workspace -a my-engagement --path ~/cygor-workspace
 ```
 
 ### Permission Issues

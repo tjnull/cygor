@@ -131,25 +131,31 @@ cygor credrecon --protocol ssh -f ssh-hostlist.txt
 
 Workspaces keep per-engagement results, scan files, and databases isolated.
 
-| Subcommand | Action |
+The command syntax mirrors msfconsole's `workspace`: bare command lists,
+`name` switches, `-a NAME` adds, `-d NAME` deletes, `-r OLD NEW` renames.
+There is always exactly one active workspace; `default` is auto-created on
+first use under `~/.cygor/workspaces/` (override with `$CYGOR_WORKSPACES_ROOT`).
+
+| Form | Action |
 |---|---|
-| `cygor workspace` *(no args)* | Show the active workspace, other registered ones, and the available commands |
-| `cygor workspace list` | Inventory of registered workspaces (no command hints — pipe-friendly) |
-| `cygor workspace create <path>` | Create a workspace at `<path>` (activates the first one automatically) |
-| `cygor workspace use <name\|path>` | Switch to one — by name, or any directory path (registers it on the fly) |
-| `cygor workspace info <name>` | Show subdirectories, size breakdown, timestamps |
-| `cygor workspace clean` | Trim old scan output (use `--keep-last N` / `--dry-run`) |
-| `cygor workspace remove <name>` | Unregister; files preserved |
-| `cygor workspace none` | Deactivate (stop writing to any workspace) |
-| `cygor workspace path` | Print the active path on stdout (designed for shell scripts) |
+| `cygor workspace` | List workspaces (`*` marks active) |
+| `cygor workspace <name>` | Switch to `<name>` |
+| `cygor workspace -a <name>` | Add a workspace at the default root |
+| `cygor workspace -a <name> --path <dir>` | Add at a custom location |
+| `cygor workspace -d <name>` | Delete from the registry (files preserved) |
+| `cygor workspace -d <name> --purge` | Delete + wipe the directory on disk |
+| `cygor workspace -r <old> <new>` | Rename a workspace |
+| `cygor workspace --info <name>` | Show subdirs, sizes, timestamps |
+| `cygor workspace --clean [<name>]` | Trim old scan output (`--keep-last N`, `--dry-run`) |
+| `cygor workspace --print-path` | Print active path on stdout (for shell scripts) |
 
 Full guide: [Setting Up Workspaces](Setting-Up-Workspaces.md).
 
 ```bash
-cygor workspace create ~/cygor-pentest-acme
-cygor workspace use acme
-cygor workspace            # status dashboard
-cd "$(cygor workspace path)"
+cygor workspace -a acme
+cygor workspace acme
+cygor workspace            # list
+cd "$(cygor workspace --print-path)"
 ```
 
 ---
