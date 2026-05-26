@@ -111,25 +111,71 @@ def _plugin_count() -> int:
         return 0
 
 
-def _db_target() -> str:
-    """Where would cygor web start write its DB by default? Best-effort."""
+def _mask_db_url(url: str) -> str:
+    """Strip the password from a libpq-style URL so it's safe to print."""
+    if "@" in url and "://" in url:
+        scheme, rest = url.split("://", 1)
+        if "@" in rest:
+            creds, host = rest.split("@", 1)
+            if ":" in creds:
+                user, _ = creds.split(":", 1)
+                return f"{scheme}://{user}:***@{host}"
+    return url
+
+
+def _detect_postgres() -> tuple[bool, list, bool]:
+    """Probe what cygor's autodetect would find for Postgres.
+
+    Returns (psql_present, running_instances, adapter_import_ok). The instances
+    list is whatever PostgreSQLAdapter.detect_running_instances() returns:
+    list of (port, version) tuples, latest first. Best-effort; never raises.
+    """
+    try:
+        from .webapp.db_adapters import PostgreSQLAdapter
+    except Exception:
+        return (bool(shutil.which("psql")), [], False)
+    try:
+        adapter = PostgreSQLAdapter()
+        return (adapter.is_available(), adapter.detect_running_instances(), True)
+    except Exception:
+        return (bool(shutil.which("psql")), [], True)
+
+
+def _db_target() -> tuple[str, str]:
+    """Mirror cygor's real DB autodetect.
+
+    Returns (backend, descriptor):
+      - backend ∈ {"explicit", "postgres", "sqlite-workspace", "sqlite-default"}
+      - descriptor is a one-line, password-masked description suitable for
+        printing.
+
+    Order of resolution follows webapp/db.py:get_database_url():
+      1. $CYGOR_DB_URL — explicit override wins.
+      2. Postgres autodetect (psql installed AND a server is running on
+         5430-5440). Picks the latest version.
+      3. SQLite under the active workspace.
+      4. SQLite in the app data dir (last-resort).
+    """
     url = os.environ.get("CYGOR_DB_URL")
     if url:
-        # Mask password if present.
-        masked = url
-        if "@" in url and "://" in url:
-            scheme, rest = url.split("://", 1)
-            if "@" in rest:
-                creds, host = rest.split("@", 1)
-                if ":" in creds:
-                    user, _ = creds.split(":", 1)
-                    masked = f"{scheme}://{user}:***@{host}"
-        return masked
-    # Fall back to the workspace-aware SQLite path.
+        return ("explicit", _mask_db_url(url))
+
+    psql_present, instances, _ = _detect_postgres()
+    if psql_present and instances:
+        port, version = instances[0]
+        # Match the default credentials the adapter uses when none are set,
+        # so what we print is what `cygor web start` will actually connect to.
+        user = os.environ.get("CYGOR_DB_USER", "cygor")
+        db   = os.environ.get("CYGOR_DB_NAME", "cygor")
+        host = os.environ.get("CYGOR_DB_HOST", "localhost")
+        ver_label = f"v{version}" if version and version != "detected" else "detected"
+        return ("postgres",
+                f"postgresql://{user}:***@{host}:{port}/{db}  ({ver_label})")
+
     active = ws.active_workspace_path()
     if active:
-        return f"sqlite:///{active}/cygor.db"
-    return "sqlite (workspace-aware default; no workspace active)"
+        return ("sqlite-workspace", f"sqlite:///{active}/cygor.db")
+    return ("sqlite-default", "sqlite (workspace-aware default; no workspace active)")
 
 
 # ── Sections ────────────────────────────────────────────────────────────────
@@ -160,9 +206,34 @@ def _section_workspace(lines: list[str], issues: list[str]) -> None:
 
 def _section_db(lines: list[str]) -> None:
     lines.append(_header("Database"))
-    target = _db_target()
-    lines.append(f"  {target}")
-    if target.startswith("sqlite") and "no workspace active" in target:
+    backend, descriptor = _db_target()
+
+    if backend == "explicit":
+        lines.append("  " + _ok(descriptor))
+        lines.append("  " + _info("Source: $CYGOR_DB_URL (overrides autodetect)"))
+        return
+
+    if backend == "postgres":
+        lines.append("  " + _ok(descriptor))
+        lines.append("  " + _info("Postgres is cygor's primary backend; autodetected on the listed port."))
+        return
+
+    # SQLite path — explain why Postgres wasn't picked so the user can fix it
+    # if they meant to be on Postgres.
+    psql_present, instances, _ = _detect_postgres()
+    if backend == "sqlite-workspace":
+        lines.append("  " + _ok(descriptor))
+    else:
+        lines.append("  " + _warn(descriptor))
+
+    if not psql_present:
+        lines.append("  " + _info("Postgres not detected (psql missing); falling back to SQLite."))
+        lines.append(f"      Install with: {Fore.CYAN}sudo apt install postgresql-client{Style.RESET_ALL}")
+    elif not instances:
+        lines.append("  " + _info("Postgres client found but no server is running on 5430-5440."))
+        lines.append(f"      Start one with: {Fore.CYAN}sudo systemctl start postgresql{Style.RESET_ALL}"
+                     f"   (or `cygor web start --auto-start-postgres`)")
+    if backend == "sqlite-default":
         lines.append("  " + _info("Web UI will create a per-workspace SQLite file when one is set."))
 
 
