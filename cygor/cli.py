@@ -119,6 +119,7 @@ def _print_help():
             ("credrecon", "Test default/weak credentials across protocols", ""),
         ]),
         ("Management", [
+            ("status", "Diagnose the install (tools, workspace, DB, sync state)", ""),
             ("workspace", "Manage workspaces (init / switch / list / current)", ""),
             ("proxy", "Configure HTTP/HTTPS proxy", ""),
             ("plugin", "Manage community plugins", ""),
@@ -659,6 +660,11 @@ def main():
         _print_help()
         sys.exit(0)
 
+    # --- status: quick diagnostic of the install ---
+    if cmd == "status":
+        from .status import run as _status_run
+        sys.exit(_status_run())
+
     # --- workspace ---
     if cmd == "workspace":
         _exec_module_argv("cygor.workspace", "cygor-workspace", cmd_args)
@@ -785,6 +791,7 @@ def main():
     _KNOWN_COMMANDS = (
         "scan", "parse", "enrich", "enum", "credrecon", "workspace", "proxy",
         "plugin", "sync", "web", "setup-privileges", "banner", "precheck",
+        "status",
     )
     import difflib
     suggestion = difflib.get_close_matches(cmd, _KNOWN_COMMANDS, n=1, cutoff=0.6)
@@ -882,6 +889,7 @@ def _show_sync_status() -> None:
 
     # --- Fingerprints ---
     print(f"{Fore.MAGENTA}● Fingerprints{Style.RESET_ALL}  ({Fore.YELLOW}cygor sync fingerprints{Style.RESET_ALL})")
+    fingerprint_empty = False
     try:
         from cygor.fingerprinting.sync import JSONSyncEngine
         from cygor.fingerprinting.cache import get_cache_dir
@@ -892,7 +900,13 @@ def _show_sync_status() -> None:
             total += 1
             if (cache_dir / f"{source}.json").exists():
                 synced_count += 1
-        print(f"    {synced_count}/{total} sources synced under {cache_dir}\n")
+        print(f"    {synced_count}/{total} sources synced under {cache_dir}")
+        if synced_count == 0:
+            fingerprint_empty = True
+            print(f"    {Fore.YELLOW}↳ Device classification will be limited until you sync. "
+                  f"Run:{Style.RESET_ALL}")
+            print(f"      {Fore.CYAN}cygor sync fingerprints{Style.RESET_ALL}")
+        print()
     except Exception as e:
         print(f"    {Fore.RED}error reading fingerprint cache: {e}{Style.RESET_ALL}\n")
 

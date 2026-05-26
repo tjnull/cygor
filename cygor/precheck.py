@@ -208,7 +208,13 @@ def install_playwright_bundle() -> None:
             print(f"[*] Installing Playwright system dependencies for {distro}...")
             run(s + ["bash", "-lc", f"{' '.join(cmd)} install-deps"], check=False)
 
-        print("[*] Installing Playwright Chromium browser...")
+        # Chromium is a ~115 MB download; on a slow link the precheck looks
+        # frozen unless we say so up front.
+        print()
+        print("[*] Downloading the Playwright Chromium browser (~115 MB).")
+        print("    This is required by the 'lockon' module to capture web/RDP/VNC/X11")
+        print("    screenshots. The download usually takes 20-60 seconds; please wait.")
+        print()
         run(["bash", "-lc", f"{' '.join(cmd)} install chromium"], check=False)
 
     except Exception as e:

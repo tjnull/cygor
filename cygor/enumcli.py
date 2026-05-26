@@ -78,6 +78,87 @@ def discover_modules():
 
     return sorted(modules)
 
+
+# Pretty grouped listing for `cygor enum --list`. Keep one description per slug
+# (≤ 60 chars so a 100-col terminal doesn't wrap). New modules need an entry
+# here OR they'll be listed under "Other" with the slug as the description.
+MODULE_CATEGORIES = [
+    ("Web", [
+        ("lockon",       "Screenshots: HTTP/S, RDP, VNC, X11 (Playwright + native)"),
+        ("webenum",      "Multi-tool content discovery (ffuf/feroxbuster/gobuster)"),
+    ]),
+    ("File sharing", [
+        ("smbexplorer",  "SMB shares + files (NTLM, Kerberos, pass-the-hash)"),
+        ("nfsexplorer",  "NFS exports, versions, files (UID/GID spoofing)"),
+    ]),
+    ("Active Directory / Directory", [
+        ("rpcexplorer",  "MSRPC: users, groups, password policy, RID cycling"),
+        ("ldapexplorer", "LDAP/AD: rootDSE, anonymous bind, authenticated dump"),
+    ]),
+    ("Network services", [
+        ("snmpexplorer", "SNMP v1/v2c: community brute, system info, MIB sweep"),
+        ("dnsexplorer",  "DNS: version, open resolver, AXFR zone transfer"),
+    ]),
+    ("Mail / file transfer", [
+        ("smtpexplorer", "SMTP: banner, STARTTLS, AUTH, VRFY, open-relay"),
+        ("ftpexplorer",  "FTP: banner, anon login, listing, anon write"),
+    ]),
+    ("Databases", [
+        ("dbprobe",      "Probe Redis/MySQL/Postgres/Mongo/Elastic/CouchDB for unauth access"),
+    ]),
+]
+
+
+def _print_module_list() -> None:
+    """Grouped listing of built-in modules + any installed plugins."""
+    builtins = set(discover_modules())
+    # Track which slugs we've already shown so plugins (and unknown built-ins)
+    # land under the right tail group.
+    known: set = set()
+
+    print()
+    print(f"  {Fore.CYAN}Built-in enumeration modules{Style.RESET_ALL}")
+    print()
+    for group, items in MODULE_CATEGORIES:
+        # Only show groups that have at least one module actually present.
+        rows = [(slug, desc) for slug, desc in items if slug in builtins]
+        if not rows:
+            continue
+        print(f"  {Fore.MAGENTA}{group}{Style.RESET_ALL}")
+        for slug, desc in rows:
+            print(f"    {Fore.YELLOW}{slug:<16}{Style.RESET_ALL} {desc}")
+            known.add(slug)
+        print()
+
+    # Any built-in that's NOT in MODULE_CATEGORIES — list under Other so new
+    # additions show up immediately even before this file is updated.
+    leftover_builtins = sorted(s for s in builtins if s not in known)
+    if leftover_builtins:
+        print(f"  {Fore.MAGENTA}Other{Style.RESET_ALL}")
+        for slug in leftover_builtins:
+            print(f"    {Fore.YELLOW}{slug:<16}{Style.RESET_ALL} (run with --help for details)")
+        print()
+
+    # Installed plugins (community modules under ~/.cygor/plugins/).
+    try:
+        from .plugin_loader import discover_plugins
+        plugins = discover_plugins()
+    except Exception:
+        plugins = []
+    plugin_specs = [p for p in plugins if p.slug not in builtins]
+    if plugin_specs:
+        print(f"  {Fore.CYAN}Installed plugins{Style.RESET_ALL}")
+        for spec in plugin_specs:
+            desc = (spec.description or "").strip() or "(no description)"
+            print(f"    {Fore.YELLOW}{spec.slug:<16}{Style.RESET_ALL} {desc[:70]}")
+        print()
+
+    total = len(builtins) + len(plugin_specs)
+    print(f"  {Fore.GREEN}{total} module(s) available.{Style.RESET_ALL} "
+          f"Run {Fore.CYAN}cygor enum <name> --help{Style.RESET_ALL} for per-module options.")
+    print()
+
+
 # Service -> enumeration module dispatch. Keyed by the parsed-hostlists/<service>
 # bucket name (see cygor/parse.py SERVICES). Each entry lists the module slug and
 # the args that precede the hostlist path on its command line. This is the
@@ -218,8 +299,7 @@ def main(argv=None):
         argv = sys.argv[1:]
 
     if "--list" in argv:
-        modules = discover_modules()
-        print("\n".join(modules))
+        _print_module_list()
         return
 
     if "--auto" in argv:
