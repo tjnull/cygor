@@ -145,6 +145,14 @@ class Task:
         # stopped flowing on long-running scans.
         self.output_lines: CountingDeque = CountingDeque(maxlen=MAX_OUTPUT_LINES)
         self.error_lines: CountingDeque = CountingDeque(maxlen=MAX_OUTPUT_LINES)
+        # File handles for streaming stdout/stderr to disk during the run.
+        # The in-memory ring buffer above caps at MAX_OUTPUT_LINES so the
+        # UI can stream without unbounded growth, but the on-disk sidecars
+        # MUST capture every line for long scans -- a 200k-line nmap -p-
+        # output would otherwise lose its first 100k. These are opened by
+        # _run_task() once output_dir is created.
+        self._stdout_fh = None
+        self._stderr_fh = None
         self.exit_code: Optional[int] = None
         self.last_output_at: Optional[datetime] = None  # Watchdog: last time output was produced
         # True for any task whose ``command`` carries enough args to re-execute
@@ -628,10 +636,41 @@ class TaskManager:
             task.process = process
             start_time = datetime.utcnow()
 
+            # Open the sidecar files for streaming. The in-memory deques
+            # cap at MAX_OUTPUT_LINES so the UI doesn't blow up RAM on
+            # long scans, but if we only wrote the deque contents at end
+            # of run (the old behaviour), anything beyond 100k lines was
+            # silently dropped from stdout.txt. Streaming straight to disk
+            # captures everything. Best-effort: if the open fails we still
+            # populate the in-memory deque and the legacy fallback in
+            # _save_output_to_disk catches anything left.
+            try:
+                task._stdout_fh = open(task.output_dir / "stdout.txt", "w", encoding="utf-8")
+                task._stderr_fh = open(task.output_dir / "stderr.txt", "w", encoding="utf-8")
+            except Exception as e:
+                logger.warning(f"Task {task.task_id}: could not open sidecar files: {e}")
+                task._stdout_fh = task._stderr_fh = None
+
+            def _persist(line: str, target_stream: str) -> None:
+                """Append `line` to the matching sidecar file and flush so the
+                bytes survive a process kill. `target_stream` is 'stdout' or
+                'stderr'."""
+                fh = task._stdout_fh if target_stream == "stdout" else task._stderr_fh
+                if fh is None:
+                    return
+                try:
+                    fh.write(line + "\n")
+                    fh.flush()
+                except Exception:
+                    pass  # best-effort; closed/broken handle shouldn't kill the scan
+
             # --- Enhanced stream readers ---
             async def read_stream(stream, lines_list, redirect_to_output=False):
                 """Read and filter process output in real time."""
                 last_line = ""
+                # 'stdout' lines coming through stderr after redirection still
+                # belong in stdout.txt -- track which sidecar each line lands in.
+                target = "stderr" if redirect_to_output else "stdout"
                 while True:
                     line = await stream.readline()
                     if not line:
@@ -665,10 +704,13 @@ class TaskManager:
                             or ("done" in decoded and "rate:" in decoded)
                         ):
                             task.output_lines.append(decoded)
+                            _persist(decoded, "stdout")
                         else:
                             lines_list.append(decoded)
+                            _persist(decoded, "stderr")
                     else:
                         lines_list.append(decoded)
+                        _persist(decoded, target)
 
             # Read concurrently
             await asyncio.gather(
@@ -689,6 +731,14 @@ class TaskManager:
             )
 
             task.output_lines.append(summary)
+            # Stream the summary line to disk too, so the sidecar matches
+            # what the UI's output buffer shows.
+            if task._stdout_fh is not None:
+                try:
+                    task._stdout_fh.write(summary + "\n")
+                    task._stdout_fh.flush()
+                except Exception:
+                    pass
 
             if task.exit_code == 0:
                 task.set_status(TaskStatus.COMPLETED)
@@ -748,22 +798,50 @@ class TaskManager:
         finally:
             task.completed_at = datetime.utcnow()
             logger.info(f"Task {task.task_id} finished with status: {task.status.value}, exit_code: {task.exit_code}")
-            # Persist output to disk so it survives server restarts
+            # Close the streaming sidecar handles before the fallback write
+            # so the fallback can re-open if needed.
+            for attr in ("_stdout_fh", "_stderr_fh"):
+                fh = getattr(task, attr, None)
+                if fh is not None:
+                    try:
+                        fh.close()
+                    except Exception:
+                        pass
+                    setattr(task, attr, None)
+            # Fallback: if streaming-to-disk never started (e.g. setup failed
+            # before the open()), flush whatever's still in the deque so we
+            # don't lose the small early lines completely. When streaming
+            # worked, the sidecar files already exist with the FULL output
+            # (including anything past MAX_OUTPUT_LINES) -- don't overwrite.
             self._save_output_to_disk(task)
             # Notify any registered callbacks that the task has completed
             await self._notify_completion(task)
 
     def _save_output_to_disk(self, task: "Task"):
-        """Persist stdout/stderr to disk so output survives server restarts."""
+        """Fallback persistence: dump the in-memory deque only when the
+        streaming sidecars don't already exist on disk.
+
+        During a normal run, _run_task() streams every line to
+        ``stdout.txt`` / ``stderr.txt`` directly, capturing the full output
+        even beyond MAX_OUTPUT_LINES. This method is the safety net for
+        runs where opening the sidecar files failed -- in that case the
+        bounded deque is all we have, and a truncated record is better
+        than nothing.
+        """
         try:
             if not task.output_dir or not task.output_dir.exists():
                 return
+            stdout_path = task.output_dir / "stdout.txt"
+            stderr_path = task.output_dir / "stderr.txt"
             stdout_lines = list(task.output_lines)
             stderr_lines = list(task.error_lines)
-            if stdout_lines:
-                (task.output_dir / "stdout.txt").write_text("\n".join(stdout_lines) + "\n")
-            if stderr_lines:
-                (task.output_dir / "stderr.txt").write_text("\n".join(stderr_lines) + "\n")
+            # Only write if streaming didn't already produce these files
+            # -- otherwise we'd truncate the full sidecar back down to
+            # the deque window.
+            if stdout_lines and not stdout_path.exists():
+                stdout_path.write_text("\n".join(stdout_lines) + "\n")
+            if stderr_lines and not stderr_path.exists():
+                stderr_path.write_text("\n".join(stderr_lines) + "\n")
         except Exception as e:
             logger.warning(f"Failed to save output to disk for task {task.task_id}: {e}")
 
