@@ -120,7 +120,7 @@ def _print_help():
         ]),
         ("Management", [
             ("status", "Diagnose the install (tools, workspace, DB, sync state)", ""),
-            ("workspace", "Manage workspaces (init / switch / list / current)", ""),
+            ("workspace", "Manage workspaces (create / select / list / delete)", ""),
             ("proxy", "Configure HTTP/HTTPS proxy", ""),
             ("plugin", "Manage community plugins", ""),
             ("sync", "Refresh data sources (fingerprints / plugins)", ""),
@@ -223,7 +223,7 @@ def _format_usage_plain():
     commands += f"    {'enum':<{cmd_width}}Load enumeration modules from cygor modules directory\n"
     commands += f"    {'credrecon':<{cmd_width}}Test default/weak credentials across protocols (HTTP, SSH, FTP, databases)\n\n"
     commands += "  Management & Interface:\n"
-    commands += f"    {'workspace':<{cmd_width}}Manage workspaces (init/switch/list/current)\n"
+    commands += f"    {'workspace':<{cmd_width}}Manage workspaces (create/select/list/delete)\n"
     commands += f"    {'proxy':<{cmd_width}}Configure HTTP/HTTPS proxy settings (status/set/enable/disable/test)\n"
     commands += f"    {'plugin':<{cmd_width}}Manage community plugins (list/install/validate/create/remove)\n"
     commands += f"    {'sync':<{cmd_width}}Refresh data sources: fingerprints, plugins (run with --help for subcommands)\n"
