@@ -474,7 +474,10 @@ def _handle_proxy_command(args: list[str]) -> None:
         config_path.write_text(json.dumps(config, indent=2))
         config_path.chmod(0o600)
 
-    if not args:
+    # Treat -h / --help / help like the no-arg help screen instead of the
+    # previous "[!] Unknown action: -h" rejection. Standard CLI muscle
+    # memory; no reason to require remembering the bare-`cygor proxy` form.
+    if not args or args[0] in ("-h", "--help", "help"):
         print(f"{Fore.CYAN}Proxy - HTTP/HTTPS Proxy Settings{Style.RESET_ALL}\n")
         print("Usage:")
         print("  cygor proxy status                       Show current proxy status")
@@ -624,6 +627,20 @@ def main():
 
     # --- Manual precheck command ---
     if argv[0] == "precheck":
+        # `--help` / `-h` must NOT trigger the actual precheck -- it
+        # installs OS-level dependencies via apt/sudo and downloads
+        # Chromium (~115 MB), so "I just wanted help" would be a nasty
+        # surprise. Handle the help flags here BEFORE invoking the runner.
+        if len(argv) > 1 and argv[1] in ("-h", "--help"):
+            print("Usage: cygor precheck")
+            print()
+            print("  Run the one-time dependency check that installs system tools")
+            print("  (nmap, masscan, naabu, ...) and downloads the Playwright")
+            print("  Chromium browser. Re-runs cleanly; does not re-download if")
+            print("  everything is already in place.")
+            print()
+            print("  Requires sudo for the apt step. Pass nothing else.")
+            sys.exit(0)
         print("[*] Running manual dependency check...")
         try:
             run_once_precheck(force=True)
@@ -640,20 +657,11 @@ def main():
 
     cmd, cmd_args = rest[0], rest[1:]
 
-
-    # --- precheck command (manual run)
-    if cmd == "precheck":
-        print("[*] Running manual dependency check...")
-        run_once_precheck(force=True)
-        print("[✓] Dependency verification complete.")
-        return
-
-    chown_paths, rest = _parse_chown_paths(argv)
-    if not rest:
-        _print_help()
-        sys.exit(0)
-
-    cmd, cmd_args = rest[0], rest[1:]
+    # Note: there used to be a second 'precheck' dispatch and a duplicate
+    # _parse_chown_paths() call here. Both were unreachable -- the early
+    # 'if argv[0] == "precheck"' branch above always handles precheck
+    # first, and the chown_paths/rest values from the prior parse are
+    # still valid (argv hasn't changed). Removed in the Pass 3 cleanup.
 
     # --- Help flags ---
     if cmd in ("-h", "--help", "help"):
