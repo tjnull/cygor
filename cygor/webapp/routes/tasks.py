@@ -460,6 +460,21 @@ async def create_module_task(req: ModuleRequest, request: Request):
         if not req.targets_file:
             raise HTTPException(status_code=400, detail="No targets file provided")
 
+        # Validate module_name against the actual registered modules. Without
+        # this gate, the value flows into both an os.path.join (which would
+        # path-traverse on `../foo`) AND a subprocess argv (which would let an
+        # untrusted caller invoke any binary cygor's PATH can find by name).
+        # Defense-in-depth: this webapp is meant for trusted operators, but
+        # validating user-supplied strings before they reach exec is cheap.
+        from cygor.module_loader import discover_modules
+        known_slugs = {spec.slug for spec in discover_modules()}
+        if req.module_name not in known_slugs:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown module '{req.module_name}'. "
+                       f"Available: {', '.join(sorted(known_slugs))}",
+            )
+
         targets_file_path = req.targets_file
 
         # Handle uploaded file content

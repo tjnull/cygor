@@ -201,30 +201,134 @@ def parse_nmap_xml(file_path):
             print(f"{Fore.RED}[!] Unexpected error parsing {file_path}: {e}")
     return hosts
 
+# In a gnmap "Ports:" segment, each entry looks like
+#   <port>/<state>/<proto>//<service>//<version>
+# We need every (port, "open") pair on the line, not just the first.
+_GNMAP_PORT_RE = re.compile(r"(\d{1,5})/open/")
+# In a .nmap text body, ports are one per line like  `22/tcp   open  ssh ...`
+_NMAP_PORT_LINE_RE = re.compile(r"^(\d{1,5})/(?:tcp|udp)\s+open\s")
+# Validate an extracted token is an IP literal (v4 or v6). Doing the structural
+# parse first and validating with the stdlib is more robust than building a
+# regex that covers every legal IPv6 compressed form.
+import ipaddress as _ipaddress
+
+
+def _looks_like_ip(token: str) -> bool:
+    if not token:
+        return False
+    try:
+        _ipaddress.ip_address(token)
+        return True
+    except ValueError:
+        return False
+
+
+def _extract_ip_from_gnmap_host(host_segment: str) -> str | None:
+    """Pull the IP from a gnmap 'Host: <ip> (<hostname>)' segment.
+
+    gnmap always puts the IP immediately after 'Host:' and before either
+    a space-paren-hostname-paren or the end of the segment. Structural
+    parsing handles every legal IP form (v4 + v6 compressed) without
+    fighting regex edge cases."""
+    if "Host:" not in host_segment:
+        return None
+    after = host_segment.split("Host:", 1)[1].strip()
+    # Optional "(hostname)" trailer is whitespace-separated.
+    token = after.split()[0] if after else ""
+    return token if _looks_like_ip(token) else None
+
+
+def _extract_ip_from_scan_report(line: str) -> str | None:
+    """Pull the IP from `Nmap scan report for <something>`. Handles:
+        Nmap scan report for 10.0.0.1
+        Nmap scan report for 2001:db8::1
+        Nmap scan report for host.example.com (10.0.0.1)
+        Nmap scan report for host.example.com (2001:db8::1)
+    Prefers the parenthesised IP when both a name and a paren-IP are
+    present (the parenthesised one is what nmap resolved).
+    """
+    marker = "Nmap scan report for"
+    if marker not in line:
+        return None
+    rest = line.split(marker, 1)[1].strip()
+    # Parenthesised IP takes precedence.
+    if "(" in rest and ")" in rest:
+        inner = rest[rest.rfind("(") + 1:rest.rfind(")")].strip()
+        if _looks_like_ip(inner):
+            return inner
+    # Otherwise the leading token must be the IP.
+    token = rest.split()[0] if rest else ""
+    return token if _looks_like_ip(token) else None
+
+
+def _format_target(ip: str, port: int) -> str:
+    """Render `ip:port` for hostlists. IPv6 gets `[host]:port` brackets so
+    the result is shell- and URL-parsable (`http://[2001:db8::1]:80`)."""
+    return f"[{ip}]:{port}" if ":" in ip else f"{ip}:{port}"
+
+
 def parse_nmap_text(file_path):
+    """Parse .nmap or .gnmap output into per-service hostlists.
+
+    Handles both formats and IPv6 in both. gnmap is line-oriented (`Host:
+    <ip> ...  Ports: 22/open/tcp//ssh//, 80/open/tcp//http//`), so every
+    `port/open` substring on a single Host: line is collected -- the old
+    regex captured only the first and silently dropped the rest.
+    .nmap is block-oriented (`Nmap scan report for <ip>` followed by
+    per-line `port/proto open service`), so we track the current host
+    across lines.
+    """
     hosts = {service: set() for service in SERVICES}
     for cat in FINGERPRINTS.keys():
         hosts.setdefault(cat, set())
 
     print(f"{Fore.YELLOW}[i] Parsing text-based file: {file_path}")
+
+    def _record(ip: str, port_num: int) -> None:
+        target_entry = _format_target(ip, port_num)
+        for service, ports in SERVICES.items():
+            if port_num in ports:
+                if service == "smb":
+                    hosts[service].add(ip)
+                else:
+                    hosts[service].add(target_entry)
+                if service in WEBLIKE_CATEGORIES or service in ("http", "https"):
+                    hosts["http"].add(target_entry)
+                    hosts["https"].add(target_entry)
+
+    is_gnmap = str(file_path).lower().endswith(".gnmap")
+    current_ip: str | None = None
+
     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
         for line in f:
-            match = re.search(r"(\d+\.\d+\.\d+\.\d+).*?(\d{1,5})/open", line)
-            if match:
-                ip, port_num = match.groups()
-                port_num = int(port_num)
-                target_entry = f"{ip}:{port_num}"
+            if is_gnmap:
+                # gnmap puts host + all its ports on a single line. The
+                # "Host: <ip>" segment comes before "Ports:" -- splitting
+                # on Ports: avoids picking ports out of the hostname.
+                if "Host:" not in line:
+                    continue
+                host_seg = line.split("Ports:", 1)[0]
+                ip = _extract_ip_from_gnmap_host(host_seg)
+                if not ip:
+                    continue
+                ports_seg = line.split("Ports:", 1)[1] if "Ports:" in line else ""
+                for m in _GNMAP_PORT_RE.finditer(ports_seg):
+                    port_num = int(m.group(1))
+                    if 1 <= port_num <= 65535:
+                        _record(ip, port_num)
+                continue
 
-                for service, ports in SERVICES.items():
-                    if port_num in ports:
-                        if service == "smb":
-                            hosts[service].add(ip)
-                        else:
-                            hosts[service].add(target_entry)
-
-                        if service in WEBLIKE_CATEGORIES or service in ("http", "https"):
-                            hosts["http"].add(target_entry)
-                            hosts["https"].add(target_entry)
+            # .nmap text format: track the host across lines.
+            if line.startswith("Nmap scan report for"):
+                current_ip = _extract_ip_from_scan_report(line)
+                continue
+            if current_ip is None:
+                continue
+            m = _NMAP_PORT_LINE_RE.match(line)
+            if m:
+                port_num = int(m.group(1))
+                if 1 <= port_num <= 65535:
+                    _record(current_ip, port_num)
     return hosts
 
 # ---------------- Writers ----------------

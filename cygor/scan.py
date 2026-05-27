@@ -1901,12 +1901,16 @@ def main():
 
     # Normal path: file or IPs
     if args.file:
+        # read_hosts_from_file() already strips comments, blank lines, and
+        # extracts the host from URL / 'host:port' / CIDR forms.  We used to
+        # re-open the file right here and overwrite `hosts` with raw line
+        # contents, which threw away all of that normalisation -- so a
+        # scope.txt containing `# header` or `https://target/path` lines
+        # fed garbage to nmap. Use the parsed list directly.
         hosts = read_hosts_from_file(args.file)
         if not hosts:
             print(f"{Fore.RED}No valid hosts loaded from {args.file}")
             return
-        with open(args.file, 'r') as f:
-            hosts = [line.strip() for line in f if line.strip()]
     elif args.ips:
     # flatten list of lists from comma_separated_ips + nargs="+"
       hosts = [item for sublist in args.ips for item in sublist]
