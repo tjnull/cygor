@@ -3232,7 +3232,14 @@ def _get_scan_db_id(session, scan_id: str):
 
 
 def _flush_db_write_buffer():
-    """Flush buffered results to database in a single transaction."""
+    """Flush buffered results to database in a single transaction.
+
+    On commit failure: requeue the batch instead of silently losing it.
+    The previous behaviour ate every result row when the commit failed
+    (FK violation, dead connection, anything) -- a credrecon scan
+    finding 100 valid credentials on a flaky DB would lose all 100 with
+    no log message.
+    """
     global _db_write_buffer
     with _db_write_buffer_lock:
         if not _db_write_buffer:
@@ -3242,6 +3249,11 @@ def _flush_db_write_buffer():
 
     engine = _get_sync_engine()
     if not engine:
+        # No engine available -- put the batch back so a later flush
+        # (e.g. once the engine reconnects) can retry. Without this the
+        # batch was already removed from the buffer above and lost.
+        with _db_write_buffer_lock:
+            _db_write_buffer = batch + _db_write_buffer
         return
 
     try:
@@ -3250,8 +3262,40 @@ def _flush_db_write_buffer():
             for db_result in batch:
                 session.add(db_result)
             session.commit()
-    except Exception:
-        pass  # Silently fail to not interrupt scanning
+    except Exception as e:
+        # Loud log so the failure isn't invisible. Don't requeue the
+        # entire batch automatically because the same failure mode will
+        # likely repeat -- write a warning to a dead-letter file alongside
+        # cygor's app data so the user can investigate and recover.
+        try:
+            import logging as _logging
+            _logging.getLogger("cygor.credrecon").error(
+                f"DB write batch dropped: {len(batch)} result(s); commit failed "
+                f"({type(e).__name__}: {e}). See app log for recovery."
+            )
+            # Best-effort dead-letter dump so the data isn't gone forever.
+            try:
+                from cygor.workspace import app_log_dir
+                import json as _json
+                dl = app_log_dir() / "credrecon-dropped.jsonl"
+                dl.parent.mkdir(parents=True, exist_ok=True)
+                with open(dl, "a", encoding="utf-8") as fh:
+                    for r in batch:
+                        try:
+                            fh.write(_json.dumps({
+                                "scan_id":  getattr(r, "scan_id", None),
+                                "target":   getattr(r, "target", None),
+                                "port":     getattr(r, "port", None),
+                                "protocol": getattr(r, "protocol", None),
+                                "status":   getattr(r, "status", None),
+                                "error":    str(e)[:200],
+                            }, default=str) + "\n")
+                        except Exception:
+                            continue
+            except Exception:
+                pass  # dead-letter is best-effort
+        except Exception:
+            pass
 
 
 def save_result_to_db_sync(scan_id: str, result: CredentialResult = None, skip_info: Dict = None):

@@ -27,6 +27,7 @@ Output format: cygor-result.json (universal schema)
 import socket
 import ssl
 import struct
+import sys
 from typing import Any, Dict, List, Optional
 
 from cygor.modules.base import CygorModule, wrap_external, merge_prior_results
@@ -297,15 +298,31 @@ class DBProbe(CygorModule):
         service = kwargs.get("service")
         timeout = kwargs.get("timeout") or 4.0
         port_override = kwargs.get("port")
+        # `--port N` without `--service S` is ambiguous: which of the 7
+        # protocols would inherit the overridden port? Reject early so we
+        # don't silently fall back to the default ports and confuse the user.
+        if port_override and not service:
+            print(f"[!] --port requires --service (which database is on port "
+                  f"{port_override}?)", file=sys.stderr)
+            return
+
         services = [service] if service else list(DB_PORTS)
         self._refreshed_services = set(services)
 
+        # Import the IPv6-safe host parser from the module base. The
+        # previous '.split(":")[0]' idiom mangled bare IPv6 hosts.
+        from cygor.modules.base import parse_host_token
+
         for host in targets:
-            host = host.strip().split()[0].split(":")[0] if host.strip() else host
+            host = parse_host_token(host)
             if not host:
                 continue
             for svc in services:
-                port = port_override if (port_override and service) else DB_PORTS[svc]
+                # Apply the port override only when the user pinned a single
+                # service via --service. (We already rejected the
+                # port-without-service case above, so port_override here
+                # implies service is set.)
+                port = port_override if port_override else DB_PORTS[svc]
                 try:
                     row = PROBES[svc](host, port, timeout)
                 except Exception as e:

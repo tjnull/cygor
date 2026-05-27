@@ -1722,8 +1722,10 @@ class JSONSyncEngine:
                 data = list(data.values()) if isinstance(data, dict) else []
 
             filepath = self.cache.cache_dir / self.cache.CACHE_FILES[source]
-            with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
+            # Atomic write to avoid a truncated cache on Ctrl-C during long
+            # downloads (multi-100MB files for Satori/huginn).
+            from cygor.fingerprinting.cache import _atomic_write_json
+            _atomic_write_json(filepath, data)
 
             # Clear the in-memory cache so it reloads from the new file
             cache_attr = f"_{source}_cache"
@@ -1756,8 +1758,8 @@ class JSONSyncEngine:
                 entries = {}
 
             filepath = self.cache.cache_dir / self.cache.CACHE_FILES["huginn_combinations"]
-            with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(entries, f, indent=2)
+            from cygor.fingerprinting.cache import _atomic_write_json
+            _atomic_write_json(filepath, entries)
 
             self.cache._huginn_combinations_cache = None
             logger.info(f"Parsed {len(entries)} Huginn-Muninn DHCP combinations")

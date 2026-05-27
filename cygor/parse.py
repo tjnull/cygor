@@ -133,6 +133,34 @@ FINGERPRINTS = {
 # Web-like categories always also go into http/https
 WEBLIKE_CATEGORIES = {"proxmox", "hyperv", "esxi", "xen", "openstack"}
 
+# Per-port HTTPS hint: these are HTTPS-only by convention. When a port
+# matches one of these AND the service-name lookup picks a 'weblike'
+# category (proxmox 8006, hyperv 2179, ...), we should add to https only,
+# not double-list into the http hostlist -- otherwise lockon/webenum
+# will try plaintext HTTP against an HTTPS-only service and waste time.
+# Conversely the plain 'http' ports go only to http.
+_HTTPS_ONLY_PORTS = {443, 4443, 5443, 6443, 7443, 8443, 9443, 10443, 12443,
+                     16443, 18443, 8006, 2179}
+_HTTP_ONLY_PORTS = {80, 8000, 8080, 8081, 8088, 8888, 9000, 9080, 10000,
+                    16080, 18080, 50080, 12000}
+
+
+def _add_to_web_buckets(hosts: dict, target_entry: str, port: int | None) -> None:
+    """Add a target to the appropriate web hostlist(s) based on port.
+
+    HTTPS-only ports go to 'https' only. HTTP-only ports go to 'http'
+    only. Anything else -- ambiguous ports, fingerprint-driven matches
+    where we don't know the port shape -- gets both as a safe default
+    so lockon/webenum can probe and discard.
+    """
+    if port in _HTTPS_ONLY_PORTS:
+        hosts["https"].add(target_entry)
+    elif port in _HTTP_ONLY_PORTS:
+        hosts["http"].add(target_entry)
+    else:
+        hosts["http"].add(target_entry)
+        hosts["https"].add(target_entry)
+
 # ---------------- Parsing helpers ----------------
 
 def parse_nmap_xml(file_path):
@@ -159,19 +187,36 @@ def parse_nmap_xml(file_path):
                 port = getattr(service, "port", None)
                 target_entry = f"{host.address}:{port}" if port else host.address
 
-                # Port-based
+                # Port-based. SERVICES["http"] and SERVICES["https"] both
+                # contain ports like 8443 (which appears in both because
+                # some web servers expose both schemes there); but for the
+                # http / https hostlists we want a single canonical bucket
+                # per target, not double-listing. So for web services skip
+                # the direct hosts[serv_name].add() and let
+                # _add_to_web_buckets() route by port.
                 for serv_name, ports in SERVICES.items():
                     if port in ports:
+                        if serv_name in ("http", "https"):
+                            # Routed below; skip the direct add to avoid
+                            # leaking 8443 into the http bucket (etc.).
+                            continue
                         if serv_name == "smb":
                             hosts[serv_name].add(host.address)
                         else:
                             hosts[serv_name].add(target_entry)
 
-                        if serv_name in WEBLIKE_CATEGORIES or serv_name in ("http", "https"):
-                            hosts["http"].add(target_entry)
-                            hosts["https"].add(target_entry)
+                        if serv_name in WEBLIKE_CATEGORIES:
+                            _add_to_web_buckets(hosts, target_entry, port)
 
-                # Fingerprint-based
+                # Dedicated http/https port routing (single canonical bucket
+                # per target based on the port number).
+                if (port in SERVICES.get("http", [])
+                        or port in SERVICES.get("https", [])):
+                    _add_to_web_buckets(hosts, target_entry, port)
+
+                # Fingerprint-based: the banner says it's web-like, but we
+                # don't know the protocol from the banner alone. Use the
+                # port to pick the right bucket(s).
                 combined = " ".join([
                     (getattr(service, "service", "") or "").lower(),
                     (getattr(service, "product", "") or "").lower(),
@@ -182,8 +227,7 @@ def parse_nmap_xml(file_path):
                     if any(k in combined for k in keywords):
                         if category in ("proxmox", "hyperv"):
                             hosts[category].add(target_entry)
-                        hosts["http"].add(target_entry)
-                        hosts["https"].add(target_entry)
+                        _add_to_web_buckets(hosts, target_entry, port)
 
     except NmapParserException as e:
         # Check if this is actually a non-Nmap XML file (like from enumeration modules)
@@ -288,13 +332,20 @@ def parse_nmap_text(file_path):
         target_entry = _format_target(ip, port_num)
         for service, ports in SERVICES.items():
             if port_num in ports:
+                if service in ("http", "https"):
+                    # Routed via _add_to_web_buckets below; skip direct add
+                    # to avoid double-listing ports that appear in both
+                    # SERVICES["http"] and SERVICES["https"] (e.g. 8443).
+                    continue
                 if service == "smb":
                     hosts[service].add(ip)
                 else:
                     hosts[service].add(target_entry)
-                if service in WEBLIKE_CATEGORIES or service in ("http", "https"):
-                    hosts["http"].add(target_entry)
-                    hosts["https"].add(target_entry)
+                if service in WEBLIKE_CATEGORIES:
+                    _add_to_web_buckets(hosts, target_entry, port_num)
+        if (port_num in SERVICES.get("http", [])
+                or port_num in SERVICES.get("https", [])):
+            _add_to_web_buckets(hosts, target_entry, port_num)
 
     is_gnmap = str(file_path).lower().endswith(".gnmap")
     current_ip: str | None = None

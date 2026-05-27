@@ -1038,7 +1038,11 @@ socks5 127.0.0.1 {socks_port}
 """
 
     PROXYCHAINS_CONF_FILE.write_text(conf_content)
-    PROXYCHAINS_CONF_FILE.chmod(0o644)
+    # 0o600: owner-only. The config carries the SOCKS port the SSH tunnel
+    # listens on, plus the structure of the operator's jump-host setup --
+    # information that shouldn't be visible to other local users on a
+    # shared host. Matches the 0o600 used everywhere else in this file.
+    PROXYCHAINS_CONF_FILE.chmod(0o600)
 
     return PROXYCHAINS_CONF_FILE
 

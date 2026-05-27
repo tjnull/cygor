@@ -15,9 +15,46 @@ import os
 import json
 import logging
 import re
+import tempfile
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, List, Any
+
+
+def _atomic_write_json(path: Path, data: Any) -> None:
+    """Write ``data`` to ``path`` as JSON without leaving a partial file behind.
+
+    A KeyboardInterrupt or kill during a 100MB+ fingerprint cache write
+    used to leave a truncated JSON; next startup's ``json.load`` raised
+    and the in-memory cache silently reset to empty. Atomic temp+rename
+    means the destination either has the previous contents or the new
+    contents -- never half of either.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # mkstemp on the same directory so os.replace() is atomic (no
+    # cross-device fallback). The 'tmp' prefix + random suffix avoids
+    # collisions with concurrent saves of the same cache file.
+    fd, tmp_path = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent)
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+            f.flush()
+            try:
+                os.fsync(f.fileno())  # durability: survive a panic/kill
+            except OSError:
+                pass  # not supported on every fs; the rename below is the
+                      # real atomicity guarantee
+        os.replace(tmp_path, path)
+    except Exception:
+        # Clean up the temp on failure so we don't leave .tmp turds behind.
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 logger = logging.getLogger(__name__)
 
@@ -256,8 +293,7 @@ class FingerprintCache:
             if metadata:
                 data.update(metadata)
 
-            with open(self.oui_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
+            _atomic_write_json(self.oui_file, data)
 
             self._oui_cache = entries
             logger.info(f"Saved {len(entries)} OUI entries ({entries_with_device_type} with device_type) to {self.oui_file}")
@@ -343,8 +379,7 @@ class FingerprintCache:
             if metadata:
                 data.update(metadata)
 
-            with open(self.tcpip_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
+            _atomic_write_json(self.tcpip_file, data)
 
             self._tcpip_cache = entries
             logger.info(f"Saved {len(entries)} TCP/IP entries to {self.tcpip_file}")
@@ -386,8 +421,7 @@ class FingerprintCache:
             if metadata:
                 data.update(metadata)
 
-            with open(self.banners_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
+            _atomic_write_json(self.banners_file, data)
 
             self._banners_cache = entries
             logger.info(f"Saved {len(entries)} banner patterns to {self.banners_file}")
@@ -443,8 +477,7 @@ class FingerprintCache:
                 "error_message": error_message,
             }
 
-            with open(self.status_file, 'w', encoding='utf-8') as f:
-                json.dump(all_status, f, indent=2)
+            _atomic_write_json(self.status_file, all_status)
 
             return True
         except Exception as e:
@@ -637,8 +670,7 @@ class FingerprintCache:
             if metadata:
                 data.update(metadata)
 
-            with open(self.huginn_devices_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f)  # No indent for large files
+            _atomic_write_json(self.huginn_devices_file, data)
 
             self._huginn_devices_cache = entries
             self._build_device_name_index()
@@ -867,8 +899,7 @@ class FingerprintCache:
             if metadata:
                 data.update(metadata)
 
-            with open(self.huginn_dhcp_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f)  # No indent for large files
+            _atomic_write_json(self.huginn_dhcp_file, data)
 
             self._huginn_dhcp_cache = entries
             self._build_dhcp_hash_index()
@@ -939,8 +970,7 @@ class FingerprintCache:
             if metadata:
                 data.update(metadata)
 
-            with open(self.huginn_dhcp_vendor_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f)  # No indent for large files
+            _atomic_write_json(self.huginn_dhcp_vendor_file, data)
 
             self._huginn_dhcp_vendor_cache = entries
             logger.info(f"Saved {len(entries)} Huginn-Muninn DHCP vendor entries to {self.huginn_dhcp_vendor_file}")
@@ -1022,8 +1052,7 @@ class FingerprintCache:
             if metadata:
                 data.update(metadata)
 
-            with open(self.huginn_dhcpv6_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f)
+            _atomic_write_json(self.huginn_dhcpv6_file, data)
 
             self._huginn_dhcpv6_cache = entries
             logger.info(f"Saved {len(entries)} Huginn-Muninn DHCPv6 signatures to {self.huginn_dhcpv6_file}")
@@ -1063,8 +1092,7 @@ class FingerprintCache:
             if metadata:
                 data.update(metadata)
 
-            with open(self.huginn_dhcpv6_enterprise_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f)
+            _atomic_write_json(self.huginn_dhcpv6_enterprise_file, data)
 
             self._huginn_dhcpv6_enterprise_cache = entries
             logger.info(f"Saved {len(entries)} Huginn-Muninn DHCPv6 enterprise IDs to {self.huginn_dhcpv6_enterprise_file}")
@@ -1112,8 +1140,7 @@ class FingerprintCache:
             if metadata:
                 data.update(metadata)
 
-            with open(self.huginn_mac_vendors_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f)
+            _atomic_write_json(self.huginn_mac_vendors_file, data)
 
             self._huginn_mac_vendors_cache = entries
             logger.info(f"Saved {len(entries)} Huginn-Muninn MAC vendors to {self.huginn_mac_vendors_file}")
@@ -1444,8 +1471,7 @@ class FingerprintCache:
             if metadata:
                 data.update(metadata)
 
-            with open(self.nmap_os_db_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f)  # No indent for large files
+            _atomic_write_json(self.nmap_os_db_file, data)
 
             self._nmap_os_db_cache = entries
             logger.info(f"Saved {len(entries)} Nmap OS fingerprints to {self.nmap_os_db_file}")

@@ -50,6 +50,16 @@ async def ingest_findings(session, workspace: str) -> int:
 
     Returns the number of findings written. Files are the source of truth, so we
     fully replace the table each run (idempotent, no stale rows).
+
+    WARNING: this DELETE removes EVERY row in the Finding table. The current
+    design assumes findings always originate from <workspace>/cygor-enumeration-modules
+    /<slug>/cygor-result.json. If you add a code path that writes findings
+    directly to the DB (live credrecon hits, scheduler in-process probes,
+    plugin output, ...), it MUST not call ingest_findings_safe() or it will
+    wipe its own rows. Either (a) route the new source through a JSON file
+    on disk so this rebuild captures it, or (b) refactor the delete to scope
+    by a `source` column you add to the Finding model. Do not silently
+    introduce a new writer without one of those.
     """
     module_results = _load_module_results(workspace)
     findings = module_findings(module_results)

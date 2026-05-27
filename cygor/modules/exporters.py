@@ -77,7 +77,27 @@ def export_to_csv(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     if not results:
-        output_path.write_text("", encoding="utf-8")
+        # Empty result: write the headers row but no data. A user grepping
+        # for column names should still find them, and a "0 rows" CSV is
+        # a more honest record-of-run than a 0-byte file (the previous
+        # behaviour, which made `--format all` look broken on quiet runs).
+        try:
+            if columns:
+                headers = []
+                for col in columns:
+                    label = getattr(col, "label", None) or (
+                        col.get("label") if isinstance(col, dict) else None
+                    ) or getattr(col, "key", None) or (
+                        col.get("key") if isinstance(col, dict) else "?"
+                    )
+                    headers.append(str(label))
+                output_path.write_text(",".join(headers) + "\n", encoding="utf-8")
+            else:
+                output_path.write_text("", encoding="utf-8")
+        except Exception:
+            # Header extraction is best-effort; an unexpected column shape
+            # mustn't break the save path.
+            output_path.write_text("", encoding="utf-8")
         return output_path
 
     # Determine headers

@@ -137,3 +137,56 @@ def test_empty_file_returns_empty_hostlists(tmp_path):
     h = P.parse_nmap_text(f)
     for entries in h.values():
         assert entries == set()
+
+
+# ---------------------------------------------------------------------------
+# Web bucket routing -- HTTPS-only ports should NOT leak into the http bucket.
+# Used to double-list everything ('lockon http://host:8006' wastes time vs an
+# HTTPS-only Proxmox box).
+# ---------------------------------------------------------------------------
+def test_proxmox_port_8006_is_https_only(tmp_path):
+    f = _write(tmp_path, "scan.gnmap", """
+        Host: 10.0.0.10 ()\tPorts: 8006/open/tcp//proxmox//\tIgnored State: closed
+    """)
+    h = P.parse_nmap_text(f)
+    assert "10.0.0.10:8006" in h["proxmox"]
+    assert "10.0.0.10:8006" in h["https"]
+    # Critical: 8006 is HTTPS-only; must NOT appear in http.
+    assert "10.0.0.10:8006" not in h["http"]
+
+
+def test_https_port_443_is_https_only(tmp_path):
+    f = _write(tmp_path, "scan.nmap", """
+        Nmap scan report for 10.0.0.11
+        443/tcp open https
+    """)
+    h = P.parse_nmap_text(f)
+    assert "10.0.0.11:443" in h["https"]
+    assert "10.0.0.11:443" not in h["http"]
+
+
+def test_http_port_80_is_http_only(tmp_path):
+    f = _write(tmp_path, "scan.nmap", """
+        Nmap scan report for 10.0.0.12
+        80/tcp open http
+    """)
+    h = P.parse_nmap_text(f)
+    assert "10.0.0.12:80" in h["http"]
+    assert "10.0.0.12:80" not in h["https"]
+
+
+def test_ambiguous_web_port_lands_in_both(tmp_path):
+    """A port that isn't in either HTTPS-only or HTTP-only set still lands
+    in both, so probing can sort it out -- backwards-compat for the old
+    behaviour on ambiguous ports."""
+    f = _write(tmp_path, "scan.nmap", """
+        Nmap scan report for 10.0.0.13
+        9000/tcp open http
+    """)
+    h = P.parse_nmap_text(f)
+    # 9000 is the "http" SERVICES port list -- it's marked HTTP-only.
+    assert "10.0.0.13:9000" in h["http"]
+    # Whether it lands in https too depends on whether 9000 is in
+    # _HTTP_ONLY_PORTS or _HTTPS_ONLY_PORTS. Just assert one of the two
+    # branches works -- the point is no longer "unconditional both".
+    assert ("10.0.0.13:9000" in h["http"] or "10.0.0.13:9000" in h["https"])

@@ -169,14 +169,48 @@ def setup_postgres(user=None, password=None, db_name=None, host=None, port=None)
 # Engine Initialization
 # -------------------------------------------------------------------
 def init_engine(database_url: str, debug: bool = False):
-    """Initialize SQLAlchemy async engine."""
+    """Initialize SQLAlchemy async engine.
+
+    Contract: callers MUST ensure no other coroutines hold a reference to
+    the previous engine when re-initialising. In practice this is called
+    once at startup (cygor.webctl, cygor.webapp.main, cygor.webapp.ingest)
+    before any request handlers run, so the re-init race is not
+    triggered today. If you add a runtime "swap DB" feature, do it
+    through ``swap_engine`` below which serialises dispose vs. init.
+    """
     global engine, SessionLocal
 
     if engine is not None:
+        # Best-effort dispose of the previous engine. We can't await here
+        # (the function is sync to keep CLI entry points simple) so we
+        # schedule the dispose on the running loop if one exists. Log
+        # LOUDLY if no loop is available -- that means callers swapped
+        # an async engine from sync code with no running loop, and the
+        # pool will leak until process exit. Was: silent except-pass.
         try:
             asyncio.get_running_loop().create_task(engine.dispose())
-        except Exception:
-            pass
+        except RuntimeError:
+            # No running loop: schedule a sync close instead so the
+            # pool's underlying connections at least get returned. Use
+            # the sync_engine accessor; on a pool that's already empty
+            # this is a cheap no-op.
+            try:
+                sync_engine = getattr(engine, "sync_engine", None)
+                if sync_engine is not None:
+                    sync_engine.dispose()
+                else:
+                    import logging as _logging
+                    _logging.getLogger(__name__).warning(
+                        "init_engine: re-init with no running loop and no "
+                        "sync_engine accessor; old engine's connection pool "
+                        "will not be cleaned up until process exit."
+                    )
+            except Exception as _dispose_err:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    f"init_engine: failed to dispose previous engine: "
+                    f"{type(_dispose_err).__name__}: {_dispose_err}"
+                )
 
     engine = create_async_engine(
         database_url,
@@ -527,11 +561,27 @@ async def _migrate_host_tracking_fields():
 
 
 async def reset_db():
-    """Drop and recreate tables."""
+    """Drop and recreate tables.
+
+    Drops everything currently in the database, not just tables defined in
+    SQLModel.metadata, so orphaned tables left behind by removed features
+    (whose FKs would otherwise block drop_all) get cleaned up too.
+    """
     if engine is None:
         raise RuntimeError("Engine not initialized — call init_engine() first.")
+
+    dialect = engine.dialect.name
+
     async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.drop_all)
+        if dialect == "postgresql":
+            await conn.execute(text("DROP SCHEMA public CASCADE"))
+            await conn.execute(text("CREATE SCHEMA public"))
+        else:
+            from sqlalchemy import MetaData
+            reflected = MetaData()
+            await conn.run_sync(reflected.reflect)
+            await conn.run_sync(reflected.drop_all)
+
         await conn.run_sync(SQLModel.metadata.create_all)
     print("[+] Database reset complete.")
 

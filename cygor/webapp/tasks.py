@@ -639,16 +639,26 @@ class TaskManager:
             # Open the sidecar files for streaming. The in-memory deques
             # cap at MAX_OUTPUT_LINES so the UI doesn't blow up RAM on
             # long scans, but if we only wrote the deque contents at end
-            # of run (the old behaviour), anything beyond 100k lines was
-            # silently dropped from stdout.txt. Streaming straight to disk
-            # captures everything. Best-effort: if the open fails we still
-            # populate the in-memory deque and the legacy fallback in
-            # _save_output_to_disk catches anything left.
+            # of run, anything beyond 100k lines was silently dropped from
+            # stdout.txt. Streaming straight to disk captures everything.
+            #
+            # If the open fails (read-only filesystem, full disk, ...) we
+            # log LOUDLY (error not warning) and append a synthetic error
+            # line to the task's deque so the user sees it in the live tail
+            # AND in the eventual fallback save. Previously a silent
+            # warning meant long scans on a near-full disk lost every line
+            # past the deque window without any user-visible signal.
             try:
                 task._stdout_fh = open(task.output_dir / "stdout.txt", "w", encoding="utf-8")
                 task._stderr_fh = open(task.output_dir / "stderr.txt", "w", encoding="utf-8")
             except Exception as e:
-                logger.warning(f"Task {task.task_id}: could not open sidecar files: {e}")
+                err_msg = (f"[!] Task {task.task_id}: could not open sidecar files "
+                           f"({type(e).__name__}: {e}). Output beyond {MAX_OUTPUT_LINES} "
+                           f"lines will be lost.")
+                logger.error(err_msg)
+                # Surface the failure in the task's own output so the user
+                # actually sees it instead of silently losing data.
+                task.error_lines.append(err_msg)
                 task._stdout_fh = task._stderr_fh = None
 
             def _persist(line: str, target_stream: str) -> None:
@@ -712,11 +722,24 @@ class TaskManager:
                         lines_list.append(decoded)
                         _persist(decoded, target)
 
-            # Read concurrently
-            await asyncio.gather(
+            # Read concurrently. return_exceptions=True is critical: without
+            # it, an error in ONE stream reader (closed pipe mid-read, encoding
+            # blow-up, etc.) immediately cancels the other reader and drops
+            # whatever was still in its buffer. With it, both streams drain
+            # to completion or to their own per-stream error; we then log
+            # any failures explicitly so they don't disappear.
+            stream_results = await asyncio.gather(
                 read_stream(process.stdout, task.output_lines),
-                read_stream(process.stderr, task.error_lines, redirect_to_output=True)
+                read_stream(process.stderr, task.error_lines, redirect_to_output=True),
+                return_exceptions=True,
             )
+            for name, result in zip(("stdout", "stderr"), stream_results):
+                if isinstance(result, BaseException):
+                    logger.warning(f"Task {task.task_id}: {name} stream reader "
+                                   f"raised {type(result).__name__}: {result}")
+                    task.error_lines.append(
+                        f"[!] {name} reader: {type(result).__name__}: {result}"
+                    )
 
             # Wait for completion
             task.exit_code = await process.wait()
@@ -788,8 +811,31 @@ class TaskManager:
             task.set_status(TaskStatus.CANCELLED)
             logger.info(f"Task {task.task_id} was cancelled")
             if task.process:
-                task.process.kill()
-                await task.process.wait()
+                # Kill the whole process group, not just the leader. The
+                # subprocess was launched with start_new_session=True so it
+                # gets its own pgid, and tools cygor invokes (nmap, naabu,
+                # playwright, curl) spawn children of their own. Killing
+                # only the leader leaves those children orphaned -- they
+                # continue scanning long after the user "cancelled" the
+                # task. (The cancel_task path already does this correctly;
+                # this asyncio cancellation path was the leftover.)
+                try:
+                    import os as _os
+                    import signal as _signal
+                    pgid = _os.getpgid(task.process.pid)
+                    _os.killpg(pgid, _signal.SIGKILL)
+                except Exception as _kill_err:
+                    logger.warning(f"killpg failed for cancelled task "
+                                   f"{task.task_id}: {_kill_err}; falling back to "
+                                   f"process.kill()")
+                    try:
+                        task.process.kill()
+                    except Exception:
+                        pass
+                try:
+                    await task.process.wait()
+                except Exception:
+                    pass
         except Exception as e:
             if task.status != TaskStatus.FAILED:
                 task.set_status(TaskStatus.FAILED)
