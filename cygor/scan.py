@@ -781,53 +781,56 @@ def run_naabu(host, interface=None, base_outdir=None, ports=None, rate=10000, ex
     # treated that as a hard fail (CalledProcessError -> return None) and
     # deleted the file, losing the valid hits along with the bad ones.
     # Now we always read the file if it exists and salvage the valid lines.
+    # The outer try/finally pairs with the temp-file cleanup at the bottom
+    # so cleanup runs on every exit path (return, raise, exception).
     try:
-        proc = subprocess.run(cmd_args, check=False)
-        returncode = proc.returncode
-    except Exception as e:
-        print(f"{Fore.RED}Error running naabu for {host}: {e}")
-        return None
-
-    valid_lines = []
-    if os.path.exists(output_file):
-        with open(output_file, "r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line or ":" not in line:
-                    continue
-                ip_part = line.split(":")[0].strip()
-                try:
-                    ipaddress.ip_address(ip_part)
-                    valid_lines.append(line)
-                except ValueError:
-                    continue
-
-        if valid_lines:
-            with open(output_file, "w", encoding="utf-8") as out:
-                out.write("\n".join(sorted(set(valid_lines))) + "\n")
-            if returncode == 0:
-                print(f"{Fore.GREEN}Naabu completed for {host}. {len(valid_lines)} valid entries saved: {output_file}")
-            else:
-                # Salvaged a partial result. Flag it so the operator knows the
-                # scan didn't finish cleanly but the kept hits are still real.
-                print(f"{Fore.YELLOW}[!] Naabu exited rc={returncode} for {host}; "
-                      f"salvaged {len(valid_lines)} valid entries to {output_file}{Style.RESET_ALL}")
-            return output_file
-        else:
-            print(f"{Fore.YELLOW}[!] Naabu found no valid open ports for {host}"
-                  f"{' (exit rc=' + str(returncode) + ')' if returncode else ''}{Style.RESET_ALL}")
-            try:
-                os.remove(output_file)
-            except Exception:
-                pass
+        try:
+            proc = subprocess.run(cmd_args, check=False)
+            returncode = proc.returncode
+        except Exception as e:
+            print(f"{Fore.RED}Error running naabu for {host}: {e}")
             return None
-    else:
-        print(f"{Fore.RED}[!] Naabu did not create output file for {host}"
-              f"{' (exit rc=' + str(returncode) + ')' if returncode else ''}{Style.RESET_ALL}")
-        return None
+
+        valid_lines = []
+        if os.path.exists(output_file):
+            with open(output_file, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line or ":" not in line:
+                        continue
+                    ip_part = line.split(":")[0].strip()
+                    try:
+                        ipaddress.ip_address(ip_part)
+                        valid_lines.append(line)
+                    except ValueError:
+                        continue
+
+            if valid_lines:
+                with open(output_file, "w", encoding="utf-8") as out:
+                    out.write("\n".join(sorted(set(valid_lines))) + "\n")
+                if returncode == 0:
+                    print(f"{Fore.GREEN}Naabu completed for {host}. {len(valid_lines)} valid entries saved: {output_file}")
+                else:
+                    # Salvaged a partial result. Flag it so the operator knows the
+                    # scan didn't finish cleanly but the kept hits are still real.
+                    print(f"{Fore.YELLOW}[!] Naabu exited rc={returncode} for {host}; "
+                          f"salvaged {len(valid_lines)} valid entries to {output_file}{Style.RESET_ALL}")
+                return output_file
+            else:
+                print(f"{Fore.YELLOW}[!] Naabu found no valid open ports for {host}"
+                      f"{' (exit rc=' + str(returncode) + ')' if returncode else ''}{Style.RESET_ALL}")
+                try:
+                    os.remove(output_file)
+                except Exception:
+                    pass
+                return None
+        else:
+            print(f"{Fore.RED}[!] Naabu did not create output file for {host}"
+                  f"{' (exit rc=' + str(returncode) + ')' if returncode else ''}{Style.RESET_ALL}")
+            return None
 
     finally:
-        # Always cleanup temporary files
+        # Always cleanup temporary files, even on early return / exception.
         for f in [tmp_path, exclude_file]:
             if f and os.path.exists(f):
                 try:
