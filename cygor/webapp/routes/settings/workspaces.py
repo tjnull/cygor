@@ -81,7 +81,10 @@ async def list_workspaces():
         cfg = _migrate_old_config(cfg)
 
         workspaces = cfg.get("workspaces", {})
-        active = cfg.get("active_workspace") or cfg.get("default_workspace")
+        # _migrate_old_config promotes any legacy 'default_workspace' to
+        # 'active_workspace' on load, so this is the only key the runtime
+        # needs to read.
+        active = cfg.get("active_workspace")
 
         result = []
         for name, ws_data in workspaces.items():
@@ -131,7 +134,10 @@ async def get_current_workspace():
         cfg = _load_config()
         cfg = _migrate_old_config(cfg)
 
-        active = cfg.get("active_workspace") or cfg.get("default_workspace")
+        # _migrate_old_config has already promoted any legacy
+        # 'default_workspace' value into active_workspace + workspaces,
+        # so this read is the single source of truth.
+        active = cfg.get("active_workspace")
         if not active:
             return JSONResponse({"active": None, "workspace": None})
 
@@ -156,14 +162,6 @@ async def get_current_workspace():
             return JSONResponse({
                 "active": active,
                 "workspace": workspace_info,
-            })
-
-        # Fallback to old format
-        old_ws = cfg.get("default_workspace")
-        if old_ws and isinstance(old_ws, str):
-            return JSONResponse({
-                "active": None,
-                "workspace": {"path": old_ws},
             })
 
         return JSONResponse({"active": None, "workspace": None})
@@ -245,10 +243,12 @@ async def create_workspace(req: Dict[str, Any]):
         if description:
             cfg["workspaces"][ws_name]["description"] = description
 
-        # Set as default/active if requested
+        # Mark as the active workspace if requested. 'default_workspace' is
+        # the legacy key; the runtime only reads 'active_workspace' now and
+        # _migrate_old_config drops the legacy key on load, so don't write it.
         if set_as_default:
-            cfg["default_workspace"] = ws_name
             cfg["active_workspace"] = ws_name
+            cfg.pop("default_workspace", None)
 
         _save_config(cfg)
 
@@ -297,9 +297,10 @@ async def switch_workspace(req: Dict[str, Any]):
         if not ws_path.exists():
             return JSONResponse({"error": f"Workspace path does not exist: {ws_path}"}, status_code=404)
 
-        # Switch workspace
+        # Switch the active workspace. Drop the legacy 'default_workspace'
+        # key if it's still around -- runtime only reads 'active_workspace'.
         cfg["active_workspace"] = name
-        cfg["default_workspace"] = name
+        cfg.pop("default_workspace", None)
         _update_last_used(name, cfg)
 
         # Point the running web process at the new workspace so results show
@@ -436,7 +437,11 @@ async def remove_workspace(name: str):
                 "hint": "Switch to another workspace first"
             }, status_code=400)
 
-        # Remove from registry
+        # Remove from registry. The legacy 'default_workspace' key
+        # shouldn't exist after _migrate_old_config(), but defensively
+        # drop it if a stale value happens to point at the removed
+        # workspace -- prevents the migration code from reviving it on
+        # the next load.
         cfg["workspaces"].pop(ws_name)
         if cfg.get("default_workspace") == ws_name:
             cfg.pop("default_workspace", None)

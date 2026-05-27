@@ -1054,15 +1054,20 @@ class SchedulerManager:
         # Generate task ID with 'sched-' prefix for scheduled tasks
         task_id = f"sched-{uuid.uuid4()}"
 
-        # Determine output directory based on module type
+        # Determine output directory based on module type. Every scheduled
+        # task must land somewhere under schedule-scans/ so it never overlaps
+        # with the ad-hoc cygor-enumeration-modules/<slug>/ tree (which is
+        # owned by interactive CLI + /api/modules runs).
         base_output_dir = os.environ.get("CYGOR_LOAD_DIR") or str(settings.RESULTS_DIR)
         module_name = config.get('module_name', '')
 
-        # Lockon uses a fixed output directory so screenshots accumulate in one
-        # place and the archive mechanism can preserve previous scan results.
-        # Other modules use timestamped directories for isolation.
+        # Lockon uses a stable (non-timestamped) output directory so its
+        # screenshots/ folder accumulates and its built-in archive mechanism
+        # (screenshots/archive/<ts>/) can preserve previous runs. Other
+        # modules get a per-run timestamped dir for full isolation. Both
+        # live under schedule-scans/ so they don't pollute the workspace root.
         if module_name == "lockon":
-            scheduled_output_dir = base_output_dir
+            scheduled_output_dir = f"{base_output_dir}/schedule-scans/lockon"
         else:
             timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
             scheduled_output_dir = f"{base_output_dir}/schedule-scans/module-scan/{timestamp}"
