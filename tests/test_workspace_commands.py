@@ -1,18 +1,22 @@
-"""Tests for the msfconsole-style `cygor workspace` command surface.
+"""Tests for the English-verb `cygor workspace` command surface.
 
-Surface (flat, flag-driven, always-active invariant):
+Surface (subcommand-style; no implicit workspace creation):
 
   cygor workspace                       List (* marks active)
-  cygor workspace <name>                Switch
-  cygor workspace -a <name> [--path]    Add (at default root, or --path)
-  cygor workspace -d <name> [--purge]   Delete (files stay unless --purge)
-  cygor workspace -r <old> <new>        Rename
-  cygor workspace --info <name>         Detail view
-  cygor workspace --clean [<name>]      Trim old scan output
-  cygor workspace --print-path          Print active path (scripting)
+  cygor workspace list                  Same (explicit)
+  cygor workspace create <name>         Create + select
+  cygor workspace create <name> --path  Create at a custom location
+  cygor workspace select <name>         Switch the active workspace
+  cygor workspace info <name>           Detail view
+  cygor workspace rename <old> <new>    Rename
+  cygor workspace delete <name>         Delete (files preserved)
+  cygor workspace delete <name> --purge Delete + wipe files
+  cygor workspace clean [<name>]        Trim old scan output
+  cygor workspace path                  Print active path (scripting)
 
-There is always exactly one active workspace; 'default' is auto-created at
-the workspaces root when the registry is empty.
+The user must explicitly create + select a workspace; nothing is created
+automatically. Commands that need an active workspace error with guidance
+when none is set.
 """
 import io
 import json
@@ -31,7 +35,6 @@ def cfg(tmp_path, monkeypatch):
     cfg_dir.mkdir(parents=True)
     monkeypatch.setattr(ws, "CONFIG_DIR", cfg_dir)
     monkeypatch.setattr(ws, "CONFIG_FILE", cfg_dir / "config.json")
-    # Point the workspaces root at the tmp dir so -a NAME creates under it.
     root = tmp_path / "workspaces"
     monkeypatch.setattr(ws, "DEFAULT_WORKSPACES_ROOT", root)
     monkeypatch.delenv("CYGOR_WORKSPACES_ROOT", raising=False)
@@ -46,7 +49,14 @@ def _run(*argv):
 
 
 def _config(cfg_dir):
-    return json.loads((cfg_dir / "config.json").read_text())
+    """Read the persisted config; empty dict when nothing's been written.
+
+    `cmd_list` doesn't write a config file in the empty-state path (nothing
+    to persist), so test helpers must handle a missing file gracefully."""
+    f = cfg_dir / "config.json"
+    if not f.exists():
+        return {}
+    return json.loads(f.read_text())
 
 
 def _active(cfg_dir):
@@ -54,125 +64,120 @@ def _active(cfg_dir):
 
 
 # ---------------------------------------------------------------------------
-# -a / add  (msf:  workspace -a NAME)
+# create
 # ---------------------------------------------------------------------------
-def test_add_creates_under_default_root(cfg, tmp_path):
-    rc = _run("-a", "acme")
+def test_create_under_default_root(cfg, tmp_path):
+    rc = _run("create", "acme")
     assert rc == 0
     assert _active(cfg) == "acme"
     assert (tmp_path / "workspaces" / "acme").is_dir()
     assert (tmp_path / "workspaces" / "acme" / ".cygor-workspace.json").is_file()
 
 
-def test_add_with_custom_path(cfg, tmp_path):
+def test_create_with_custom_path(cfg, tmp_path):
     target = tmp_path / "custom" / "acme"
-    rc = _run("-a", "acme", "--path", str(target))
+    rc = _run("create", "acme", "--path", str(target))
     assert rc == 0
     assert _active(cfg) == "acme"
     assert target.is_dir()
-    # Standard layout should be laid out at the custom path.
     for sub in ws.SUBDIRS:
         assert (target / sub).is_dir()
 
 
-def test_add_duplicate_name_errors(cfg):
-    _run("-a", "acme")
-    assert _run("-a", "acme") == 2
+def test_create_duplicate_name_errors(cfg):
+    _run("create", "acme")
+    assert _run("create", "acme") == 2
 
 
-def test_add_makes_workspace_active_immediately(cfg, tmp_path):
-    # msf semantics: adding a workspace switches into it.
-    _run("-a", "alpha")
-    _run("-a", "beta")
+def test_create_makes_workspace_active_immediately(cfg):
+    # Creating always selects the new workspace -- no extra step.
+    _run("create", "alpha")
+    _run("create", "beta")
     assert _active(cfg) == "beta"
 
 
 # ---------------------------------------------------------------------------
-# bare positional / switch  (msf:  workspace NAME)
+# select
 # ---------------------------------------------------------------------------
-def test_switch_by_name(cfg):
-    _run("-a", "alpha")
-    _run("-a", "beta")
+def test_select_by_name(cfg):
+    _run("create", "alpha")
+    _run("create", "beta")
     assert _active(cfg) == "beta"
-    assert _run("alpha") == 0
+    assert _run("select", "alpha") == 0
     assert _active(cfg) == "alpha"
 
 
-def test_switch_unknown_errors(cfg):
-    _run("-a", "alpha")
-    assert _run("nonexistent") == 2
+def test_select_unknown_errors(cfg):
+    _run("create", "alpha")
+    assert _run("select", "nonexistent") == 2
 
 
-def test_switch_to_workspace_with_missing_dir_errors(cfg, tmp_path):
-    _run("-a", "alpha")
-    # Yank the directory from underneath
+def test_select_workspace_with_missing_dir_errors(cfg, tmp_path):
+    _run("create", "alpha")
     import shutil
     shutil.rmtree(tmp_path / "workspaces" / "alpha")
-    assert _run("alpha") == 2
+    assert _run("select", "alpha") == 2
 
 
 # ---------------------------------------------------------------------------
-# -d / delete  (msf:  workspace -d NAME)
+# delete
 # ---------------------------------------------------------------------------
 def test_delete_unregisters_but_preserves_files(cfg, tmp_path):
-    _run("-a", "alpha")
-    _run("-a", "beta")  # 'beta' is now active
+    _run("create", "alpha")
+    _run("create", "beta")  # 'beta' is now active
     path_alpha = tmp_path / "workspaces" / "alpha"
-    assert _run("-d", "alpha") == 0
+    assert _run("delete", "alpha") == 0
     assert "alpha" not in _config(cfg)["workspaces"]
     assert path_alpha.exists()                    # files preserved by default
     assert _active(cfg) == "beta"                 # untouched (wasn't active)
 
 
-def test_delete_active_falls_back_to_remaining(cfg, tmp_path):
-    _run("-a", "alpha")
-    _run("-a", "beta")  # beta is active
+def test_delete_active_falls_back_to_remaining(cfg):
+    _run("create", "alpha")
+    _run("create", "beta")  # beta is active
     assert _active(cfg) == "beta"
-    assert _run("-d", "beta") == 0
-    # Auto-promote to the remaining one rather than leaving the user in
-    # "no workspace" state.
+    assert _run("delete", "beta") == 0
+    # Auto-promote to the remaining one -- never strand the user.
     assert _active(cfg) == "alpha"
 
 
 def test_delete_last_workspace_clears_active(cfg, tmp_path):
-    _run("-a", "alpha")
-    assert _run("-d", "alpha") == 0
+    _run("create", "alpha")
+    assert _run("delete", "alpha") == 0
     cfg_now = _config(cfg)
     assert cfg_now["workspaces"] == {}
     assert cfg_now.get("active_workspace") is None
-    # Files still on disk.
     assert (tmp_path / "workspaces" / "alpha").exists()
 
 
 def test_delete_with_purge_wipes_files(cfg, tmp_path, monkeypatch):
-    _run("-a", "alpha")
+    _run("create", "alpha")
     path_alpha = tmp_path / "workspaces" / "alpha"
-    # Bypass the interactive confirm.
     monkeypatch.setattr("builtins.input", lambda *a, **k: "alpha")
-    assert _run("-d", "alpha", "--purge") == 0
+    assert _run("delete", "alpha", "--purge") == 0
     assert not path_alpha.exists()
 
 
 def test_delete_purge_aborts_on_mismatched_confirmation(cfg, tmp_path, monkeypatch):
-    _run("-a", "alpha")
+    _run("create", "alpha")
     path_alpha = tmp_path / "workspaces" / "alpha"
     monkeypatch.setattr("builtins.input", lambda *a, **k: "wrong-name")
-    rc = _run("-d", "alpha", "--purge")
+    rc = _run("delete", "alpha", "--purge")
     assert rc == 1
-    assert path_alpha.exists()                    # NOT wiped
-    assert "alpha" in _config(cfg)["workspaces"]  # NOT unregistered
+    assert path_alpha.exists()
+    assert "alpha" in _config(cfg)["workspaces"]
 
 
 def test_delete_unknown_errors(cfg):
-    assert _run("-d", "nonexistent") == 2
+    assert _run("delete", "nonexistent") == 2
 
 
 # ---------------------------------------------------------------------------
-# -r / rename  (msf:  workspace -r OLD NEW)
+# rename
 # ---------------------------------------------------------------------------
 def test_rename_changes_key_and_preserves_active(cfg, tmp_path):
-    _run("-a", "alpha")
-    assert _run("-r", "alpha", "alpha-2026") == 0
+    _run("create", "alpha")
+    assert _run("rename", "alpha", "alpha-2026") == 0
     cfg_now = _config(cfg)
     assert "alpha" not in cfg_now["workspaces"]
     assert "alpha-2026" in cfg_now["workspaces"]
@@ -182,51 +187,85 @@ def test_rename_changes_key_and_preserves_active(cfg, tmp_path):
 
 
 def test_rename_unknown_old_errors(cfg):
-    _run("-a", "alpha")
-    assert _run("-r", "nonexistent", "x") == 2
+    _run("create", "alpha")
+    assert _run("rename", "nonexistent", "x") == 2
 
 
 def test_rename_collision_errors(cfg):
-    _run("-a", "alpha")
-    _run("-a", "beta")
-    assert _run("-r", "alpha", "beta") == 2
+    _run("create", "alpha")
+    _run("create", "beta")
+    assert _run("rename", "alpha", "beta") == 2
 
 
 # ---------------------------------------------------------------------------
-# bare workspace  (msf:  workspace)
+# bare workspace / list
 # ---------------------------------------------------------------------------
-def test_bare_workspace_auto_creates_default(cfg, tmp_path):
-    """Empty registry + bare command must auto-create 'default' so the user
-    is never in a 'no workspace' state. msf invariant."""
+def test_bare_workspace_empty_state_does_not_create_anything(cfg, tmp_path, capsys):
+    """Empty registry + bare command must NOT create anything; it should
+    print an empty-state hint and point the user at `create`. The user is
+    expected to set up their own workspace explicitly."""
     rc = _run()
+    out = capsys.readouterr().out
     assert rc == 0
     cfg_now = _config(cfg)
-    assert "default" in cfg_now["workspaces"]
-    assert cfg_now["active_workspace"] == "default"
-    assert (tmp_path / "workspaces" / "default").is_dir()
+    assert cfg_now.get("workspaces", {}) == {}
+    assert cfg_now.get("active_workspace") is None
+    assert not (tmp_path / "workspaces" / "default").exists()
+    assert "No workspaces registered" in out
+    assert "cygor workspace create" in out
+
+
+def test_bare_workspace_warns_when_workspaces_exist_but_none_selected(cfg, capsys):
+    """If the user has workspaces but somehow none is selected (e.g. just
+    deleted the active one and the registry has zero), list still works and
+    warns clearly so they know scans won't have a target."""
+    _run("create", "alpha")
+    _run("delete", "alpha")  # leaves the registry empty
+    # Manually plant one workspace via the registry without selecting it,
+    # to exercise the "have workspaces, none selected" path.
+    _run("create", "beta")
+    # Drop the active pointer to simulate the gap.
+    import json as _json
+    data = _config(cfg)
+    data.pop("active_workspace", None)
+    (cfg / "config.json").write_text(_json.dumps(data))
+    capsys.readouterr()
+    rc = _run()
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "No workspace is currently selected" in out
+    assert "cygor workspace select" in out
 
 
 def test_bare_workspace_lists_with_asterisk(cfg):
-    _run("-a", "alpha")
-    _run("-a", "beta")
+    _run("create", "alpha")
+    _run("create", "beta")
     buf = io.StringIO()
     with redirect_stdout(buf):
         _run()
     out = buf.getvalue()
-    # The active workspace (beta, last added) should have an asterisk.
     assert "*" in out
     assert "alpha" in out and "beta" in out
 
 
+def test_list_subcommand_works(cfg):
+    """Explicit 'list' verb does the same thing as bare workspace."""
+    _run("create", "alpha")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        _run("list")
+    assert "alpha" in buf.getvalue()
+
+
 # ---------------------------------------------------------------------------
-# --info
+# info
 # ---------------------------------------------------------------------------
 def test_info_shows_subdir_breakdown(cfg, tmp_path, capsys):
-    _run("-a", "alpha")
+    _run("create", "alpha")
     base = tmp_path / "workspaces" / "alpha"
     (base / "nmap" / "run-1").mkdir()
     (base / "nmap" / "run-1" / "scan.xml").write_text("data")
-    rc = _run("--info", "alpha")
+    rc = _run("info", "alpha")
     out = capsys.readouterr().out
     assert rc == 0
     assert "Subdirectories" in out
@@ -234,16 +273,16 @@ def test_info_shows_subdir_breakdown(cfg, tmp_path, capsys):
 
 
 def test_info_unknown_errors(cfg):
-    assert _run("--info", "nonexistent") == 2
+    assert _run("info", "nonexistent") == 2
 
 
 # ---------------------------------------------------------------------------
-# --print-path
+# path
 # ---------------------------------------------------------------------------
-def test_print_path_emits_clean_bytes(cfg, tmp_path, capfd):
-    _run("-a", "alpha")
+def test_path_emits_clean_bytes(cfg, tmp_path, capfd):
+    _run("create", "alpha")
     capfd.readouterr()  # drain
-    rc = _run("--print-path")
+    rc = _run("path")
     out = capfd.readouterr().out
     assert rc == 0
     assert out == f"{tmp_path / 'workspaces' / 'alpha'}\n"
@@ -252,10 +291,10 @@ def test_print_path_emits_clean_bytes(cfg, tmp_path, capfd):
 
 
 # ---------------------------------------------------------------------------
-# --clean
+# clean
 # ---------------------------------------------------------------------------
 def test_clean_keep_last(cfg, tmp_path):
-    _run("-a", "alpha")
+    _run("create", "alpha")
     nmap = tmp_path / "workspaces" / "alpha" / "nmap"
     for i in range(3):
         r = nmap / f"run-{i}"
@@ -263,31 +302,38 @@ def test_clean_keep_last(cfg, tmp_path):
         (r / "scan.xml").write_text("x" * 100)
         time.sleep(0.01)
     # No positional name -> operates on active (alpha).
-    assert _run("--clean", "--keep-last", "1", "--yes") == 0
+    assert _run("clean", "--keep-last", "1", "--yes") == 0
     remaining = sorted(p.name for p in nmap.iterdir())
     assert remaining == ["run-2"]
 
 
 def test_clean_dry_run_keeps_everything(cfg, tmp_path):
-    _run("-a", "alpha")
+    _run("create", "alpha")
     nmap = tmp_path / "workspaces" / "alpha" / "nmap"
     (nmap / "run-1").mkdir()
     (nmap / "run-1" / "scan.xml").write_text("data")
-    assert _run("--clean", "alpha", "--dry-run") == 0
+    assert _run("clean", "alpha", "--dry-run") == 0
     assert (nmap / "run-1" / "scan.xml").exists()
 
 
 # ---------------------------------------------------------------------------
-# Always-active invariant
+# No implicit workspace -- empty registry / no selection means None.
 # ---------------------------------------------------------------------------
-def test_active_workspace_path_auto_creates_default_when_empty(cfg, tmp_path):
-    """First call to active_workspace_path() with an empty registry creates
-    'default' and returns its path. This is what enables 'cygor scan' etc. to
-    always have somewhere to write."""
-    p = ws.active_workspace_path()
-    assert p == tmp_path / "workspaces" / "default"
-    assert p.is_dir()
-    assert _active(cfg) == "default"
+def test_active_workspace_path_returns_none_when_empty(cfg, tmp_path):
+    """No workspaces registered -> None. Nothing gets created on disk."""
+    assert ws.active_workspace_path() is None
+    assert not (tmp_path / "workspaces").exists()
+
+
+def test_active_workspace_path_returns_none_when_no_selection(cfg, tmp_path):
+    """Workspaces exist but none is selected -> None."""
+    _run("create", "alpha")
+    # Wipe the active pointer.
+    import json as _json
+    data = _config(cfg)
+    data.pop("active_workspace", None)
+    (cfg / "config.json").write_text(_json.dumps(data))
+    assert ws.active_workspace_path() is None
 
 
 def test_workspaces_root_env_override(monkeypatch, tmp_path):
@@ -296,8 +342,25 @@ def test_workspaces_root_env_override(monkeypatch, tmp_path):
     assert ws.workspaces_root() == target
 
 
+def test_clean_errors_when_no_workspace_selected(cfg, capsys):
+    """`clean` with no name AND no active workspace must error out (rather
+    than silently doing nothing or auto-creating something)."""
+    rc = _run("clean")
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "No workspace is selected" in err
+
+
+def test_path_returns_1_when_no_workspace_selected(cfg, capfd):
+    """`path` exits 1 with no output -- shell scripts get a clean failure."""
+    rc = _run("path")
+    captured = capfd.readouterr()
+    assert rc == 1
+    assert captured.out == ""
+
+
 # ---------------------------------------------------------------------------
-# Env-var resolution (still honored)
+# Env-var resolution (unchanged)
 # ---------------------------------------------------------------------------
 def test_workspace_env_prefers_workspace(monkeypatch, tmp_path):
     monkeypatch.setenv("CYGOR_RESULTS_DIR", str(tmp_path / "legacy"))

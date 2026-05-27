@@ -1,13 +1,12 @@
 """Tests for the central workspace resolver in cygor.workspace.
 
-Resolution precedence (unchanged):
+Resolution precedence:
   1. Explicit -o/--workspace argument
   2. $CYGOR_WORKSPACE / $CYGOR_RESULTS_DIR
   3. Active workspace from config
 
-With the msfconsole-style always-active invariant, step 3 *auto-creates*
-'default' at the workspaces root if the registry is empty. Resolution never
-returns None in practice; require_workspace() never has to error.
+If none of those produce a path, resolve_workspace() returns None and
+require_workspace() exits with guidance. Nothing is created implicitly.
 """
 import json
 from pathlib import Path
@@ -19,9 +18,7 @@ from cygor import workspace as ws
 
 @pytest.fixture
 def isolated_config(tmp_path, monkeypatch):
-    """Point both the workspace config AND the workspaces root at temp dirs
-    so the always-active auto-create writes there, never under the real
-    home directory."""
+    """Point the workspace config at a temp dir and clear workspace env vars."""
     cfg_home = tmp_path / "xdg-config"
     monkeypatch.setenv("XDG_CONFIG_HOME", str(cfg_home))
     monkeypatch.delenv("CYGOR_WORKSPACE", raising=False)
@@ -32,6 +29,8 @@ def isolated_config(tmp_path, monkeypatch):
     cfg_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(ws, "CONFIG_DIR", cfg_dir)
     monkeypatch.setattr(ws, "CONFIG_FILE", cfg_dir / "config.json")
+    # Also pin the workspaces root so nothing escapes into the real home if
+    # something does try to write there.
     monkeypatch.setattr(ws, "DEFAULT_WORKSPACES_ROOT", tmp_path / "workspaces")
     return cfg_dir
 
@@ -72,26 +71,24 @@ def test_resolve_active_workspace_config(isolated_config, tmp_path):
     assert ws.resolve_workspace() == Path(str(tmp_path / "cfg-ws"))
 
 
-def test_resolve_auto_creates_default_when_unset(isolated_config, tmp_path):
-    """With nothing configured, resolve_workspace() falls through to
-    active_workspace_path() which auto-creates 'default' at the workspaces
-    root and returns its path. The msfconsole invariant: always exactly one
-    active workspace."""
-    got = ws.resolve_workspace()
-    assert got == tmp_path / "workspaces" / "default"
-    assert got.is_dir()
-    # And it's persisted -- the next call returns the same path without
-    # creating a different one.
-    assert ws.resolve_workspace() == got
+def test_resolve_none_when_unset(isolated_config, tmp_path):
+    """With nothing configured, resolve_workspace() returns None -- and
+    crucially does NOT create anything on disk."""
+    assert ws.resolve_workspace() is None
+    assert not (tmp_path / "workspaces").exists()
 
 
-def test_require_workspace_auto_creates_default(isolated_config, tmp_path):
-    """require_workspace() never exits when nothing is configured -- it
-    falls through to the always-active auto-create."""
-    got = ws.require_workspace()
-    assert got == tmp_path / "workspaces" / "default"
-    for sub in ws.SUBDIRS:
-        assert (got / sub).is_dir()
+def test_require_workspace_exits_when_unset(isolated_config, capsys, tmp_path):
+    """require_workspace() must exit(2) with guidance when nothing is set,
+    not auto-create anything. Tools downstream rely on this error path."""
+    with pytest.raises(SystemExit) as exc:
+        ws.require_workspace()
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "No workspace is selected" in err
+    assert "cygor workspace create" in err
+    # Nothing got created on disk by the failed call.
+    assert not (tmp_path / "workspaces").exists()
 
 
 def test_require_workspace_creates_layout(isolated_config, tmp_path):

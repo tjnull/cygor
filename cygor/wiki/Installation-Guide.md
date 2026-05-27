@@ -116,12 +116,12 @@ cygor web start --help             # web UI options
 Workspaces keep per-engagement results, scan files, and databases isolated.
 
 ```bash
-# Add a workspace (created under ~/.cygor/workspaces/<name>/ by default
-# and activated immediately, msfconsole-style)
-cygor workspace -a my-engagement
+# Create a new workspace (placed under ~/.cygor/workspaces/<name>/ by
+# default and selected immediately)
+cygor workspace create my-engagement
 
-# Or create it at a custom path
-cygor workspace -a my-engagement --path /mnt/engagements/acme
+# Or pin it to a custom path
+cygor workspace create my-engagement --path /mnt/engagements/acme
 
 # `cygor workspace` with no args lists workspaces (* marks active)
 cygor workspace

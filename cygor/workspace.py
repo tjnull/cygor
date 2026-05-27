@@ -18,21 +18,15 @@ APP_NAME = "cygor"
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / APP_NAME
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
-# msfconsole-style "where do workspaces live by default". Overrideable per host
-# via $CYGOR_WORKSPACES_ROOT; mirrors how msfconsole keeps everything under
-# ~/.msf4/. 'cygor workspace -a NAME' creates <root>/<name>/ unless --path is
-# passed to point somewhere else (shared drives, large engagement folders).
+# Default directory under which `cygor workspace create NAME` will place new
+# workspaces (becomes <root>/<name>/). Per-host override via the env var
+# below; users can also bypass the root entirely by passing --path on create.
 DEFAULT_WORKSPACES_ROOT = Path.home() / ".cygor" / "workspaces"
-
-# Name of the workspace auto-created when the registry is empty. Mirrors
-# msfconsole's 'default' -- there is always exactly one active workspace,
-# never a "free mode" with nowhere to write output.
-DEFAULT_WORKSPACE_NAME = "default"
 
 
 def workspaces_root() -> Path:
-    """Where new `-a NAME` workspaces are created. Env var wins; otherwise
-    DEFAULT_WORKSPACES_ROOT. Always resolved + expanded."""
+    """Where new `cygor workspace create NAME` workspaces are placed. Env
+    var wins; otherwise DEFAULT_WORKSPACES_ROOT. Always resolved + expanded."""
     env = os.environ.get("CYGOR_WORKSPACES_ROOT")
     base = Path(env).expanduser() if env else DEFAULT_WORKSPACES_ROOT
     return base.resolve() if base.exists() else base
@@ -260,51 +254,34 @@ def app_log_dir() -> Path:
 # workspace registered with `cygor workspace`.
 # ----------------------------------------------------------------------
 NO_WORKSPACE_MESSAGE = (
-    "No workspace available.\n"
-    "  Cygor normally auto-creates a 'default' workspace on first use, but the\n"
-    "  auto-create just failed (read-only home directory, full disk, or similar).\n"
-    "  Either fix that, or work around it:\n"
-    "    - pass an explicit output directory:  -o /path/to/workspace\n"
+    "No workspace is selected.\n"
+    "  Cygor needs a workspace before it can save scan/module output. Pick\n"
+    "  one of:\n"
+    "    - create + select a new one:  cygor workspace create <name>\n"
+    "    - select an existing one:     cygor workspace select <name>\n"
+    "    - pass a one-off output dir:  -o /path/to/output\n"
     "    - or export CYGOR_WORKSPACE=/path/to/workspace"
 )
 
 
 def active_workspace_path() -> Optional[Path]:
-    """Path of the active workspace from config.
+    """Path of the active workspace from config, or None if none is set.
 
-    msfconsole-style invariant: there is *always* an active workspace. If the
-    registry is empty, the 'default' workspace is auto-created at the
-    workspaces root and activated -- so every cygor tool always has somewhere
-    to write output (no "free mode", no None returns).
+    The user must explicitly create + select a workspace before scans /
+    modules will have somewhere to write to. Tools that need a workspace
+    should call require_workspace() so they get the standard "no workspace"
+    error message instead of silently failing.
 
-    The only situation where this still returns None is if the auto-create
-    itself failed (e.g. read-only home directory). Callers should still
-    handle the None case defensively.
+    Legacy 'default_workspace' configs are promoted to 'active_workspace'
+    by _migrate_old_config() on load, so this function only looks at the
+    canonical key.
     """
     cfg = _migrate_old_config(_load_config())
     active = cfg.get("active_workspace")
-    workspaces = cfg.get("workspaces", {})
-
-    if active and active in workspaces:
-        entry = workspaces[active]
-        if entry.get("path"):
+    if active:
+        entry = cfg.get("workspaces", {}).get(active)
+        if entry and entry.get("path"):
             return Path(entry["path"])
-
-    # Registry empty (or active pointer dangling) -> auto-create 'default'.
-    # This is the msf invariant: there is always exactly one active workspace.
-    if not workspaces:
-        try:
-            ws_path = workspaces_root() / DEFAULT_WORKSPACE_NAME
-            ensure_workspace_dirs(ws_path)
-            _register_workspace(cfg, ws_path, name=DEFAULT_WORKSPACE_NAME)
-            _set_active(cfg, DEFAULT_WORKSPACE_NAME)
-            _save_config(cfg)
-            return ws_path
-        except Exception:
-            # Read-only home, full disk, etc. Don't crash the rest of cygor
-            # -- the caller's NO_WORKSPACE_MESSAGE will still fire if needed.
-            return None
-
     return None
 
 
@@ -392,13 +369,12 @@ def _fmt_last_used(iso_ts: str) -> str:
 
 
 def _print_workspace_list(cfg: dict) -> None:
-    """msfconsole-style list: `* name   path   size · used X ago` per line.
+    """Asterisk-prefixed list: `* name   path   size · used X ago` per line.
 
-    The asterisk marks the active workspace, same convention as msfconsole's
-    `workspace` output (`*default  HR  IT  ACC`). Sorted with the active one
-    first, then the rest alphabetically -- 'workspace' is the command you'll
-    use most, and seeing the current one at the top matters more than strict
-    alphabetic ordering.
+    The active workspace is prefixed with `*` and sorted to the top; other
+    workspaces follow alphabetically. Putting the current one at the top
+    matters more than strict alphabetic order -- 'list' is the command
+    you'll run most when you want to confirm what's active.
     """
     workspaces = cfg.get("workspaces", {})
     if not workspaces:
@@ -426,42 +402,30 @@ def _print_workspace_list(cfg: dict) -> None:
         print(f"  {marker} {name_col}  {path_col}{tail}")
 
 
-def _ensure_default_workspace(cfg: dict) -> str:
-    """Auto-create the 'default' workspace at the workspaces root if the
-    registry is empty. Returns the workspace name. Idempotent: no-op when
-    workspaces already exist."""
-    if cfg.get("workspaces"):
-        return cfg.get("active_workspace") or next(iter(cfg["workspaces"]))
-    ws_path = workspaces_root() / DEFAULT_WORKSPACE_NAME
-    ensure_workspace_dirs(ws_path)
-    name = _register_workspace(cfg, ws_path, name=DEFAULT_WORKSPACE_NAME)
-    _set_active(cfg, name)
-    _save_config(cfg)
-    return name
-
-
 # ----------------------------------------------------------------------
-# Commands (msfconsole-style: flat surface, flag-driven)
+# Commands (English-verb subcommand surface)
 # ----------------------------------------------------------------------
 def cmd_list(args: argparse.Namespace) -> int:
-    """Bare `cygor workspace`: list workspaces, asterisk-prefixed active.
-
-    Auto-creates 'default' if the registry is empty so the user has a
-    workspace to write to from the very first invocation. After auto-creation
-    the list shows the freshly-made entry.
-    """
+    """`cygor workspace list` (or bare `cygor workspace`): list workspaces,
+    asterisk-prefixed active. When nothing is registered, print a friendly
+    empty-state pointing at `create`."""
     cfg = _migrate_old_config(_load_config())
     if not cfg.get("workspaces"):
-        _ensure_default_workspace(cfg)
-        print(f"{Fore.CYAN}[i]{Style.RESET_ALL} Created 'default' workspace at "
-              f"{workspaces_root() / DEFAULT_WORKSPACE_NAME}")
-        print()
+        print(f"{Fore.CYAN}[i]{Style.RESET_ALL} No workspaces registered yet.")
+        print(f"    Create one with: {Fore.CYAN}cygor workspace create <name>{Style.RESET_ALL}")
+        return 0
     _print_workspace_list(cfg)
+    if not cfg.get("active_workspace"):
+        # Workspaces exist but none is selected -- scans won't have a target.
+        print()
+        print(f"{Fore.YELLOW}[!]{Style.RESET_ALL} No workspace is currently selected.")
+        print(f"    Pick one with: {Fore.CYAN}cygor workspace select <name>{Style.RESET_ALL}")
     return 0
 
 
-def cmd_switch(name: str) -> int:
-    """`cygor workspace <name>`: switch the active workspace by name."""
+def cmd_select(args: argparse.Namespace) -> int:
+    """`cygor workspace select <name>`: switch the active workspace by name."""
+    name = args.name
     cfg = _migrate_old_config(_load_config())
     if name not in cfg.get("workspaces", {}):
         print(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Workspace not found: {name}", file=sys.stderr)
@@ -471,7 +435,7 @@ def cmd_switch(name: str) -> int:
             for n in known:
                 print(f"      - {n}", file=sys.stderr)
         else:
-            print(f"    Create one with: cygor workspace -a <name>", file=sys.stderr)
+            print(f"    Create one with: cygor workspace create <name>", file=sys.stderr)
         return 2
 
     ws_path = _resolve_path(cfg["workspaces"][name]["path"])
@@ -483,27 +447,24 @@ def cmd_switch(name: str) -> int:
     _set_active(cfg, name)
     _update_last_used(name, cfg)
     _save_config(cfg)
-    print(f"{Fore.GREEN}[✓]{Style.RESET_ALL} Workspace: {Fore.CYAN}{name}{Style.RESET_ALL}  "
-          f"({ws_path})")
+    print(f"{Fore.GREEN}[✓]{Style.RESET_ALL} Selected workspace: "
+          f"{Fore.CYAN}{name}{Style.RESET_ALL}  ({ws_path})")
     return 0
 
 
-def cmd_add(name: str, custom_path: Optional[str] = None) -> int:
-    """`cygor workspace -a <name>`: create a new workspace, register it,
-    activate it. Default location is `<workspaces_root>/<name>/`; pass
+def cmd_create(args: argparse.Namespace) -> int:
+    """`cygor workspace create <name>`: create a new workspace, register it,
+    select it. Default location is `<workspaces_root>/<name>/`; pass
     `--path /custom/dir` to place it elsewhere (shared drives, large
     engagement folders)."""
+    name = args.name
     cfg = _migrate_old_config(_load_config())
     if name in cfg.get("workspaces", {}):
         print(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Workspace already exists: {name}",
               file=sys.stderr)
         return 2
 
-    if custom_path:
-        ws_path = _resolve_path(custom_path)
-    else:
-        ws_path = workspaces_root() / name
-
+    ws_path = _resolve_path(args.path) if getattr(args, "path", None) else workspaces_root() / name
     ws_path.mkdir(parents=True, exist_ok=True)
 
     # Standard layout + the marker file so future tooling recognises this dir.
@@ -530,25 +491,29 @@ def cmd_add(name: str, custom_path: Optional[str] = None) -> int:
     }, indent=2))
 
     ws_name = _register_workspace(cfg, ws_path, name=name)
-    # msf semantics: switch into the newly-created workspace.
+    # Creating a workspace selects it immediately -- saves a follow-up
+    # 'select' call for the common case of "make and use".
     _set_active(cfg, ws_name)
     _save_config(cfg)
-    print(f"{Fore.GREEN}[✓]{Style.RESET_ALL} Added workspace: "
+    print(f"{Fore.GREEN}[✓]{Style.RESET_ALL} Created workspace: "
           f"{Fore.CYAN}{ws_name}{Style.RESET_ALL}  ({ws_path})")
     return 0
 
 
-def cmd_delete(name: str, purge: bool = False) -> int:
-    """`cygor workspace -d <name>`: remove a workspace from the registry.
+def cmd_delete(args: argparse.Namespace) -> int:
+    """`cygor workspace delete <name>`: remove a workspace from the registry.
 
-    Default behaviour preserves files on disk -- removal is just unregistering.
-    Pass `--purge` to also delete the directory tree.
+    Default behaviour preserves files on disk -- delete is just unregistering.
+    Pass `--purge` to also delete the directory tree (asks for confirmation
+    first; type the workspace name to proceed).
 
-    If you delete the active workspace, the active pointer falls back to
-    'default' (auto-created at the workspaces root if it doesn't exist).
-    This preserves the msf invariant: there is always exactly one active
-    workspace.
+    If you delete the active workspace, the next remaining one is auto-
+    selected so you're never stranded. If the registry ends up empty,
+    nothing is selected; the user has to create or select one before
+    scans can save output again.
     """
+    name = args.name
+    purge = getattr(args, "purge", False)
     cfg = _migrate_old_config(_load_config())
     if name not in cfg.get("workspaces", {}):
         print(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Workspace not found: {name}", file=sys.stderr)
@@ -559,17 +524,14 @@ def cmd_delete(name: str, purge: bool = False) -> int:
     was_active = (name == cfg.get("active_workspace"))
 
     if purge:
-        # Confirmation -- this is destructive even with -y because it deletes
-        # whatever scan data is in the directory.
-        if not getattr(cmd_delete, "_skip_confirm", False):
-            try:
-                print(f"{Fore.YELLOW}This will permanently delete:{Style.RESET_ALL} {ws_path}")
-                resp = input("Type the workspace name to confirm: ").strip()
-            except EOFError:
-                resp = ""
-            if resp != name:
-                print(f"{Fore.CYAN}[i]{Style.RESET_ALL} Aborted -- name did not match.")
-                return 1
+        try:
+            print(f"{Fore.YELLOW}This will permanently delete:{Style.RESET_ALL} {ws_path}")
+            resp = input("Type the workspace name to confirm: ").strip()
+        except EOFError:
+            resp = ""
+        if resp != name:
+            print(f"{Fore.CYAN}[i]{Style.RESET_ALL} Aborted -- name did not match.")
+            return 1
         if ws_path.exists():
             shutil.rmtree(ws_path, ignore_errors=True)
 
@@ -585,29 +547,29 @@ def cmd_delete(name: str, purge: bool = False) -> int:
         print(f"{Fore.GREEN}[✓]{Style.RESET_ALL} Deleted workspace: "
               f"{Fore.CYAN}{name}{Style.RESET_ALL}")
         print(f"    Files preserved at: {ws_data['path']}")
-        print(f"    Use {Fore.CYAN}--purge{Style.RESET_ALL} next time to also delete the directory.")
+        print(f"    Pass {Fore.CYAN}--purge{Style.RESET_ALL} next time to also delete the directory.")
 
-    # Always-active invariant: if we removed the active workspace, the next
-    # active_workspace_path() call will auto-recreate 'default' as needed.
     if was_active:
         remaining = sorted(cfg.get("workspaces", {}).keys())
         if remaining:
-            # Auto-promote the first remaining workspace.
             _set_active(cfg, remaining[0])
             _save_config(cfg)
-            print(f"    Switched to: {Fore.CYAN}{remaining[0]}{Style.RESET_ALL}")
+            print(f"    Selected: {Fore.CYAN}{remaining[0]}{Style.RESET_ALL}")
         else:
-            print(f"    Registry is now empty -- next cygor run will auto-create 'default'.")
+            print(f"    No workspaces left. Create one with: "
+                  f"{Fore.CYAN}cygor workspace create <name>{Style.RESET_ALL}")
     return 0
 
 
-def cmd_rename(old: str, new: str) -> int:
-    """`cygor workspace -r <old> <new>`: rename a workspace in the registry.
+def cmd_rename(args: argparse.Namespace) -> int:
+    """`cygor workspace rename <old> <new>`: rename a workspace in the registry.
 
-    Renames the key only; the directory on disk keeps its current name.
-    Preserves activation state (if the renamed workspace was active, it stays
-    active under the new name). Errors if old doesn't exist or new collides.
+    Renames the registry key only; the directory on disk keeps its current
+    name. Preserves activation state (if the renamed workspace was active,
+    it stays active under the new name). Errors if `old` doesn't exist or
+    `new` collides with an existing workspace.
     """
+    old, new = args.old, args.new
     cfg = _migrate_old_config(_load_config())
     if old not in cfg.get("workspaces", {}):
         print(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Workspace not found: {old}", file=sys.stderr)
@@ -626,9 +588,10 @@ def cmd_rename(old: str, new: str) -> int:
     return 0
 
 
-def cmd_info(name: str) -> int:
-    """`cygor workspace --info <name>`: show path/status/timestamps/size +
+def cmd_info(args: argparse.Namespace) -> int:
+    """`cygor workspace info <name>`: show path/status/timestamps/size +
     per-subdirectory file counts."""
+    name = args.name
     cfg = _migrate_old_config(_load_config())
     if name not in cfg.get("workspaces", {}):
         print(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Workspace not found: {name}", file=sys.stderr)
@@ -663,13 +626,15 @@ def cmd_info(name: str) -> int:
     return 0
 
 
-def cmd_print_path() -> int:
-    """`cygor workspace --print-path`: print the active workspace path,
-    nothing else. Designed for shell substitution:
+def cmd_path(args: argparse.Namespace) -> int:
+    """`cygor workspace path`: print the active workspace path, nothing else.
 
-        cd "$(cygor workspace --print-path)"
+    Designed for shell substitution:  `cd "$(cygor workspace path)"`
 
-    Writes raw bytes to fd 1 to bypass colorama's autoreset wrapper.
+    Writes raw bytes to fd 1 to bypass colorama's autoreset wrapper -- the
+    CLI initialises colorama with autoreset=True everywhere else, which
+    appends a \\x1b[0m reset after every print() and would contaminate
+    output meant for `$(...)`.
     """
     p = active_workspace_path()
     if p is None:
@@ -679,10 +644,11 @@ def cmd_print_path() -> int:
 
 
 def cmd_clean(args: argparse.Namespace) -> int:
-    """`cygor workspace --clean`: remove generated scan output from a workspace
-    (preserves the layout). With no name, operates on the active workspace."""
+    """`cygor workspace clean [<name>]`: remove generated scan output from a
+    workspace (preserves the layout). With no name, operates on the active
+    workspace."""
     cfg = _migrate_old_config(_load_config())
-    name = getattr(args, "clean_target", None)
+    name = getattr(args, "name", None)
     if name:
         if name not in cfg.get("workspaces", {}):
             print(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Workspace not found: {name}",
@@ -692,7 +658,11 @@ def cmd_clean(args: argparse.Namespace) -> int:
     else:
         ws_path = active_workspace_path()
         if ws_path is None:
-            print(f"{Fore.YELLOW}[!]{Style.RESET_ALL} No active workspace and none specified.",
+            print(f"{Fore.YELLOW}[!]{Style.RESET_ALL} No workspace is selected, and none was passed.",
+                  file=sys.stderr)
+            print(f"    Pass a name: {Fore.CYAN}cygor workspace clean <name>{Style.RESET_ALL}",
+                  file=sys.stderr)
+            print(f"    Or select one first: {Fore.CYAN}cygor workspace select <name>{Style.RESET_ALL}",
                   file=sys.stderr)
             return 2
 
@@ -752,88 +722,139 @@ def cmd_clean(args: argparse.Namespace) -> int:
 
 
 # ----------------------------------------------------------------------
-# CLI Parser (msfconsole-style flat surface)
+# CLI Parser  (subcommand style, English verbs)
 # ----------------------------------------------------------------------
 def build_parser(prog="cygor workspace") -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog=prog,
         description=(
             "Manage Cygor workspaces -- the directories where scan and module "
-            "output is saved. Command syntax mirrors msfconsole's `workspace`: "
-            "bare command lists, `name` switches, `-a NAME` adds, `-d NAME` "
-            "deletes, `-r OLD NEW` renames. There is always exactly one active "
-            "workspace; 'default' is auto-created on first use."
+            "output is saved. Run with no arguments (or `list`) to see what's "
+            "registered. You must create a workspace and select it before "
+            "scans can save output; nothing is created automatically. New "
+            f"workspaces go under {DEFAULT_WORKSPACES_ROOT} unless you pass "
+            "--path on create (or override the root with $CYGOR_WORKSPACES_ROOT)."
         ),
-        epilog=f"""
-Workspaces live under {DEFAULT_WORKSPACES_ROOT} by default
-(override with $CYGOR_WORKSPACES_ROOT). `-a NAME` puts a new workspace there;
-pass `--path /custom/dir` to place it elsewhere.
-
+        epilog="""
 Examples:
-  # List workspaces (active marked with *)
+  # List workspaces (the active one is marked with *)
   cygor workspace
+  cygor workspace list
 
-  # Switch to one
-  cygor workspace acme
+  # Create a new workspace (created under the workspaces root by default)
+  cygor workspace create acme
 
-  # Add a new one (created under the workspaces root by default)
-  cygor workspace -a acme
+  # Create at a custom location (shared drive, large engagement folder)
+  cygor workspace create acme --path /mnt/engagements/acme
 
-  # Add at a custom location (shared drive, large engagement folder)
-  cygor workspace -a acme --path /mnt/engagements/acme
+  # Switch the active workspace
+  cygor workspace select acme
 
-  # Delete (files stay)
-  cygor workspace -d acme
-
-  # Delete + wipe the directory on disk
-  cygor workspace -d acme --purge
+  # Detail view of one workspace
+  cygor workspace info acme
 
   # Rename
-  cygor workspace -r acme acme-2026
+  cygor workspace rename acme acme-2026
 
-  # Detail view + cleanup + scripting
-  cygor workspace --info acme
-  cygor workspace --clean --keep-last 3
-  cd "$(cygor workspace --print-path)"
+  # Delete from the registry (files preserved)
+  cygor workspace delete acme
+
+  # Delete + wipe the directory on disk (asks for confirmation)
+  cygor workspace delete acme --purge
+
+  # Trim old scan output (keep the 3 newest per subdir)
+  cygor workspace clean --keep-last 3
+
+  # Use in scripts
+  cd "$(cygor workspace path)"
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    # No required=True: bare `cygor workspace` falls through to cmd_list.
+    sub = p.add_subparsers(dest="subcmd", metavar="<command>")
 
-    # Core CRUD lives in a mutually-exclusive group so the user can't pass
-    # `-a foo -d bar` at the same time. The positional `name` is parsed
-    # alongside and dispatched in main() based on which (if any) flag was set.
-    group = p.add_mutually_exclusive_group()
-    group.add_argument("-a", "--add", metavar="NAME",
-        help="Add (create) a new workspace named NAME")
-    group.add_argument("-d", "--delete", metavar="NAME",
-        help="Delete the workspace named NAME (files preserved unless --purge)")
-    group.add_argument("-r", "--rename", nargs=2, metavar=("OLD", "NEW"),
-        help="Rename a workspace from OLD to NEW")
-    group.add_argument("--info", metavar="NAME",
-        help="Show subdirectories, sizes, and timestamps for NAME")
-    group.add_argument("--print-path", action="store_true",
-        help="Print only the active workspace path (for shell scripts)")
-    group.add_argument("--clean", action="store_true",
-        help="Trim old scan output from a workspace (active one if no name given)")
+    # list -- bare command's also reaches this via main()'s fall-through
+    pls = sub.add_parser("list",
+        help="List registered workspaces (* marks active).",
+        description="List every registered workspace. The active one is "
+                    "prefixed with `*`. Same output as bare `cygor workspace`.")
+    pls.set_defaults(func=cmd_list)
 
-    # Modifiers for the above:
-    p.add_argument("--path", metavar="DIR",
-        help="With -a: create the workspace at DIR instead of the default root")
-    p.add_argument("--purge", action="store_true",
-        help="With -d: also delete the directory on disk (default: files preserved)")
-    p.add_argument("--keep-last", type=int, metavar="N",
-        help="With --clean: keep the N most recent entries per subdirectory")
-    p.add_argument("--dry-run", action="store_true",
-        help="With --clean: show what would be removed without deleting")
-    p.add_argument("--yes", "-y", action="store_true",
-        help="With --clean: skip the confirmation prompt")
+    # create -- new workspace + register + select
+    pcr = sub.add_parser("create",
+        help="Create a new workspace.",
+        description=f"Create a new workspace directory at {DEFAULT_WORKSPACES_ROOT}/<name>/ "
+                    f"with the standard subdirectory layout, register it, and select it. "
+                    f"Use `--path DIR` to put the directory somewhere else.")
+    pcr.add_argument("name", help="Name for the new workspace")
+    pcr.add_argument("--path", metavar="DIR",
+        help="Custom directory location (default: <workspaces_root>/<name>/)")
+    pcr.set_defaults(func=cmd_create)
 
-    # Positional name: used by `workspace <name>` (switch) and by `--clean
-    # <name>` (clean a specific workspace instead of the active one). Made
-    # optional so bare `cygor workspace` works.
-    p.add_argument("name", nargs="?",
-        help="Workspace name -- without other flags, switches to it; "
-             "with --clean, scopes the cleanup target")
+    # select -- switch active workspace
+    psel = sub.add_parser("select",
+        help="Switch the active workspace.",
+        description="Make NAME the active workspace. All subsequent scans / "
+                    "module runs write to it until you switch again.")
+    psel.add_argument("name", help="Workspace name to select")
+    psel.set_defaults(func=cmd_select)
+
+    # info -- subdirs + sizes + timestamps
+    pinfo = sub.add_parser("info",
+        help="Show subdirectories, sizes, and timestamps for a workspace.",
+        description="Show path, status, timestamps, total size, and per-"
+                    "subdirectory file counts for the given workspace.")
+    pinfo.add_argument("name", help="Workspace name")
+    pinfo.set_defaults(func=cmd_info)
+
+    # rename
+    prn = sub.add_parser("rename",
+        help="Rename a workspace.",
+        description="Rename a workspace in cygor's registry. The directory on "
+                    "disk keeps its original name; only the registry key changes. "
+                    "If the renamed workspace was active, it stays active under "
+                    "the new name.")
+    prn.add_argument("old", help="Current name")
+    prn.add_argument("new", help="New name")
+    prn.set_defaults(func=cmd_rename)
+
+    # delete -- unregister; --purge also wipes files
+    pdel = sub.add_parser("delete",
+        help="Delete a workspace from the registry (files preserved unless --purge).",
+        description="Remove the workspace from cygor's registry. Files on disk "
+                    "are preserved by default. Pass `--purge` to also delete the "
+                    "directory tree (you'll be asked to type the workspace name "
+                    "to confirm).")
+    pdel.add_argument("name", help="Workspace name to delete")
+    pdel.add_argument("--purge", action="store_true",
+        help="Also delete the directory on disk (asks for confirmation)")
+    pdel.set_defaults(func=cmd_delete)
+
+    # clean -- trim old output
+    pcl = sub.add_parser("clean",
+        help="Trim old scan output (the layout itself is preserved).",
+        description="Remove generated scan output from inside a workspace. "
+                    "The workspace itself, its layout, and its registration are "
+                    "preserved. With no name argument, operates on the active "
+                    "workspace.")
+    pcl.add_argument("name", nargs="?",
+        help="Workspace name (default: active workspace)")
+    pcl.add_argument("--keep-last", type=int, metavar="N",
+        help="Keep the N most recent entries per subdirectory; remove older")
+    pcl.add_argument("--dry-run", action="store_true",
+        help="Show what would be removed without deleting")
+    pcl.add_argument("--yes", "-y", action="store_true",
+        help="Do not prompt for confirmation")
+    pcl.set_defaults(func=cmd_clean)
+
+    # path -- one-line scriptable accessor
+    ppath = sub.add_parser("path",
+        help="Print the active workspace path (for shell scripting).",
+        description="Print only the active workspace path on stdout, with no "
+                    "decoration or colour codes. Designed for shell substitution: "
+                    "`cd \"$(cygor workspace path)\"`. Exits 1 (with no output) "
+                    "when no workspace is selected.")
+    ppath.set_defaults(func=cmd_path)
 
     return p
 
@@ -841,26 +862,10 @@ Examples:
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     args = build_parser().parse_args(argv)
-
-    # Dispatch table (order matches the help block above).
-    if args.add:
-        return cmd_add(args.add, args.path)
-    if args.delete:
-        return cmd_delete(args.delete, purge=args.purge)
-    if args.rename:
-        return cmd_rename(args.rename[0], args.rename[1])
-    if args.info:
-        return cmd_info(args.info)
-    if args.print_path:
-        return cmd_print_path()
-    if args.clean:
-        args.clean_target = args.name  # name is the optional clean target
-        return cmd_clean(args)
-
-    # No flags -> bare positional = switch, no positional = list.
-    if args.name:
-        return cmd_switch(args.name)
-    return cmd_list(args)
+    # Bare `cygor workspace` -> list.
+    if not getattr(args, "subcmd", None):
+        return cmd_list(args)
+    return args.func(args)
 
 
 if __name__ == "__main__":

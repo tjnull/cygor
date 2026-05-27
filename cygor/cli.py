@@ -97,7 +97,7 @@ def _print_help():
         ws_line.append("not set", style="bold yellow")
         console.print(ws_line)
         hint = Text("              set one with: ", style=DIM)
-        hint.append("cygor workspace -a <name>", style=f"bold {BLUE}")
+        hint.append("cygor workspace create <name>", style=f"bold {BLUE}")
         console.print(hint)
     console.print()
 
@@ -190,7 +190,7 @@ def _print_help():
     if not ws:
         console.print(f"  [{HEADER}]Getting Started[/{HEADER}]")
         steps = [
-            ("1.", "Set a workspace:",      "cygor workspace -a engagement-1"),
+            ("1.", "Set a workspace:",      "cygor workspace create engagement-1"),
             ("2.", "Run your first scan:",  "sudo cygor scan -i eth0 -ips 192.168.1.0/24 --discover naabu"),
             ("3.", "View results:",         "cygor web start"),
         ]
@@ -260,7 +260,7 @@ def _workspace_status_plain() -> str:
         return f"  Workspace: {ws}\n"
     return (
         "  Workspace: not set\n"
-        "    Set one with: cygor workspace -a <name>\n"
+        "    Set one with: cygor workspace create <name>\n"
     )
 
 # ---- Workspace helpers ----

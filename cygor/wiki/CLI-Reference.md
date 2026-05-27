@@ -131,31 +131,31 @@ cygor credrecon --protocol ssh -f ssh-hostlist.txt
 
 Workspaces keep per-engagement results, scan files, and databases isolated.
 
-The command syntax mirrors msfconsole's `workspace`: bare command lists,
-`name` switches, `-a NAME` adds, `-d NAME` deletes, `-r OLD NEW` renames.
-There is always exactly one active workspace; `default` is auto-created on
-first use under `~/.cygor/workspaces/` (override with `$CYGOR_WORKSPACES_ROOT`).
+Commands read as English verbs. You create a workspace, you select it, you
+scan — nothing is created automatically. New workspaces go under
+`~/.cygor/workspaces/` by default; override with `$CYGOR_WORKSPACES_ROOT` or
+bypass it per-workspace with `--path` on `create`.
 
-| Form | Action |
+| Command | Action |
 |---|---|
-| `cygor workspace` | List workspaces (`*` marks active) |
-| `cygor workspace <name>` | Switch to `<name>` |
-| `cygor workspace -a <name>` | Add a workspace at the default root |
-| `cygor workspace -a <name> --path <dir>` | Add at a custom location |
-| `cygor workspace -d <name>` | Delete from the registry (files preserved) |
-| `cygor workspace -d <name> --purge` | Delete + wipe the directory on disk |
-| `cygor workspace -r <old> <new>` | Rename a workspace |
-| `cygor workspace --info <name>` | Show subdirs, sizes, timestamps |
-| `cygor workspace --clean [<name>]` | Trim old scan output (`--keep-last N`, `--dry-run`) |
-| `cygor workspace --print-path` | Print active path on stdout (for shell scripts) |
+| `cygor workspace` *(or `… list`)* | List workspaces (`*` marks active) |
+| `cygor workspace create <name>` | Create a new workspace at the default root |
+| `cygor workspace create <name> --path <dir>` | Create at a custom location |
+| `cygor workspace select <name>` | Switch the active workspace |
+| `cygor workspace info <name>` | Show subdirs, sizes, timestamps |
+| `cygor workspace rename <old> <new>` | Rename a workspace |
+| `cygor workspace delete <name>` | Delete from registry (files preserved) |
+| `cygor workspace delete <name> --purge` | Delete + wipe the directory on disk |
+| `cygor workspace clean [<name>]` | Trim old scan output (`--keep-last N`, `--dry-run`) |
+| `cygor workspace path` | Print active path on stdout (for shell scripts) |
 
 Full guide: [Setting Up Workspaces](Setting-Up-Workspaces.md).
 
 ```bash
-cygor workspace -a acme
-cygor workspace acme
+cygor workspace create acme
+cygor workspace select acme
 cygor workspace            # list
-cd "$(cygor workspace --print-path)"
+cd "$(cygor workspace path)"
 ```
 
 ---

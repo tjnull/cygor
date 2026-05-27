@@ -323,7 +323,7 @@ def start(host: str, port: int, extra_args: list[str], load_dir: Optional[str],
     else:
         log.warning(
             "No workspace configured - scans are disabled until one is set",
-            "Use --workspace PATH or: cygor workspace -a <name>",
+            "Use --workspace PATH or: cygor workspace create <name>",
         )
 
     # --- Sudo Authentication (automatic at startup) ---
