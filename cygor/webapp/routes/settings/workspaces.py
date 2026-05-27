@@ -186,38 +186,15 @@ async def create_workspace(req: Dict[str, Any]):
 
         ws = _resolve_path(path)
 
-        # Create directory if it doesn't exist
-        ws.mkdir(parents=True, exist_ok=True)
-
-        # Create the standardized workspace subdirectories
-        for rel in SUBDIRS:
-            base = ws / rel
-            base.mkdir(parents=True, exist_ok=True)
-
-            # Auto-create subfolders for enumeration modules
-            if rel == "cygor-enumeration-modules":
-                for module in ["lockon", "smbexplorer", "nfsexplorer"]:
-                    (base / module).mkdir(parents=True, exist_ok=True)
-
-        # Write metadata file
-        meta = {
-            "workspace": str(ws),
-            "created_at": datetime.datetime.utcnow().isoformat() + "Z",
-            "schema": 2,
-            "description": "Cygor workspace directory structure for scan and enumeration data.",
-            "subdirectories": {
-                "nmap": "Nmap scan data and parsed XML output",
-                "masscan": "Masscan discovery results",
-                "naabu": "Naabu discovery results",
-                "parsed-hostlists": "Aggregated and categorized hostlists",
-                "cygor-enumeration-modules": {
-                    "description": "Output directories for enumeration modules",
-                    "modules": ["lockon", "smbexplorer", "nfsexplorer", "httpx", "rdpmapper"]
-                },
-                "logs": "General log output and runtime information"
-            },
-        }
-        (ws / ".cygor-workspace.json").write_text(json.dumps(meta, indent=2))
+        # Single source of truth: delegate the on-disk layout + marker
+        # to cygor.workspace.ensure_workspace_dirs(). Previously this
+        # route had its own duplicate of the create logic which drifted
+        # away from SUBDIRS (still listed 'logs/', pre-seeded only 3 of
+        # the 11 module subfolders, still wrote schema=2). The duplicate
+        # is gone now -- web-created workspaces get the same layout as
+        # `cygor workspace create`.
+        from cygor.workspace import ensure_workspace_dirs
+        ensure_workspace_dirs(ws)
 
         # Register workspace in config
         cfg = _load_config()
