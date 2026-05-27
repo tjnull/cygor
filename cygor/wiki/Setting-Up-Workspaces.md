@@ -34,13 +34,21 @@ This creates the directory structure:
 ```
 my-engagement/
 ├── nmap/                       # Nmap scan results
+├── masscan/                    # Masscan discovery results
+├── naabu/                      # Naabu port discovery results
+├── icmp/                       # ICMP host-discovery results
 ├── parsed-hostlists/           # Parsed hostlists by service
+├── enrich/                     # Enrichment results (Shodan, VT, crt.sh, …)
 ├── credrecon/                  # Credential reconnaissance output
 ├── schedule-scans/             # Scheduled / automated scans
 ├── cygor-enumeration-modules/  # Per-module output (lockon, smbexplorer, …)
-├── logs/                       # Runtime logs
 └── cygor.db                    # SQLite database (if used)
 ```
+
+Each subdirectory corresponds to a real tool that writes there; the layout
+is flat so it's easy to grep, archive, or rsync. Logs live in
+`~/.cygor/logs/` (or `/var/log/cygor` when running as root) — not inside
+the workspace.
 
 ### Switch the Active Workspace
 

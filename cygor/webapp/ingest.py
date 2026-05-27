@@ -271,9 +271,16 @@ async def ingest_directory(path, session, dedupe=True, verbose=0):
     for file in load_path.rglob("*"):
         if not file.is_file():
             continue
-        if "enrichment" in file.parts:
+        # Skip enrichment outputs -- they're ingested via the enrichment
+        # route, not the generic scan-result ingestor. Accept both the new
+        # 'enrich/' subdir (current) and the legacy 'enrichment/' name so
+        # existing workspaces don't double-ingest after the rename.
+        if "enrich" in file.parts or "enrichment" in file.parts:
             continue
-        if file.name.startswith("enrichment-") or "enrichment" in file.name.lower():
+        if (file.name.startswith("enrichment-") or
+            file.name.startswith("enrich-") or
+            "enrichment" in file.name.lower() or
+            "enrich" in file.name.lower()):
             continue
         if file.name.startswith(".") or file.name == ".cygor-workspace.json":
             continue
@@ -401,8 +408,12 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
         log(f"[!] File not found: {file}", level=0, verbose=verbose)
         return
 
-    # Skip enrichment files - enrichment results should not be ingested into the database
-    if "enrichment" in file.parts or file.name.startswith("enrichment-") or "enrichment" in file.name.lower():
+    # Skip enrichment files - enrichment results should not be ingested into
+    # the database. Accept both 'enrich/' (current) and 'enrichment/' (legacy
+    # webapp path) so we keep working on workspaces that pre-date the rename.
+    if ("enrich" in file.parts or "enrichment" in file.parts or
+        file.name.startswith("enrich-") or file.name.startswith("enrichment-") or
+        "enrich" in file.name.lower() or "enrichment" in file.name.lower()):
         log(f"[i] Skipping enrichment file (not ingesting): {file}", level=2, verbose=verbose)
         return
 

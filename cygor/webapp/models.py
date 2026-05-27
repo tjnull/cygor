@@ -384,7 +384,11 @@ class EnrichmentRun(SQLModel, table=True):
     started_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     completed_at: Optional[datetime] = Field(default=None, index=True)
 
-    # Source of truth on disk (results/enrichment/enrichment-<ts>.json).
+    # Source of truth on disk (<workspace>/enrich/enrichment-<ts>.json). The
+    # field itself is just a stored path string -- the directory name is
+    # 'enrich/' in current code; legacy workspaces may still hold the path
+    # under the old 'enrichment/' subdir, which is fine: nothing in the DB
+    # rewrites these on rename, the ingestor accepts both.
     output_path: str = Field(max_length=500)
 
     # Sources requested for this run (e.g. ["shodan","virustotal","crt_sh"]).

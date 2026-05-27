@@ -1187,8 +1187,11 @@ async def create_enrich_task(req: Dict[str, Any], request: Request):
         temp_file.write('\n'.join(iocs))
         temp_file.close()
 
-        # Determine output file path with correct extension
-        output_dir = str(Path(settings.RESULTS_DIR) / "enrichment")
+        # Determine output file path with correct extension.
+        # The on-disk subdir is 'enrich/' (matches `cygor enrich` CLI and the
+        # workspace SUBDIRS list); both producers must write to the same
+        # location so the ingestor sees every run.
+        output_dir = str(Path(settings.RESULTS_DIR) / "enrich")
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.utcnow().strftime('%Y%m%d-%H%M%S')

@@ -34,13 +34,19 @@ def workspaces_root() -> Path:
 # ----------------------------------------------------------------------
 # Final, minimal workspace layout
 # ----------------------------------------------------------------------
+# Workspace subdirectories pre-created by `cygor workspace create`. Each entry
+# corresponds to a real tool that writes into it; if a tool doesn't write there,
+# it's dead weight and shouldn't be on this list. Comments name the producer.
 SUBDIRS = [
-    "nmap",
-    "parsed-hostlists",
-    "credrecon",
-    "schedule-scans",
-    "cygor-enumeration-modules",
-    "logs",
+    "nmap",                        # cygor scan (default Nmap engine)
+    "masscan",                     # cygor scan --discover masscan
+    "naabu",                       # cygor scan --discover naabu
+    "icmp",                        # cygor scan ICMP host-discovery
+    "parsed-hostlists",            # cygor parse
+    "enrich",                      # cygor enrich + webapp enrichment route
+    "credrecon",                   # cygor credrecon
+    "schedule-scans",              # webapp scheduled scans (port/module/credrecon)
+    "cygor-enumeration-modules",   # cygor enum <slug>  (lockon, smbexplorer, ...)
 ]
 
 # ----------------------------------------------------------------------
@@ -312,21 +318,55 @@ def workspace_env() -> Optional[str]:
 
 
 def ensure_workspace_dirs(path: Path) -> Path:
-    """Create the standard workspace layout (idempotent) and return the path."""
+    """Create the standard workspace layout (idempotent) and return the path.
+
+    Also runs cheap migrations for workspaces created by older versions:
+      - rename 'enrichment/' -> 'enrich/' if only the old one exists (the
+        webapp used to write to 'enrichment/' while the CLI used 'enrich/'),
+      - remove an empty 'logs/' subdir (logs live in ~/.cygor/logs/; the
+        in-workspace one was never written to).
+    Existing data is never destroyed: if both 'enrichment/' and 'enrich/'
+    exist, both are left alone; only the symlinked-style rename runs when
+    'enrich/' is absent.
+    """
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
+
+    # --- migrations (run BEFORE pre-creating SUBDIRS so 'enrich/' isn't
+    # created empty next to a populated 'enrichment/') -----------------------
+    old_enrich = path / "enrichment"
+    new_enrich = path / "enrich"
+    if old_enrich.is_dir() and not new_enrich.exists():
+        try:
+            old_enrich.rename(new_enrich)
+        except OSError:
+            # Cross-device or permission failure: leave the old dir alone.
+            # The ingestor accepts both names so the workspace still works.
+            pass
+
+    legacy_logs = path / "logs"
+    if legacy_logs.is_dir():
+        try:
+            # Only remove if empty -- never blow away log files the user
+            # might have copied here manually.
+            legacy_logs.rmdir()
+        except OSError:
+            pass
+
+    # --- standard layout ----------------------------------------------------
     for rel in SUBDIRS:
         base = path / rel
         base.mkdir(parents=True, exist_ok=True)
         if rel == "cygor-enumeration-modules":
             for module in ("lockon", "smbexplorer", "nfsexplorer"):
                 (base / module).mkdir(parents=True, exist_ok=True)
+
     meta_file = path / ".cygor-workspace.json"
     if not meta_file.exists():
         meta_file.write_text(json.dumps({
             "workspace": str(path),
             "created_at": datetime.datetime.utcnow().isoformat() + "Z",
-            "schema": 3,
+            "schema": 4,
         }, indent=2))
     return path
 
@@ -444,6 +484,11 @@ def cmd_select(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return 2
 
+    # Eagerly bring the workspace up to the current layout: fills in any
+    # newly-added SUBDIRS entries and runs the legacy-name migrations
+    # (e.g. 'enrichment/' -> 'enrich/'). Idempotent and cheap.
+    ensure_workspace_dirs(ws_path)
+
     _set_active(cfg, name)
     _update_last_used(name, cfg)
     _save_config(cfg)
@@ -465,28 +510,27 @@ def cmd_create(args: argparse.Namespace) -> int:
         return 2
 
     ws_path = _resolve_path(args.path) if getattr(args, "path", None) else workspaces_root() / name
-    ws_path.mkdir(parents=True, exist_ok=True)
 
-    # Standard layout + the marker file so future tooling recognises this dir.
-    for rel in SUBDIRS:
-        base = ws_path / rel
-        base.mkdir(parents=True, exist_ok=True)
-        if rel == "cygor-enumeration-modules":
-            for module in ("lockon", "smbexplorer", "nfsexplorer"):
-                (base / module).mkdir(parents=True, exist_ok=True)
-
+    # Single source of truth for the layout: ensure_workspace_dirs() pre-creates
+    # every SUBDIRS entry, runs the legacy-name migrations, and writes a
+    # minimal marker. Then overlay the richer per-subdir description so
+    # 'cygor workspace info' and external tooling can introspect the layout.
+    ensure_workspace_dirs(ws_path)
     (ws_path / ".cygor-workspace.json").write_text(json.dumps({
         "workspace": str(ws_path),
         "created_at": datetime.datetime.utcnow().isoformat() + "Z",
-        "schema": 3,
+        "schema": 4,
         "description": "Cygor workspace directory for scan and enumeration data.",
         "subdirectories": {
-            "nmap":                       "Nmap scan data and parsed XML output",
+            "nmap":                       "Nmap scan results",
+            "masscan":                    "Masscan discovery results",
+            "naabu":                      "Naabu port discovery results",
+            "icmp":                       "ICMP host-discovery results",
             "parsed-hostlists":           "Aggregated and categorized hostlists",
-            "credrecon":                  "Credential reconnaissance scan results",
-            "schedule-scans":             "Scheduled and automated scan results",
-            "cygor-enumeration-modules":  "Per-module output (lockon, smbexplorer, …)",
-            "logs":                       "General log output and runtime information",
+            "enrich":                     "Enrichment results (Shodan, VT, crt.sh, ...)",
+            "credrecon":                  "Credential reconnaissance results",
+            "schedule-scans":             "Scheduled / automated scan output",
+            "cygor-enumeration-modules":  "Per-module output (lockon, smbexplorer, ...)",
         },
     }, indent=2))
 

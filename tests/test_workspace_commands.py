@@ -96,6 +96,74 @@ def test_create_makes_workspace_active_immediately(cfg):
     assert _active(cfg) == "beta"
 
 
+def test_create_lays_out_every_subdir_in_canonical_list(cfg, tmp_path):
+    """Every entry in SUBDIRS must be pre-created. Guards against the list
+    drifting away from what the layout actually delivers."""
+    _run("create", "alpha")
+    base = tmp_path / "workspaces" / "alpha"
+    for sub in ws.SUBDIRS:
+        assert (base / sub).is_dir(), f"missing pre-created subdir: {sub}"
+    # Anchor the expected names so adding/removing one in SUBDIRS doesn't
+    # silently change the contract.
+    for expected in ("nmap", "masscan", "naabu", "icmp", "parsed-hostlists",
+                     "enrich", "credrecon", "schedule-scans",
+                     "cygor-enumeration-modules"):
+        assert (base / expected).is_dir()
+    # 'logs' lives in ~/.cygor/logs/, not inside the workspace.
+    assert not (base / "logs").exists()
+
+
+# ---------------------------------------------------------------------------
+# Layout migrations (run from ensure_workspace_dirs())
+# ---------------------------------------------------------------------------
+def test_ensure_workspace_dirs_migrates_legacy_enrichment(tmp_path):
+    """Workspaces from older versions have 'enrichment/' (the webapp's old
+    write path). ensure_workspace_dirs() renames it to 'enrich/'."""
+    ws_path = tmp_path / "legacy"
+    ws_path.mkdir()
+    old = ws_path / "enrichment"
+    old.mkdir()
+    (old / "enrichment-2026-01-01.json").write_text("{}")
+    ws.ensure_workspace_dirs(ws_path)
+    assert not old.exists()
+    assert (ws_path / "enrich" / "enrichment-2026-01-01.json").read_text() == "{}"
+
+
+def test_ensure_workspace_dirs_keeps_both_enrich_dirs_when_present(tmp_path):
+    """If a workspace has BOTH 'enrichment/' AND 'enrich/' (mixed-version
+    runs, or manual creation), leave both alone -- no destructive merging."""
+    ws_path = tmp_path / "mixed"
+    ws_path.mkdir()
+    (ws_path / "enrichment").mkdir()
+    (ws_path / "enrichment" / "old.json").write_text("OLD")
+    (ws_path / "enrich").mkdir()
+    (ws_path / "enrich" / "new.json").write_text("NEW")
+    ws.ensure_workspace_dirs(ws_path)
+    assert (ws_path / "enrichment" / "old.json").read_text() == "OLD"
+    assert (ws_path / "enrich" / "new.json").read_text() == "NEW"
+
+
+def test_ensure_workspace_dirs_removes_empty_logs(tmp_path):
+    """Old workspaces have an empty 'logs/' that was created but never
+    written to. Migration removes it -- but only if empty."""
+    ws_path = tmp_path / "legacy"
+    ws_path.mkdir()
+    (ws_path / "logs").mkdir()
+    ws.ensure_workspace_dirs(ws_path)
+    assert not (ws_path / "logs").exists()
+
+
+def test_ensure_workspace_dirs_preserves_nonempty_logs(tmp_path):
+    """User may have manually copied files into logs/. Don't blow them away."""
+    ws_path = tmp_path / "legacy"
+    ws_path.mkdir()
+    logs = ws_path / "logs"
+    logs.mkdir()
+    (logs / "manual.txt").write_text("user put this here")
+    ws.ensure_workspace_dirs(ws_path)
+    assert (logs / "manual.txt").read_text() == "user put this here"
+
+
 # ---------------------------------------------------------------------------
 # select
 # ---------------------------------------------------------------------------
