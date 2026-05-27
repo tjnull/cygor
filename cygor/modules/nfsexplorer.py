@@ -143,7 +143,7 @@ _examples = f"""
     cygor enum nfsexplorer -t 192.168.1.200 --check-root
 
     {Fore.YELLOW}# Save all formats (txt,csv,json,xml){Style.RESET_ALL}
-    cygor enum nfsexplorer -t 10.10.10.5 --list-files --nfs-output-format all
+    cygor enum nfsexplorer -t 10.10.10.5 --list-files --format all
 """
 
 def parse_args(argv=None):
@@ -162,23 +162,39 @@ def parse_args(argv=None):
     )
 
     # Targets
+    # Accept both '--target' (the project-wide convention from
+    # cygor/modules/base.py) and '--targets' as a backwards-compatible alias.
     tgt = parser.add_argument_group("Targets")
-    tgt.add_argument("-t", "--targets", type=str, help="IP address or comma-separated list")
-    tgt.add_argument("-i", "--input-file", type=str, help="Input file with target IPs")
+    tgt.add_argument("-t", "--target", "--targets", dest="targets", type=str,
+                     help="IP address or comma-separated list")
+    tgt.add_argument("-i", "-f", "--file", "--input-file", dest="input_file", type=str,
+                     help="Input file with target IPs")
 
     # Output / Options
+    # `-o` uses nargs="?"/const="" to match the rest of the project: a bare
+    # `-o` means "save under the active workspace's default location"; an
+    # explicit path overrides. Without `-o`, --format alone is enough to
+    # trigger saving at the default location too (preserves the historic
+    # behaviour that `--nfs-output-format` implied saving).
     out = parser.add_argument_group("Output / Options")
     out.add_argument(
         "-o", "--output-dir",
-        type=str,
+        nargs="?",
+        const="",
         default=None,
-        help="Directory to save results (default: results/cygor-enumeration-modules/nfsexplorer/)"
+        type=str,
+        help="Output directory (default: <workspace>/cygor-enumeration-modules/nfsexplorer/)"
     )
+    # Accept the standard `--format` plus the legacy `--nfs-output-format`
+    # alias so existing scripts keep working.
     out.add_argument(
-    "--nfs-output-format",
-    choices=["text", "csv", "json", "xml", "all"],
-    default=None,  # <-- None means user did NOT explicitly request saving
-    help="When provided, results are saved in this format (text, csv, json, xml, or all). ""If omitted, nothing is saved unless -o/--output-dir is set.")
+        "--format", "--nfs-output-format",
+        dest="format",
+        choices=["text", "txt", "csv", "json", "xml", "all"],
+        default=None,
+        help="Output format(s). When provided, results are saved. If omitted, "
+             "nothing is saved unless -o/--output-dir is set."
+    )
 
     out.add_argument("--timeout", type=int, default=10, help="RPC timeout (seconds)")
     out.add_argument("-r", "--recurse", type=int, default=1, help="Directory recursion depth (0=list export root only)")
@@ -833,12 +849,12 @@ class NFSClient:
 
             
             # Save if user provided an output dir OR explicitly set a format
-            should_save = (self.args.output_dir is not None) or (self.args.nfs_output_format is not None)
+            should_save = (self.args.output_dir is not None) or (self.args.format is not None)
             if should_save and all_results:
                 outdir = self.args.output_dir if self.args.output_dir else os.path.join(
                     "results", "cygor-enumeration-modules", "nfsexplorer"
                 )
-                fmt = self.args.nfs_output_format if self.args.nfs_output_format else "json"
+                fmt = self.args.format if self.args.format else "json"
 
                 # Save in new cygor-result.json format
                 saved_files = save_cygor_result(
@@ -952,12 +968,12 @@ class NFSClient:
                     self.logger.error(f"{Fore.RED}Error accessing share {share}: {e}{Style.RESET_ALL}")
 
             # Save if user provided an output dir OR explicitly set a format
-            should_save = (args.output_dir is not None) or (args.nfs_output_format is not None)
+            should_save = (args.output_dir is not None) or (args.format is not None)
             if should_save and all_results:
                 outdir = args.output_dir if args.output_dir else os.path.join(
                     "results", "cygor-enumeration-modules", "nfsexplorer"
                 )
-                fmt = args.nfs_output_format if args.nfs_output_format else "json"
+                fmt = args.format if args.format else "json"
 
                 # Save in new cygor-result.json format
                 saved_files = save_cygor_result(
@@ -1032,6 +1048,11 @@ if __name__ == "__main__":
     #------------------------------------
 
     targets = _collect_targets(args)
+    # Track per-host connection outcome so we can write a summary cygor-result
+    # even when every host failed to connect (otherwise the user gets no
+    # output file at all, which makes it look like the module hung).
+    host_outcomes = []
+    started_at = datetime.now()
     for host in targets:
         print(f"{Fore.MAGENTA}[*] Target: {host}{Style.RESET_ALL}")
         # Per-target IP rotation
@@ -1047,4 +1068,39 @@ if __name__ == "__main__":
                 cli.enum_share_files(args)
             else:
                 cli.enum_shares_only()
+            host_outcomes.append({"host": host, "connected": True})
+        else:
+            host_outcomes.append({"host": host, "connected": False,
+                                  "error": "connection refused / RPC unreachable"})
+
+    # Fallback: if the user asked us to save output (`-o` or `--format`)
+    # but every host failed (so the per-share save paths never fired),
+    # write a top-level cygor-result.json with the per-host failure
+    # records so there's *some* evidence of the run on disk.
+    should_save = (args.output_dir is not None) or (args.format is not None)
+    summary_path = Path(args.output_dir) / "cygor-result.json"
+    if should_save and host_outcomes and not summary_path.exists():
+        failure_rows = [
+            {
+                "host": o["host"],
+                "share": "",
+                "permission": "ERROR",
+                "filesystem": "",
+                "size": "",
+                "info": o.get("error", "connect failed"),
+            }
+            for o in host_outcomes if not o["connected"]
+        ]
+        if failure_rows:
+            save_cygor_result(
+                all_results=failure_rows,
+                output_dir=args.output_dir,
+                started_at=started_at,
+                completed_at=datetime.now(),
+                target_count=len(targets),
+                list_files=False,
+                formats=args.format if args.format else "json",
+            )
+            print(f"{Fore.CYAN}[i]{Style.RESET_ALL} No hosts responded; saved per-host "
+                  f"failure record to {summary_path}")
 

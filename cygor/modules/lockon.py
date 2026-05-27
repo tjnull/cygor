@@ -1641,12 +1641,26 @@ Examples:
 """,
     )
 
+    # Protocol is positional (required) -- `all` is the most common choice
+    # for end-to-end discovery. Keep this near the top of help so it's
+    # discoverable.
     parser.add_argument("protocol", choices=["http", "https", "web", "rdp", "vnc", "x11", "all"],
-                        help="Protocol to screenshot")
-    parser.add_argument("-f", "--file", help="File with targets (one per line)")
-    parser.add_argument("-t", "--targets", nargs="+", help="Targets directly on command line")
-    parser.add_argument("-o", "--output", help="Custom output directory")
-    parser.add_argument("--output-format", choices=["json", "csv", "xml", "txt", "all"], default="all")
+                        help="Protocol to screenshot (use 'all' to try every supported protocol)")
+    # `-f` and `--input-file` are the project-wide convention; `--file`
+    # stays as a historic alias.
+    parser.add_argument("-f", "--file", "--input-file", dest="file",
+                        help="File with targets (one per line)")
+    # `--target` is the project-wide convention; `--targets` stays accepted.
+    parser.add_argument("-t", "--target", "--targets", dest="targets", nargs="+",
+                        help="Targets directly on command line")
+    # `-o` matches the other modules: bare `-o` -> workspace default.
+    parser.add_argument("-o", "--output", "--output-dir", dest="output",
+                        nargs="?", const="",
+                        help="Custom output directory (bare -o uses the workspace default)")
+    # `--format` is the project-wide convention; `--output-format` stays.
+    parser.add_argument("--format", "--output-format",
+                        dest="output_format",
+                        choices=["json", "csv", "xml", "txt", "all"], default="all")
     parser.add_argument("--workers", type=int, default=min(16, (os.cpu_count() or 4) * 2))
     parser.add_argument("--timeout", type=int, default=30, help="Capture timeout (seconds)")
     parser.add_argument("--viewport", default="1366x768", help="Screenshot viewport WxH")

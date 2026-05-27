@@ -22,7 +22,7 @@ import sys
 import shutil
 import argparse
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -221,22 +221,31 @@ def parse_args(argv=None):
         formatter_class=argparse.RawTextHelpFormatter,
     )
     tgt = parser.add_argument_group("Targets")
-    tgt.add_argument("-t", "--targets", type=str, help="IP/host or comma-separated list")
-    tgt.add_argument("-f", "-i", "--input-file", dest="input_file", type=str,
+    # `--target` is the project-wide convention (cygor/modules/base.py);
+    # `--targets` is the historic alias and stays accepted.
+    tgt.add_argument("-t", "--target", "--targets", dest="targets", type=str,
+                     help="IP/host or comma-separated list")
+    tgt.add_argument("-f", "-i", "--file", "--input-file", dest="input_file", type=str,
                      help="File of targets, one per line")
 
     out = parser.add_argument_group("Options")
-    out.add_argument("-o", "--output-dir", default=None, help="Output directory (default: workspace)")
+    # Bare `-o` -> workspace default, matches base.py.
+    out.add_argument("-o", "--output-dir", nargs="?", const="", default=None,
+                     help="Output directory (default: <workspace>/cygor-enumeration-modules/snmpexplorer/)")
     out.add_argument("-c", "--communities", default=",".join(DEFAULT_COMMUNITIES),
                      help="Community strings to try, comma-separated (default: public,private)")
     out.add_argument("--timeout", type=int, default=2, help="Per-probe timeout in seconds (default: 2)")
     out.add_argument("--threads", type=int, default=10, help="Concurrent hosts (default: 10)")
-    out.add_argument("--output-format", choices=["json", "csv", "xml", "txt", "all"],
+    # `--format` is the project-wide convention; `--output-format` is the
+    # historic alias.
+    out.add_argument("--format", "--output-format",
+                     dest="format",
+                     choices=["json", "csv", "xml", "txt", "all"],
                      default="json", help="Also export this format (default: json)")
 
     args = parser.parse_args(argv)
     if not args.targets and not args.input_file:
-        parser.error("specify targets with -t/--targets or -f/--input-file")
+        parser.error("specify targets with -t/--target or -f/--input-file")
     return args
 
 
@@ -298,8 +307,17 @@ def main(argv=None):
 
     communities = [c.strip() for c in args.communities.split(",") if c.strip()] or DEFAULT_COMMUNITIES
 
-    if args.output_dir:
+    # Output dir resolution (matches the convention used by the other modules):
+    #   - explicit non-empty --output-dir wins;
+    #   - bare `-o` (const="") -> workspace default + a timestamped subdir
+    #     so consecutive runs don't trample each other;
+    #   - omitted altogether -> workspace default (no timestamp), legacy behaviour.
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if args.output_dir not in (None, ""):
         out_dir = Path(args.output_dir)
+    elif args.output_dir == "":
+        from cygor.workspace import require_workspace
+        out_dir = require_workspace() / "cygor-enumeration-modules" / "snmpexplorer" / ts
     else:
         from cygor.workspace import require_workspace
         out_dir = require_workspace() / "cygor-enumeration-modules" / "snmpexplorer"
@@ -308,7 +326,7 @@ def main(argv=None):
     print(f"{Fore.CYAN}[*] SNMP enumeration: {len(hosts)} host(s), "
           f"communities={communities}, timeout={args.timeout}s{Style.RESET_ALL}")
 
-    started_at = datetime.utcnow()
+    started_at = datetime.now(timezone.utc)
     results = []
     with ThreadPoolExecutor(max_workers=max(1, args.threads)) as ex:
         futures = {ex.submit(_enumerate_host, h, communities, args.timeout): h for h in hosts}
@@ -332,7 +350,7 @@ def main(argv=None):
                 extra = f"  [{', '.join(loot)}]" if loot else ""
                 print(f"{Fore.GREEN}[+] {host} community '{row['community']}' "
                       f"{row.get('sysName', '')}  {descr}{extra}{Style.RESET_ALL}")
-    completed_at = datetime.utcnow()
+    completed_at = datetime.now(timezone.utc)
 
     columns = [
         ColumnDefinition(key="ip", label="IP Address", type=ColumnType.IP),
@@ -355,7 +373,7 @@ def main(argv=None):
     )
     schema = SchemaDefinition(view=ViewType.TABLE, columns=columns, group_by="ip")
 
-    fmt = args.output_format.lower()
+    fmt = args.format.lower()
     formats_list = ["json", "csv", "xml", "txt"] if fmt == "all" else [fmt]
     metadata = RunMetadata(
         started_at=started_at,
@@ -377,11 +395,15 @@ def main(argv=None):
 
     json_path = out_dir / "cygor-result.json"
     cygor_result.save(json_path)
-    if "csv" in formats_list and results:
+    # Always honour the requested formats, even when `results` is empty:
+    # an empty CSV/XML/TXT is a valid record-of-run that a user can grep
+    # to confirm the scan really happened (the previous "skip if empty"
+    # behaviour made `--format all` look broken on no-result runs).
+    if "csv" in formats_list:
         export_to_csv(results, out_dir / "snmpexplorer-results.csv", columns)
-    if "xml" in formats_list and results:
+    if "xml" in formats_list:
         export_to_xml(results, out_dir / "snmpexplorer-results.xml")
-    if "txt" in formats_list and results:
+    if "txt" in formats_list:
         export_to_txt(results, out_dir / "snmpexplorer-results.txt", columns)
 
     print(f"{Fore.GREEN}[+] SNMP: {len(results)}/{len(hosts)} host(s) responded. "

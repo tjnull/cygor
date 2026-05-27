@@ -741,20 +741,35 @@ def smbexplorer(input_file, output_dir=None, target=None, smb_output_format="txt
             logger.info(f"Results saved to {p}")
 
     elapsed = time() - start_time
-    shares_count = len(result_data) - 1
+    # Each row in result_data after the header is one host+share or one
+    # error row. Count actual successes separately from failures so the
+    # summary doesn't claim "3 shares found" when all 3 are connection errors.
+    data_rows = result_data[1:] if result_data else []
+    shares_count = sum(1 for r in data_rows if len(r) >= 3 and r[2] == "Success")
+    failed_count = sum(1 for r in data_rows
+                       if len(r) >= 3 and r[2] in ("Connection Failed", "Error"))
 
     if file_results:
         files_count = sum(1 for f in file_results if not f["is_dir"] and f["type"] == "File")
         dirs_count = sum(1 for f in file_results if f["is_dir"])
         specials_count = sum(1 for f in file_results if f["type"] == "Special")
+        suffix = f" ({failed_count} host(s) failed)" if failed_count else ""
         logger.info(
             f"SMB enumeration completed in {elapsed:.1f}s: "
-            f"{shares_count} shares, {files_count} files, {dirs_count} directories, {specials_count} specials."
+            f"{shares_count} shares, {files_count} files, {dirs_count} directories, "
+            f"{specials_count} specials.{suffix}"
+        )
+    elif shares_count == 0 and failed_count:
+        logger.info(
+            f"SMB enumeration completed in {elapsed:.1f}s: "
+            f"no shares accessible ({failed_count} host(s) failed to connect or authenticate)."
         )
     else:
+        suffix = f" ({failed_count} host(s) failed)" if failed_count else ""
         logger.info(
             f"SMB enumeration completed in {elapsed:.1f}s: "
-            f"{shares_count} shares found. Use --list-files to enumerate files, directories, and specials."
+            f"{shares_count} shares found.{suffix} "
+            f"Use --list-files to enumerate files, directories, and specials."
         )
 
 # ----------------------------------------------------------------------
@@ -832,13 +847,21 @@ def parse_args(argv=None):
     k.add_argument("--kerberos-ccache", type=str, help="Path to Kerberos ccache file (overrides KRB5CCNAME env variable)")
 
     t = p.add_argument_group("Targets")
-    t.add_argument("-t", "--targets", type=str, help="Target IP address or comma-separated list")
-    t.add_argument("-i", "--input-file", type=str, help="File with target IPs (one per line)")
+    # `--target` is the project-wide convention (see cygor/modules/base.py);
+    # `--targets` is the historic alias and stays accepted.
+    t.add_argument("-t", "--target", "--targets", dest="targets", type=str,
+                   help="Target IP address or comma-separated list")
+    t.add_argument("-i", "-f", "--file", "--input-file", dest="input_file", type=str,
+                   help="File with target IPs (one per line)")
 
     o = p.add_argument_group("Output/Options")
     o.add_argument("-o", "--output-dir", nargs="?", const="", type=str,
-                   help="Directory to save results (if -o used with no path, a timestamped folder will be created under results/cygor-enumeration-modules/smbexplorer/)")
-    o.add_argument("--smb-output-format", type=str, default="txt,csv,json,xml",
+                   help="Directory to save results (if -o is passed without a path, "
+                        "a timestamped folder is created under "
+                        "<workspace>/cygor-enumeration-modules/smbexplorer/)")
+    # Accept the standard `--format` plus the legacy `--smb-output-format`.
+    o.add_argument("--format", "--smb-output-format",
+                   dest="format", type=str, default="txt,csv,json,xml",
                    help="Output formats: txt,csv,json,xml or all")
     o.add_argument("--list-files", action="store_true", help="List accessible files in each share")
     o.add_argument("--max-files", type=int, default=50, help="Max files to list per share when using --list-files")
@@ -854,7 +877,7 @@ if __name__ == "__main__":
         input_file=args.input_file,
         output_dir=args.output_dir,
         target=args.targets,
-        smb_output_format=args.smb_output_format,
+        smb_output_format=args.format,
         list_files=args.list_files,
         max_files=args.max_files,
         username=args.username,

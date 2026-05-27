@@ -266,18 +266,22 @@ class CygorModule(ABC):
             result.save(json_path)
             saved_files.append(json_path)
 
-        # Export other formats
-        if "csv" in formats and self._results:
+        # Always honour the requested csv/xml/txt formats, even when
+        # `self._results` is empty: a header-only file is a valid
+        # record-of-run that a user can grep to confirm the scan happened.
+        # Previously these were silently skipped when there were 0 findings,
+        # which made `--format all` look broken on empty runs.
+        if "csv" in formats:
             csv_path = self.output_dir / f"{self.slug}-results.csv"
             export_to_csv(self._results, csv_path, self._build_columns())
             saved_files.append(csv_path)
 
-        if "xml" in formats and self._results:
+        if "xml" in formats:
             xml_path = self.output_dir / f"{self.slug}-results.xml"
             export_to_xml(self._results, xml_path, self.slug)
             saved_files.append(xml_path)
 
-        if "txt" in formats and self._results:
+        if "txt" in formats:
             txt_path = self.output_dir / f"{self.slug}-results.txt"
             export_to_txt(self._results, txt_path, self._build_columns())
             saved_files.append(txt_path)
