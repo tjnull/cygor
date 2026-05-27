@@ -113,6 +113,52 @@ def test_create_lays_out_every_subdir_in_canonical_list(cfg, tmp_path):
     assert not (base / "logs").exists()
 
 
+def test_create_does_not_pre_seed_per_module_subdirs(cfg, tmp_path):
+    """Per-module subdirs under cygor-enumeration-modules/ are created on
+    first module run, not at workspace-create time. Hardcoding a list here
+    would drift as modules are added/removed and would lie about which
+    modules have actually been used."""
+    _run("create", "alpha")
+    enum_dir = tmp_path / "workspaces" / "alpha" / "cygor-enumeration-modules"
+    assert enum_dir.is_dir()
+    assert list(enum_dir.iterdir()) == [], (
+        "cygor-enumeration-modules/ should be empty until a module runs"
+    )
+
+
+def test_create_with_path_shaped_positional_uses_basename_as_name(cfg, tmp_path):
+    """`cygor workspace create /opt/engagements/acme` should register the
+    workspace as 'acme' (basename), at /opt/engagements/acme, not as
+    '/opt/engagements/acme/' (the entire string)."""
+    target = tmp_path / "engagements" / "acme"
+    rc = _run("create", str(target))
+    assert rc == 0
+    assert "acme" in _config(cfg)["workspaces"]
+    assert _active(cfg) == "acme"
+    # The literal path string is NOT used as the registry key.
+    assert str(target) not in _config(cfg)["workspaces"]
+    assert target.is_dir()
+
+
+def test_create_with_trailing_slash_path_still_uses_basename(cfg, tmp_path):
+    target = tmp_path / "engagements" / "acme"
+    rc = _run("create", str(target) + "/")
+    assert rc == 0
+    assert "acme" in _config(cfg)["workspaces"]
+
+
+def test_create_rejects_both_path_positional_and_path_flag(cfg, tmp_path):
+    """Ambiguous: don't try to guess what the user meant."""
+    rc = _run("create", str(tmp_path / "foo"), "--path", str(tmp_path / "bar"))
+    assert rc == 2
+
+
+def test_create_with_root_path_rejects(cfg):
+    """Edge case: '/' has no basename. Don't silently misregister it."""
+    rc = _run("create", "/")
+    assert rc == 2
+
+
 # ---------------------------------------------------------------------------
 # Layout migrations (run from ensure_workspace_dirs())
 # ---------------------------------------------------------------------------

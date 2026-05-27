@@ -354,12 +354,13 @@ def ensure_workspace_dirs(path: Path) -> Path:
             pass
 
     # --- standard layout ----------------------------------------------------
+    # Per-module subdirs under cygor-enumeration-modules/ are intentionally
+    # NOT pre-created. cygor/modules/base.py:_module_outdir() creates the
+    # right subdir for whichever module actually runs, so seeding empty
+    # folders here would either lie about what's been used or quietly drift
+    # out of sync as modules are added/removed.
     for rel in SUBDIRS:
-        base = path / rel
-        base.mkdir(parents=True, exist_ok=True)
-        if rel == "cygor-enumeration-modules":
-            for module in ("lockon", "smbexplorer", "nfsexplorer"):
-                (base / module).mkdir(parents=True, exist_ok=True)
+        (path / rel).mkdir(parents=True, exist_ok=True)
 
     meta_file = path / ".cygor-workspace.json"
     if not meta_file.exists():
@@ -501,15 +502,41 @@ def cmd_create(args: argparse.Namespace) -> int:
     """`cygor workspace create <name>`: create a new workspace, register it,
     select it. Default location is `<workspaces_root>/<name>/`; pass
     `--path /custom/dir` to place it elsewhere (shared drives, large
-    engagement folders)."""
-    name = args.name
+    engagement folders).
+
+    For convenience, the positional may itself be a path: if `<name>`
+    looks like a path (contains `/`, or starts with `~`/`.`), it's treated
+    as `--path`, and the workspace is named after the trailing directory.
+    So `cygor workspace create /opt/engagements/acme` is shorthand for
+    `cygor workspace create acme --path /opt/engagements/acme`."""
+    raw = args.name
+    custom_path = getattr(args, "path", None)
+
+    # Path-shaped positional? Promote it to --path and use the basename
+    # as the registry name. Anyone passing both forms is asking ambiguously.
+    if "/" in raw or raw.startswith("~") or raw.startswith("."):
+        if custom_path:
+            print(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Pass either a name or a path-shaped "
+                  f"positional, not both. Got name={raw!r} and --path={custom_path!r}.",
+                  file=sys.stderr)
+            return 2
+        resolved = _resolve_path(raw)
+        # Trailing slash like '/foo/bar/' -> bar; root '/' -> empty -> reject.
+        name = resolved.name
+        if not name:
+            print(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Could not derive a workspace name "
+                  f"from path: {raw}", file=sys.stderr)
+            return 2
+        ws_path = resolved
+    else:
+        name = raw
+        ws_path = _resolve_path(custom_path) if custom_path else workspaces_root() / name
+
     cfg = _migrate_old_config(_load_config())
     if name in cfg.get("workspaces", {}):
         print(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Workspace already exists: {name}",
               file=sys.stderr)
         return 2
-
-    ws_path = _resolve_path(args.path) if getattr(args, "path", None) else workspaces_root() / name
 
     # Single source of truth for the layout: ensure_workspace_dirs() pre-creates
     # every SUBDIRS entry, runs the legacy-name migrations, and writes a
