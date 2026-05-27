@@ -772,6 +772,25 @@ def smbexplorer(input_file, output_dir=None, target=None, smb_output_format="txt
             f"Use --list-files to enumerate files, directories, and specials."
         )
 
+
+# Module-level discovery metadata. cygor.module_loader.discover_modules()
+# reads `module_info` by attribute lookup on the imported module; the
+# detailed ModuleInfo(...) used inside smb_enumerate is a local variable,
+# not visible to discovery. Without this top-level dict, `cygor plugin list`
+# and the Web UI's module index showed smbexplorer with no version /
+# description.
+module_info = {
+    "name":        "SMB Explorer",
+    "slug":        "smbexplorer",
+    "description": "Enumerate SMB shares, permissions, and files",
+    "author":      "cygor",
+    "version":     "2.0.0",
+    "module_type": "enumeration",
+    "view":        "table",
+    "category":    "network_shares",
+}
+
+
 # ----------------------------------------------------------------------
 # CLI
 # ----------------------------------------------------------------------

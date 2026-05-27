@@ -1008,6 +1008,25 @@ def _collect_targets(args):
                     targets.append(s)
     return list(dict.fromkeys(targets))
 
+
+# Module-level discovery metadata. cygor.module_loader.discover_modules()
+# reads `module_info` via attribute lookup on the imported module; the
+# detailed ModuleInfo(...) used inside the per-target scan loop is a
+# local variable, not visible to discovery. Without this top-level dict,
+# `cygor plugin list` and the Web UI's module index showed nfsexplorer
+# with no version / description.
+module_info = {
+    "name":        "NFS Explorer",
+    "slug":        "nfsexplorer",
+    "description": "Enumerate NFS exports, versions, files (UID/GID spoofing)",
+    "author":      "cygor",
+    "version":     "2.0.0",
+    "module_type": "enumeration",
+    "view":        "table",
+    "category":    "network_shares",
+}
+
+
 # ---------------------------
 # Main
 # ---------------------------
