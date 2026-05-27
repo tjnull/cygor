@@ -28,7 +28,7 @@ from typing import Any, Dict, List, Optional
 
 from colorama import Fore, Style
 
-from cygor.modules.base import CygorModule, wrap_external
+from cygor.modules.base import CygorModule, wrap_external, parse_host_token
 
 # domainControllerFunctionality / domainFunctionality -> AD release.
 FUNC_LEVELS = {
@@ -145,7 +145,7 @@ class LDAPExplorer(CygorModule):
         timeout = kwargs.get("timeout") or 8
 
         for raw in targets:
-            server = raw.strip().split()[0].split(":")[0] if raw.strip() else ""
+            server = parse_host_token(raw)
             if not server:
                 continue
 

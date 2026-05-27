@@ -17,7 +17,7 @@ Output format: cygor-result.json (universal schema)
 from ftplib import FTP, all_errors
 from typing import Any, Dict, List, Optional
 
-from cygor.modules.base import CygorModule
+from cygor.modules.base import CygorModule, parse_host_token
 
 DEFAULT_PORT = 21
 _WRITE_TEST_DIR = "cygor_write_test"
@@ -106,7 +106,7 @@ class FTPExplorer(CygorModule):
         check_writable = bool(kwargs.get("check_writable"))
 
         for raw in targets:
-            host = raw.strip().split()[0].split(":")[0] if raw.strip() else ""
+            host = parse_host_token(raw)
             if not host:
                 continue
             try:

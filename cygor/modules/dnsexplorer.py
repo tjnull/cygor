@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional
 
 from colorama import Fore, Style
 
-from cygor.modules.base import CygorModule, wrap_external
+from cygor.modules.base import CygorModule, wrap_external, parse_host_token
 
 # A benign public name the target resolver is not authoritative for -- if it
 # returns an answer, the server is recursing for arbitrary clients.
@@ -128,7 +128,7 @@ class DNSExplorer(CygorModule):
         timeout = kwargs.get("timeout") or 5
 
         for raw in targets:
-            server = raw.strip().split()[0].split(":")[0] if raw.strip() else ""
+            server = parse_host_token(raw)
             if not server:
                 continue
             version = _version_bind(server, timeout)

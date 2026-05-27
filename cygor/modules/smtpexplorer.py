@@ -17,7 +17,7 @@ Output format: cygor-result.json (universal schema)
 import socket
 from typing import Any, Dict, List, Optional
 
-from cygor.modules.base import CygorModule
+from cygor.modules.base import CygorModule, parse_host_token
 
 DEFAULT_PORTS = [25, 587]
 
@@ -115,7 +115,7 @@ class SMTPExplorer(CygorModule):
         ports = [port] if port else DEFAULT_PORTS
 
         for raw in targets:
-            host = raw.strip().split()[0].split(":")[0] if raw.strip() else ""
+            host = parse_host_token(raw)
             if not host:
                 continue
             for p in ports:

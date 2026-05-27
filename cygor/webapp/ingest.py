@@ -272,15 +272,16 @@ async def ingest_directory(path, session, dedupe=True, verbose=0):
         if not file.is_file():
             continue
         # Skip enrichment outputs -- they're ingested via the enrichment
-        # route, not the generic scan-result ingestor. Accept both the new
-        # 'enrich/' subdir (current) and the legacy 'enrichment/' name so
-        # existing workspaces don't double-ingest after the rename.
+        # route, not the generic scan-result ingestor. Match exact path
+        # COMPONENTS (so a file inside 'enrich/' or 'enrichment/' subdir
+        # is skipped) and exact filename PREFIXES ('enrich-' / 'enrichment-').
+        # The previous substring check ('enrich' in file.name.lower()) was
+        # too greedy: 'unenriched-hosts.json' or 'service-enrichment.xml'
+        # would be skipped even though they're legitimate scan output.
         if "enrich" in file.parts or "enrichment" in file.parts:
             continue
-        if (file.name.startswith("enrichment-") or
-            file.name.startswith("enrich-") or
-            "enrichment" in file.name.lower() or
-            "enrich" in file.name.lower()):
+        if (file.name.startswith("enrichment-")
+            or file.name.startswith("enrich-")):
             continue
         if file.name.startswith(".") or file.name == ".cygor-workspace.json":
             continue
@@ -293,6 +294,28 @@ async def ingest_directory(path, session, dedupe=True, verbose=0):
         except Exception:
             continue
 
+        # XML completeness check: a mid-write nmap XML doesn't have a
+        # closing </nmaprun> tag. Caching its mtime now and then failing
+        # to ingest silently would mean we'd skip it on every subsequent
+        # pass even after the scan finishes and rewrites it. Skip the
+        # cache entry entirely for incomplete XML so we retry next pass.
+        is_xml = file.suffix.lower() == ".xml"
+        looks_complete = True
+        if is_xml:
+            try:
+                # Peek at the last 256 bytes for the closing tag. Cheap
+                # for huge files (nmap can produce 100s of MB).
+                with open(file, "rb") as fh:
+                    fh.seek(0, 2)
+                    size = fh.tell()
+                    fh.seek(max(0, size - 256))
+                    tail = fh.read().decode("utf-8", errors="ignore")
+                if "</nmaprun>" not in tail and "</masscan>" not in tail:
+                    looks_complete = False
+            except Exception:
+                pass  # fall back to "looks complete = True" -- worst case
+                      # we ingest a real file and try to handle the error
+
         all_files.append(file)
         file_key = str(file)
         current_mtime = stat.st_mtime_ns
@@ -301,6 +324,12 @@ async def ingest_directory(path, session, dedupe=True, verbose=0):
         if file_key in mtime_cache and mtime_cache[file_key] == current_mtime:
             new_mtime_cache[file_key] = current_mtime
             skipped_unchanged += 1
+            continue
+
+        if not looks_complete:
+            # Don't cache the mtime -- we want to retry this file on the
+            # next pass once the scan finishes writing it.
+            log(f"[!] Skipping incomplete XML (no </nmaprun>): {file}", level=1, verbose=verbose)
             continue
 
         new_mtime_cache[file_key] = current_mtime

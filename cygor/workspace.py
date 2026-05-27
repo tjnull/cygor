@@ -336,7 +336,14 @@ def ensure_workspace_dirs(path: Path) -> Path:
     # created empty next to a populated 'enrichment/') -----------------------
     old_enrich = path / "enrichment"
     new_enrich = path / "enrich"
-    if old_enrich.is_dir() and not new_enrich.exists():
+    # Symlink-safety: lstat/.is_symlink() checks BEFORE Path.exists() (which
+    # follows symlinks). If 'enrich/' is a broken symlink, exists() returns
+    # False but renaming over it would silently clobber the symlink target.
+    # If 'enrichment/' is itself a symlink, leave it alone -- the user
+    # pointed it at something on purpose; we shouldn't move the link.
+    if (old_enrich.is_dir() and not old_enrich.is_symlink()
+            and not new_enrich.exists()
+            and not new_enrich.is_symlink()):
         try:
             old_enrich.rename(new_enrich)
         except OSError:
@@ -345,7 +352,10 @@ def ensure_workspace_dirs(path: Path) -> Path:
             pass
 
     legacy_logs = path / "logs"
-    if legacy_logs.is_dir():
+    # Don't follow a symlink for 'logs/' either. If it's a symlink pointing
+    # elsewhere, the user explicitly set that up -- leave it. is_dir() on a
+    # symlink follows by default, so use a non-followed check.
+    if legacy_logs.is_dir() and not legacy_logs.is_symlink():
         try:
             # Only remove if empty -- never blow away log files the user
             # might have copied here manually.

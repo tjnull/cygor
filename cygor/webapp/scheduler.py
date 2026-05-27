@@ -998,6 +998,48 @@ class SchedulerManager:
                 )
                 return None
 
+    def _scheduled_base_dir(self) -> str:
+        """Where scheduled tasks should write.
+
+        Precedence:
+          1. The active workspace from cygor.workspace (the runtime source of
+             truth -- gets updated when the user switches via the UI).
+          2. settings.RESULTS_DIR (mirror of #1; set on startup AND on switch
+             via _apply_workspace_to_process). Kept as a safety net for
+             plugins that bypass cygor.workspace.
+          3. CYGOR_LOAD_DIR env (only set when 'cygor web start --load-dir'
+             was used at startup). This used to be checked FIRST, but a user
+             who started with --load-dir A and then switched the workspace
+             to B via the UI was silently still writing to A. Demoting it
+             to last-resort fixes that drift.
+        Always returns a string path; never None.
+        """
+        try:
+            from cygor.workspace import active_workspace_path
+            ws = active_workspace_path()
+            if ws is not None:
+                return str(ws)
+        except Exception:
+            pass
+        if getattr(settings, "RESULTS_DIR", None):
+            return str(settings.RESULTS_DIR)
+        return os.environ.get("CYGOR_LOAD_DIR") or ""
+
+    def _scheduled_subdir(self, prefix: str, task_id: str | None = None) -> str:
+        """Build a unique-per-task scheduled output subdir under prefix/.
+
+        Two scheduled tasks firing within the same wall-clock second used
+        to land in the same '<prefix>/<ts>' directory and clobber each
+        other's output. Append a short suffix derived from the task_id
+        (or a fresh uuid if not provided) so collisions can't happen even
+        on a cron with multiple-per-second runs.
+        """
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
+        # First 8 chars of the uuid are enough to disambiguate within a
+        # second (collision probability ~1 in 4 billion per second).
+        suffix = (task_id or str(uuid.uuid4())).split("-")[0][:8]
+        return f"{self._scheduled_base_dir()}/schedule-scans/{prefix}/{timestamp}-{suffix}"
+
     async def _execute_port_scan(self, config: Dict[str, Any]) -> tuple[str, str]:
         """Execute a port scan task. Returns (task_id, output_path)."""
         import uuid
@@ -1012,12 +1054,11 @@ class SchedulerManager:
         # Generate task ID with 'sched-' prefix for scheduled tasks
         task_id = f"sched-{uuid.uuid4()}"
 
-        # Create timestamped output directory organized by task type
-        # ALWAYS use CYGOR_LOAD_DIR for scheduled scans to ensure data is saved
-        # in the directory where cygor was started with --load-dir
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
-        base_output_dir = os.environ.get("CYGOR_LOAD_DIR") or str(settings.RESULTS_DIR)
-        scheduled_output_dir = f"{base_output_dir}/schedule-scans/port-scan/{timestamp}"
+        # Per-run output dir under the active workspace. _scheduled_subdir
+        # picks the LIVE active workspace (was: stale CYGOR_LOAD_DIR env)
+        # and adds a uuid suffix so two scheduled runs firing in the same
+        # second can't share a directory.
+        scheduled_output_dir = self._scheduled_subdir("port-scan", task_id=None)
 
         logger.info(f"[PORT_SCAN] Output directory: {scheduled_output_dir}")
         logger.info(f"[PORT_SCAN] Config: targets={config.get('targets', [])}, discover={config.get('discover')}, scan_type={config.get('scan_type', 'top-ports')}, discover_only={config.get('discover_only', False)}")
@@ -1057,20 +1098,19 @@ class SchedulerManager:
         # Determine output directory based on module type. Every scheduled
         # task must land somewhere under schedule-scans/ so it never overlaps
         # with the ad-hoc cygor-enumeration-modules/<slug>/ tree (which is
-        # owned by interactive CLI + /api/modules runs).
-        base_output_dir = os.environ.get("CYGOR_LOAD_DIR") or str(settings.RESULTS_DIR)
+        # owned by interactive CLI + /api/modules runs). _scheduled_subdir
+        # picks the LIVE active workspace (was: stale CYGOR_LOAD_DIR env)
+        # and adds a uuid suffix to prevent same-second collisions.
         module_name = config.get('module_name', '')
 
         # Lockon uses a stable (non-timestamped) output directory so its
         # screenshots/ folder accumulates and its built-in archive mechanism
         # (screenshots/archive/<ts>/) can preserve previous runs. Other
-        # modules get a per-run timestamped dir for full isolation. Both
-        # live under schedule-scans/ so they don't pollute the workspace root.
+        # modules get a per-run timestamped dir for full isolation.
         if module_name == "lockon":
-            scheduled_output_dir = f"{base_output_dir}/schedule-scans/lockon"
+            scheduled_output_dir = f"{self._scheduled_base_dir()}/schedule-scans/lockon"
         else:
-            timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
-            scheduled_output_dir = f"{base_output_dir}/schedule-scans/module-scan/{timestamp}"
+            scheduled_output_dir = self._scheduled_subdir("module-scan", task_id=None)
 
         logger.info(f"Scheduled module scan output directory: {scheduled_output_dir}")
 
@@ -1099,9 +1139,16 @@ class SchedulerManager:
 
         # Create timestamped workspace directory organized by task type
         # ALWAYS use CYGOR_LOAD_DIR for scheduled scans
+        # credrecon already disambiguates its dir with short_scan_id + ts;
+        # this implicit guarantees uniqueness without needing _scheduled_subdir.
+        # Use _scheduled_base_dir() so we get the LIVE active workspace
+        # (was: stale CYGOR_LOAD_DIR env if the user switched workspaces).
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        base_workspace = os.environ.get("CYGOR_LOAD_DIR") or str(settings.RESULTS_DIR)
-        scheduled_workspace = Path(base_workspace) / "schedule-scans" / "credrecon" / f"credrecon-{short_scan_id}-{timestamp}"
+        scheduled_workspace = (
+            Path(self._scheduled_base_dir())
+            / "schedule-scans" / "credrecon"
+            / f"credrecon-{short_scan_id}-{timestamp}"
+        )
         scheduled_workspace.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"Scheduled credrecon workspace: {scheduled_workspace}")

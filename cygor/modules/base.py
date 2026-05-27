@@ -31,6 +31,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import os
 import subprocess
 import sys
@@ -38,6 +39,59 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Type, Union
+
+
+def parse_host_token(raw: str) -> str:
+    """Extract a bare host from a target string, IPv6-safe.
+
+    Accepts every shape modules commonly receive from hostlists, the CLI,
+    or the web UI:
+        192.168.1.1                 -> '192.168.1.1'
+        192.168.1.1:445             -> '192.168.1.1'
+        [2001:db8::1]               -> '2001:db8::1'
+        [2001:db8::1]:445           -> '2001:db8::1'
+        2001:db8::1                 -> '2001:db8::1'      (no-port form)
+        host.example.com            -> 'host.example.com'
+        host.example.com:445        -> 'host.example.com'
+        '   '  or  ''               -> ''
+
+    Modules used to do ``raw.strip().split()[0].split(":")[0]`` which
+    mangled bare IPv6 addresses (``2001:db8::1`` -> ``2001``). This
+    helper validates the candidate with ``ipaddress`` to decide whether
+    a colon means 'IPv6 separator' or 'host:port separator'.
+    """
+    if not raw:
+        return ""
+    token = raw.strip().split()[0] if raw.strip() else ""
+    if not token:
+        return ""
+
+    # Bracketed forms always isolate the IPv6 host: [addr] or [addr]:port.
+    if token.startswith("["):
+        end = token.find("]")
+        if end > 0:
+            return token[1:end]
+        return ""
+
+    # If the whole token parses as an IP (v4 or v6 with no brackets / no
+    # port), return it as-is.
+    try:
+        ipaddress.ip_address(token)
+        return token
+    except ValueError:
+        pass
+
+    # Multi-colon tokens that aren't bracketed and aren't bare IPv6 are
+    # almost certainly a malformed IPv6-with-port like '2001:db8::1:445'.
+    # We can't unambiguously split that, but we can detect it and bail.
+    if token.count(":") > 1:
+        # Probably bare IPv6 that didn't parse for some reason. Return
+        # the token unchanged -- the module's downstream connect attempt
+        # will produce a clearer error than silently mangling.
+        return token
+
+    # Single colon: host:port (IPv4 or hostname). Strip the port.
+    return token.split(":", 1)[0]
 
 from .schema import (
     AssetReferences,

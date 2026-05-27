@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional
 
 from colorama import Fore, Style
 
-from cygor.modules.base import CygorModule, wrap_external
+from cygor.modules.base import CygorModule, wrap_external, parse_host_token
 
 # One round-trip pulls server info, domain/SID, users, groups, and pw policy.
 _RPC_COMMANDS = "srvinfo;lsaquery;enumdomusers;enumdomgroups;getdompwinfo"
@@ -297,7 +297,7 @@ class RPCExplorer(CygorModule):
         rids = _parse_rid_ranges(kwargs.get("rid_ranges") or DEFAULT_RID_RANGES)
 
         for raw in targets:
-            host = raw.strip().split()[0].split(":")[0] if raw.strip() else ""
+            host = parse_host_token(raw)
             if not host:
                 continue
             out = _rpcclient(host, username or "", password, timeout)
