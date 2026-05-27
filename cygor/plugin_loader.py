@@ -86,6 +86,38 @@ def _allowlist_check(slug: str, fingerprint: str, allowlist: Dict[str, Any]) -> 
     return None
 
 
+def _allowlist_pre_exec_check(fingerprint: str, allowlist: Dict[str, Any]) -> Optional[str]:
+    """Pre-exec gate: when the allowlist is enforcing, refuse to import any
+    file whose hash isn't pinned anywhere in the allowlist.
+
+    The post-exec ``_allowlist_check`` (above) verifies the slug↔fingerprint
+    binding only AFTER ``exec_module`` already ran the plugin's top-level
+    code. A malicious plugin would have side-effects (file/network/imports)
+    by then; the SHA mismatch only stopped it from being registered, not
+    from running. This pre-exec check inspects all pinned fingerprints in
+    the allowlist and refuses to load any file whose hash doesn't appear --
+    so untrusted plugin code never gets executed at all.
+
+    Returns None to allow import; otherwise an error string for rejection.
+    """
+    if not allowlist or not allowlist.get("enforce"):
+        # Allowlist disabled -- skip the pre-exec gate. (The post-exec
+        # check also returns None in this mode.)
+        return None
+    pinned_fps = {
+        str(fp).lower()
+        for fp in (allowlist.get("plugins") or {}).values()
+        if fp
+    }
+    if (fingerprint or "").lower() not in pinned_fps:
+        return (
+            f"refusing to import: file fingerprint "
+            f"{(fingerprint or 'unknown')[:16]}... is not pinned in the "
+            f"allowlist (any of {len(pinned_fps)} entries)"
+        )
+    return None
+
+
 def get_plugin_errors() -> List[Dict[str, str]]:
     """Return errors recorded during the most recent plugin discovery."""
     return list(_PLUGIN_ERRORS)
@@ -207,9 +239,27 @@ def _validate_options_schema(options: List[Dict[str, Any]]) -> List[str]:
     return warnings
 
 
-def _import_plugin(path: Path):
-    """Safely import a plugin file. Returns the module object or None."""
+def _import_plugin(path: Path, allowlist: Optional[Dict[str, Any]] = None):
+    """Safely import a plugin file. Returns the module object or None.
+
+    When an allowlist is in enforcing mode, this function hashes the file
+    BEFORE calling ``exec_module`` and refuses to import anything whose
+    hash isn't pinned in the allowlist. The slug↔fingerprint binding is
+    still verified after import by ``_allowlist_check`` -- but the
+    pre-exec gate is what actually keeps untrusted plugin code from
+    running at all.
+    """
     try:
+        # Pre-exec allowlist gate. When enforce=False (or no allowlist),
+        # this returns None and we fall through to the import.
+        if allowlist is None:
+            allowlist = _load_allowlist()
+        fingerprint = _file_fingerprint(path)
+        pre_err = _allowlist_pre_exec_check(fingerprint, allowlist)
+        if pre_err:
+            _record_error(path, pre_err, kind="allowlist")
+            return None
+
         spec = importlib.util.spec_from_file_location(f"cygor_plugin_{path.stem}", path)
         if not spec or not spec.loader:
             _record_error(path, "spec_from_file_location returned None", kind="import")
@@ -349,7 +399,7 @@ def discover_plugins() -> List[ModuleSpec]:
             if f.name.startswith("_") or f.stem in _EXCLUDED_NAMES:
                 continue
 
-            mod = _import_plugin(f)
+            mod = _import_plugin(f, allowlist=allowlist)
             if mod is None:
                 continue
 
@@ -376,7 +426,7 @@ def discover_plugins() -> List[ModuleSpec]:
                 if f.name.startswith("_") or f.stem in _EXCLUDED_NAMES:
                     continue
 
-                mod = _import_plugin(f)
+                mod = _import_plugin(f, allowlist=allowlist)
                 if mod is None:
                     continue
 
@@ -513,6 +563,18 @@ def install_plugin(source: str, target_dir: Optional[Path] = None) -> Dict[str, 
 
     # Git URL
     if source.startswith("http://") or source.startswith("https://") or source.startswith("git@"):
+        # Defence in depth: even though we already filtered by URL scheme
+        # above, a value like 'https://x.com/' wouldn't pass that test BUT
+        # 'http://foo' with an embedded null or other surprises could still
+        # trick downstream tooling. Reject the obvious argument-injection
+        # vectors before handing the value to `git clone`. Note: in this
+        # specific code path the scheme filter already eliminates leading
+        # '-', but the same `subprocess.run(["git","clone", source, ...])`
+        # shape elsewhere in this branch's history was vulnerable.
+        if source.startswith("-") or "\x00" in source or "\n" in source:
+            return {"success": False,
+                    "error": f"Refusing to clone unsafe URL: {source!r}"}
+
         repo_name = source.rstrip("/").split("/")[-1].replace(".git", "")
         clone_dir = target_dir / repo_name
 
@@ -520,8 +582,14 @@ def install_plugin(source: str, target_dir: Optional[Path] = None) -> Dict[str, 
             return {"success": False, "error": f"Directory already exists: {clone_dir}"}
 
         try:
+            # The '--' separator tells git that everything after is a
+            # positional argument, not an option. Without it, a value
+            # like '--upload-pack=/tmp/x' would be parsed as a git option
+            # (RCE vector). Even though the scheme check above rejects
+            # leading '-', the '--' adds a definitive backstop in case
+            # the prefix check is ever relaxed.
             subprocess.run(
-                ["git", "clone", "--depth", "1", source, str(clone_dir)],
+                ["git", "clone", "--depth", "1", "--", source, str(clone_dir)],
                 check=True,
                 capture_output=True,
                 text=True,

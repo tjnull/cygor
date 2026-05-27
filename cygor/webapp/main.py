@@ -447,6 +447,21 @@ async def cleanup_postgresql():
     pg_db   = os.getenv("PGDATABASE", os.getenv("CYGOR_DB_NAME", "cygor"))
     pg_user = os.getenv("PGUSER", os.getenv("CYGOR_DB_USER", "cygor_user"))
 
+    # CYGOR_DB_NAME and CYGOR_DB_USER (and their PG* aliases) come from
+    # the environment; a value containing `;`, `'`, or a newline would
+    # otherwise be executed as superuser SQL when this cleanup path runs
+    # `DROP DATABASE {pg_db}` / `DROP ROLE {pg_user}` via the sudo
+    # postgres user. Reject anything that isn't a strict Postgres
+    # identifier before letting either string near a SQL statement.
+    # Same validator the DB adapter uses on its setup() path.
+    from cygor.webapp.db_adapters import PostgreSQLAdapter as _PgAdapter
+    try:
+        _PgAdapter._validate_identifier("PGDATABASE / CYGOR_DB_NAME", pg_db)
+        _PgAdapter._validate_identifier("PGUSER / CYGOR_DB_USER", pg_user)
+    except ValueError as _id_err:
+        print(f"[!] Refusing to run cleanup with unsafe identifier: {_id_err}")
+        return
+
     conn_user = os.getenv("PGADMIN_USER", os.getenv("PGUSER", os.getenv("CYGOR_DB_USER", "cygor")))
     conn_pass = os.getenv("PGADMIN_PASS", os.getenv("PGPASSWORD", os.getenv("CYGOR_DB_PASSWORD", "cygorpass")))
     pg_host   = os.getenv("PGHOST", "localhost")

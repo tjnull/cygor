@@ -88,6 +88,52 @@ class PostgreSQLAdapter(DatabaseAdapter):
         if not self.password:
             self.password = "cygor"
 
+        # Validate user/database names against Postgres identifier rules
+        # BEFORE any SQL string-interpolation later. CYGOR_DB_USER and
+        # CYGOR_DB_NAME come from env vars; a name containing `;` or `'`
+        # would otherwise be executed as superuser SQL when setup() runs.
+        # The valid Postgres unquoted-identifier grammar is letter|_ then
+        # letter|digit|_|$ -- reject anything outside that strict shape.
+        # We never need quoted identifiers here; if someone insists on
+        # special characters in role/db names they can use a custom
+        # CYGOR_DB_URL that bypasses setup() entirely.
+        self._validate_identifier("CYGOR_DB_USER", self.user)
+        self._validate_identifier("CYGOR_DB_NAME", self.database)
+
+    @staticmethod
+    def _validate_identifier(field_name: str, value: str) -> None:
+        """Raise ValueError if `value` isn't a safe Postgres identifier.
+
+        Restricts to ASCII letter/digit/underscore (Postgres unquoted-
+        identifier grammar). Keeps the SQL string-interpolation in setup()
+        from being an injection vector via env-supplied role/db names.
+        """
+        import re
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"{field_name} must be a non-empty string")
+        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$", value):
+            raise ValueError(
+                f"{field_name}={value!r} is not a valid Postgres identifier. "
+                f"Allowed: ASCII letter/underscore start, then "
+                f"letter/digit/underscore (max 63 chars). For special "
+                f"characters use CYGOR_DB_URL directly."
+            )
+
+    @staticmethod
+    def _quote_sql_literal(value: str) -> str:
+        """Quote a string for use inside a single-quoted SQL literal.
+
+        Doubles every embedded single quote and rejects null bytes.
+        Returns the value with surrounding quotes -- caller embeds the
+        result directly (no extra quoting). Used for password fields
+        where Postgres doesn't allow parameterised binding.
+        """
+        if value is None:
+            return "''"
+        if "\x00" in str(value):
+            raise ValueError("SQL literal must not contain null bytes")
+        return "'" + str(value).replace("'", "''") + "'"
+
     def is_available(self) -> bool:
         """Check if PostgreSQL client is installed."""
         try:
@@ -359,12 +405,16 @@ class PostgreSQLAdapter(DatabaseAdapter):
                 if verbose > 0:
                     logger.info(f"Creating PostgreSQL user '{self.user}'")
 
-                create_user = self._run_psql(["-c", f"CREATE ROLE {self.user} LOGIN PASSWORD '{self.password}';"])
+                # self.user was validated in __init__; password is quoted
+                # via _quote_sql_literal so embedded quotes can't break out.
+                _pw_lit = self._quote_sql_literal(self.password)
+                _create_sql = f"CREATE ROLE {self.user} LOGIN PASSWORD {_pw_lit};"
+                create_user = self._run_psql(["-c", _create_sql])
                 if create_user.returncode != 0:
                     if verbose > 1:
                         logger.debug("Retrying user creation without postgres user")
                     create_user = self._run_psql(
-                        ["-c", f"CREATE ROLE {self.user} LOGIN PASSWORD '{self.password}';"],
+                        ["-c", _create_sql],
                         use_postgres_user=False
                     )
                     if create_user.returncode != 0:
@@ -380,12 +430,14 @@ class PostgreSQLAdapter(DatabaseAdapter):
                 if verbose > 1:
                     logger.debug(f"PostgreSQL user '{self.user}' already exists, updating password")
 
-                update_password = self._run_psql(["-c", f"ALTER ROLE {self.user} PASSWORD '{self.password}';"])
+                _pw_lit = self._quote_sql_literal(self.password)
+                _alter_sql = f"ALTER ROLE {self.user} PASSWORD {_pw_lit};"
+                update_password = self._run_psql(["-c", _alter_sql])
                 if update_password.returncode != 0:
                     if verbose > 1:
                         logger.debug("Retrying password update without postgres user")
                     update_password = self._run_psql(
-                        ["-c", f"ALTER ROLE {self.user} PASSWORD '{self.password}';"],
+                        ["-c", _alter_sql],
                         use_postgres_user=False
                     )
                     if update_password.returncode != 0 and verbose > 1:
@@ -398,13 +450,18 @@ class PostgreSQLAdapter(DatabaseAdapter):
             if verbose > 1:
                 logger.debug(f"Checking if PostgreSQL database '{self.database}' exists")
 
-            check_db = self._run_psql(["-tAc", f"SELECT 1 FROM pg_database WHERE datname='{self.database}'"])
+            # self.database was validated in __init__, but use the literal
+            # quoter anyway -- defense-in-depth, and a clearer signal to
+            # future maintainers that this string ends up in raw SQL.
+            _db_lit = self._quote_sql_literal(self.database)
+            _check_sql = f"SELECT 1 FROM pg_database WHERE datname={_db_lit}"
+            check_db = self._run_psql(["-tAc", _check_sql])
 
             if check_db.returncode != 0:
                 if verbose > 1:
                     logger.debug("Retrying database check without postgres user")
                 check_db = self._run_psql(
-                    ["-tAc", f"SELECT 1 FROM pg_database WHERE datname='{self.database}'"],
+                    ["-tAc", _check_sql],
                     use_postgres_user=False
                 )
 
@@ -430,7 +487,9 @@ class PostgreSQLAdapter(DatabaseAdapter):
                     if verbose > 1:
                         logger.debug("createdb failed, trying psql CREATE DATABASE")
 
-                    # Fallback to psql CREATE DATABASE
+                    # Fallback to psql CREATE DATABASE. Both identifiers
+                    # were validated in __init__ (only [A-Za-z_][A-Za-z0-9_]*
+                    # allowed) so the f-string interpolation here is safe.
                     create_db_sql = f"CREATE DATABASE {self.database} OWNER {self.user};"
                     create_db = self._run_psql(["-c", create_db_sql])
                     if create_db.returncode != 0:

@@ -292,8 +292,21 @@ def format_socks_proxy_for_subprocess() -> Dict[str, str]:
     """
     Get SOCKS proxy environment variables for subprocess calls.
 
-    Returns ALL_PROXY and related vars if jumpbox tunnel is active.
-    Tools like curl respect ALL_PROXY for SOCKS.
+    Returns ALL_PROXY (and the lowercase alias) when the jumpbox tunnel
+    is active. Tools that honour ALL_PROXY for SOCKS (curl, ssh -o
+    ProxyCommand, modern requests[socks]) tunnel correctly; anything
+    that ONLY understands HTTPS_PROXY needs proxychains wrapping --
+    see ``get_proxychains_command()``.
+
+    NB: we used to also export ``HTTPS_PROXY`` and ``HTTP_PROXY``
+    pointing at the SOCKS URL. That was actively harmful: plain
+    ``urllib``, older ``requests`` (without ``requests[socks]``
+    installed), and ``curl --proxy`` all interpret HTTPS_PROXY as an
+    HTTP CONNECT proxy. With a SOCKS URL there, they'd silently fail
+    to tunnel and leak the real-source traffic that the user thought
+    was being routed via the jumpbox. ALL_PROXY only -- and a clear
+    log line so the caller knows extra wrapping may be needed for
+    tools that don't speak SOCKS via env.
 
     Returns:
         Dict of environment variables to merge into subprocess env.
@@ -314,13 +327,13 @@ def format_socks_proxy_for_subprocess() -> Dict[str, str]:
     if not socks_url:
         return {}
 
+    # ALL_PROXY + lowercase alias only. Anything that doesn't speak SOCKS
+    # via env vars (plain urllib, curl --proxy without --socks*, ...) must
+    # be wrapped with proxychains instead -- HTTPS_PROXY=socks5://... was
+    # a silent traffic leak.
     return {
         'ALL_PROXY': socks_url,
         'all_proxy': socks_url,
-        'HTTPS_PROXY': socks_url,
-        'https_proxy': socks_url,
-        'HTTP_PROXY': socks_url,
-        'http_proxy': socks_url,
     }
 
 
