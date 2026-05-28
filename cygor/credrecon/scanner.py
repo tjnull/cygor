@@ -61,7 +61,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COM
 from collections import defaultdict
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 # Import protocol handlers
 try:
@@ -470,102 +470,465 @@ else:
     _SourceIPAdapter = None
 
 
+# Strings in a response body that indicate authentication failed / a login
+# page is still being shown. Shared by Basic-auth and form-login evaluation.
+HTTP_AUTH_FAILURE_INDICATORS = [
+    'invalid password', 'invalid username', 'login failed',
+    'incorrect password', 'incorrect username', 'authentication failed',
+    'access denied', 'wrong password', 'wrong username', 'bad credentials',
+    'login error', 'authentication error', 'incorrect login',
+    'login unsuccessful', 'authentication unsuccessful',
+    'enter your password', 'password incorrect', 'username incorrect',
+    'invalid credentials', 'invalid login',
+]
+
+# Strings that indicate a successful, authenticated session.
+HTTP_AUTH_SUCCESS_INDICATORS = [
+    'welcome', 'dashboard', 'logout', 'sign out', 'signout', 'log out',
+    'profile', 'settings', 'account', 'user panel', 'admin panel',
+    'control panel',
+]
+
+
 class HTTPTester(ProtocolTester):
-    """Test HTTP/HTTPS Basic Auth."""
+    """Test HTTP/HTTPS credentials across Basic/Digest auth, HTML login forms,
+    and product-specific login APIs (e.g. OpenMediaVault JSON-RPC)."""
 
-    def detect_login_form(self, url: str) -> tuple[bool, str]:
-        """
-        Detect if a URL has a login form or authentication mechanism.
-        Returns (has_login, detection_method)
+    # Common login page/endpoint paths to probe when the landing page has no
+    # usable form on its own (single-page apps render the form client-side, so
+    # the root HTML carries no <form>/password field at all).
+    LOGIN_PATH_CANDIDATES = [
+        "/login", "/admin", "/admin/login", "/auth/login", "/user/login",
+        "/users/login", "/account/login", "/signin", "/sign-in", "/logon",
+        "/administrator", "/manager/html", "/wp-login.php", "/wp-admin/",
+        "/cgi-bin/luci", "/index.php?option=com_login",
+    ]
 
-        Stricter detection to avoid false positives:
-        - Requires password field + form/username field on the SAME page
-        - Or HTTP Basic Auth challenge (401)
-        - Or URL path indicating it's a login page
+    # Product-specific auth handlers. Each entry is (signature, handler, name):
+    #   signature - lowercase string matched against the fingerprint
+    #               product/vendor and the landing-page content/headers; also
+    #               used to pull that product's credentials from the DB.
+    #   handler   - HTTPTester method that authenticates the product.
+    #   name      - human-readable product name for reporting.
+    PRODUCT_AUTH_HANDLERS = [
+        ("openmediavault", "_test_omv", "OpenMediaVault"),
+    ]
+
+    @staticmethod
+    def _origin(url: str) -> str:
+        """Return scheme://host[:port] for a URL, stripping path/query/fragment."""
+        p = urlparse(url)
+        if p.scheme and p.netloc:
+            return f"{p.scheme}://{p.netloc}"
+        return url.split('#', 1)[0].rstrip('/')
+
+    @staticmethod
+    def _host_label(*candidates: str) -> str:
+        """Return a bare hostname/IP from the first usable candidate (a full URL
+        or a host string). Used so results render as host:port instead of
+        embedding a full URL (which would produce e.g. http://h:80/:80)."""
+        for c in candidates:
+            if not c:
+                continue
+            p = urlparse(c if "://" in c else f"//{c}")
+            if p.hostname:
+                return p.hostname
+        return next((c for c in candidates if c), "")
+
+    def _match_product_handler(self, *texts: str) -> Optional[Dict[str, str]]:
+        """Return {handler, product, name} for the first product signature found
+        in any of the given text blobs, or None."""
+        blob = " ".join(t for t in texts if t).lower()
+        if not blob:
+            return None
+        for needle, handler, name in self.PRODUCT_AUTH_HANDLERS:
+            if needle in blob:
+                return {"handler": handler, "product": needle, "name": name}
+        return None
+
+    def _identify_http_product(self, *texts: str) -> Optional[str]:
+        """Identify a known web application from page content/headers using the
+        shared HTTP_APPLICATION_PATTERNS table. Returns the product name (aligned
+        to credential-DB product keys) or None. This is identification only - the
+        actual login still uses the generic Basic/Digest/form tester unless a
+        product has a dedicated handler in PRODUCT_AUTH_HANDLERS."""
+        try:
+            from cygor.credrecon.validation import HTTP_APPLICATION_PATTERNS
+        except Exception:
+            return None
+        blob = " ".join(t for t in texts if t).lower()
+        if not blob:
+            return None
+        for patterns, product, vendor, _cred_category in HTTP_APPLICATION_PATTERNS:
+            for pat in patterns:
+                if pat.lower() in blob:
+                    return product
+        return None
+
+    @staticmethod
+    def _attach_product(plan: Optional[Dict[str, Any]], product: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Tag a non-product-handler auth plan (basic/digest/form) with an
+        identified web app so the scanner front-loads that product's default
+        creds. The auth method is unchanged - the generic tester still logs in."""
+        if plan and product and not plan.get("product"):
+            plan["product"] = product
+            base = plan.get("detail") or plan.get("method") or "login"
+            plan["detail"] = f"{base} - identified as {product}"
+        return plan
+
+    def _parse_login_form(self, html: str, page_url: str) -> Optional[Dict[str, Any]]:
+        """Find the first HTML <form> containing a password input and return a
+        form plan: action URL, method, username/password field names, and any
+        hidden fields (CSRF tokens, etc.). Returns None if no login form found."""
+        if not html:
+            return None
+        low = html.lower()
+        if 'type="password"' not in low and "type='password'" not in low and 'type=password' not in low:
+            return None
+
+        user_hints = ('user', 'email', 'login', 'name', 'account', 'uid', 'mail')
+        forms = re.findall(r'<form\b[^>]*>.*?</form>', html, re.IGNORECASE | re.DOTALL)
+        # Fall back to treating the whole document as one form region if no
+        # explicit <form> close tag was matched (some apps stream markup).
+        if not forms and ('<form' in low):
+            forms = [html[low.index('<form'):]]
+
+        for form_html in forms:
+            if 'password' not in form_html.lower():
+                continue
+
+            pass_field = None
+            user_field = None
+            hidden: Dict[str, str] = {}
+
+            for inp in re.findall(r'<input\b[^>]*>', form_html, re.IGNORECASE):
+                m_type = re.search(r'type\s*=\s*["\']?([^"\'\s>]+)', inp, re.IGNORECASE)
+                m_name = re.search(r'name\s*=\s*["\']?([^"\'\s>]+)', inp, re.IGNORECASE)
+                m_value = re.search(r'value\s*=\s*["\']([^"\']*)["\']', inp, re.IGNORECASE)
+                itype = (m_type.group(1).lower() if m_type else "text")
+                name = (m_name.group(1) if m_name else None)
+                value = (m_value.group(1) if m_value else "")
+                if not name:
+                    continue
+                if itype == "password":
+                    pass_field = name
+                elif itype == "hidden":
+                    hidden[name] = value
+                elif itype in ("text", "email", "tel", "search"):
+                    if user_field is None:
+                        # Prefer a name that looks like a username/email field
+                        if itype == "email" or any(h in name.lower() for h in user_hints):
+                            user_field = name
+                        elif user_field is None:
+                            user_field = name  # first text field as fallback
+
+            if not pass_field:
+                continue
+
+            m_action = re.search(r'<form\b[^>]*?\baction\s*=\s*["\']([^"\']*)["\']', form_html, re.IGNORECASE)
+            m_method = re.search(r'<form\b[^>]*?\bmethod\s*=\s*["\']?([^"\'\s>]+)', form_html, re.IGNORECASE)
+            action = m_action.group(1).strip() if m_action else ""
+            method = (m_method.group(1).lower() if m_method else "post")
+            action_url = urljoin(page_url, action) if action else page_url
+
+            return {
+                "method": "form",
+                "url": action_url,
+                "page_url": page_url,
+                "form_method": method or "post",
+                "user_field": user_field or "username",
+                "pass_field": pass_field,
+                "form_fields": hidden,
+            }
+        return None
+
+    def discover_login(self, base_url: str, product: str = None, vendor: str = None) -> Optional[Dict[str, Any]]:
+        """Determine how to authenticate to a web service.
+
+        Returns an auth-plan dict (keyed by ``method``) or None if no login
+        mechanism could be found. Detection order:
+          1. Product-specific handler matched by fingerprint product/vendor.
+          2. HTTP Basic/Digest challenge (401) on the landing page.
+          3. Product-specific handler matched by landing-page content/headers
+             (covers single-page apps whose root HTML names the product).
+          4. HTML login form on the landing page.
+          5. Probe common login paths + known login APIs (handles SPAs that
+             render the form client-side, e.g. a ``/#/login`` hash route).
         """
         if not requests:
-            return False, "requests library not installed"
+            return None
+
+        # 1. Fingerprint-driven product handler (most reliable when available).
+        match = self._match_product_handler(product, vendor)
+        if match:
+            return {"method": "product", "handler": match["handler"], "product": match["product"],
+                    "url": self._origin(base_url),
+                    "detail": f"Identified portal: {match['name']} (fingerprint match)"}
+
+        session = self._get_requests_session() or (requests.Session() if requests else None)
+        try:
+            resp = session.get(base_url, timeout=self.timeout, verify=False, allow_redirects=True)
+        except requests.exceptions.Timeout:
+            return None
+        except Exception:
+            return None
+
+        origin = self._origin(resp.url or base_url)
+        content = resp.text or ""
+        header_blob = " ".join(f"{k}:{v}" for k, v in resp.headers.items())
+
+        # Identify the web application from the landing page (broad signature
+        # match) so non-product-handler plans can still front-load that app's
+        # default creds. Fall back to any fingerprint product hint.
+        app = self._identify_http_product(content[:30000], header_blob) or product
+
+        # 2. Basic/Digest challenge.
+        if resp.status_code == 401:
+            www = resp.headers.get('WWW-Authenticate', '').lower()
+            method = "digest" if "digest" in www else "basic"
+            plan = {"method": method, "url": base_url,
+                    "detail": f"HTTP {method} auth (401 challenge)"}
+            return self._attach_product(plan, app)
+
+        # 3. Product handler (custom auth, e.g. OMV JSON-RPC) from the landing page.
+        match = self._match_product_handler(content[:30000], header_blob)
+        if match:
+            return {"method": "product", "handler": match["handler"], "product": match["product"], "url": origin,
+                    "detail": f"Identified portal: {match['name']} (detected from landing page)"}
+
+        # 4. Login form directly on the landing page.
+        form = self._parse_login_form(content, resp.url or base_url)
+        if form:
+            form["detail"] = "HTML login form on landing page"
+            return self._attach_product(form, app)
+
+        # 5. Probe common login paths + known login APIs.
+        return self._probe_login_endpoints(session, origin, app)
+
+    def _probe_login_endpoints(self, session, origin: str, app: str = None) -> Optional[Dict[str, Any]]:
+        """Probe candidate login pages/APIs under ``origin``. Returns the first
+        usable auth plan, or None. ``app`` is a web application identified from
+        the landing page, used to tag form/basic plans for credential front-loading."""
+        # 5a. Known login-API signatures (recognize a product by its API even
+        #     when the SPA shell HTML reveals nothing).
+        omv_plan = self._probe_omv_rpc(session, origin)
+        if omv_plan:
+            return omv_plan
+
+        # 5b. Common HTML login pages / Basic-auth endpoints.
+        for path in self.LOGIN_PATH_CANDIDATES:
+            cand = origin + path
+            try:
+                r = session.get(cand, timeout=self.timeout, verify=False, allow_redirects=True)
+            except Exception:
+                continue
+            if r.status_code == 401:
+                www = r.headers.get('WWW-Authenticate', '').lower()
+                method = "digest" if "digest" in www else "basic"
+                plan = {"method": method, "url": cand,
+                        "detail": f"HTTP {method} auth at {path}"}
+                return self._attach_product(plan, app or self._identify_http_product((r.text or "")[:30000]))
+            if r.status_code >= 400:
+                continue
+            page_app = app or self._identify_http_product((r.text or "")[:30000])
+            match = self._match_product_handler((r.text or "")[:30000])
+            if match:
+                return {"method": "product", "handler": match["handler"], "product": match["product"], "url": origin,
+                        "detail": f"Identified portal: {match['name']} (detected at {path})"}
+            form = self._parse_login_form(r.text or "", r.url or cand)
+            if form:
+                form["detail"] = f"HTML login form at {path}"
+                return self._attach_product(form, page_app)
+        return None
+
+    def _probe_omv_rpc(self, session, origin: str) -> Optional[Dict[str, Any]]:
+        """Detect OpenMediaVault by its JSON-RPC envelope at /rpc.php."""
+        rpc_url = origin + "/rpc.php"
+        try:
+            r = session.post(rpc_url, json={"service": "Session", "method": "noop", "params": None},
+                             timeout=self.timeout, verify=False)
+        except Exception:
+            return None
+        ctype = r.headers.get("Content-Type", "").lower()
+        if "json" not in ctype and not (r.text or "").lstrip().startswith("{"):
+            return None
+        try:
+            data = r.json()
+        except Exception:
+            return None
+        # OMV always answers RPC calls with a {"response":..., "error":...} envelope.
+        if isinstance(data, dict) and ("response" in data and "error" in data):
+            return {"method": "product", "handler": "_test_omv", "product": "openmediavault", "url": origin,
+                    "detail": "Identified portal: OpenMediaVault (JSON-RPC at /rpc.php)"}
+        return None
+
+    def test_auth(self, plan: Dict[str, Any], ip: str, port: int, username: str, password: str) -> CredentialResult:
+        """Dispatch a credential test according to the discovered auth plan."""
+        method = plan.get("method")
+        if method == "product":
+            handler = getattr(self, plan.get("handler", ""), None)
+            if handler is None:
+                result = CredentialResult(ip, port, "http", "http", username, password, "error",
+                                          f"Unknown product handler: {plan.get('handler')}")
+            else:
+                result = handler(plan["url"], ip, port, username, password)
+        elif method in ("basic", "digest"):
+            result = self.test_url(plan["url"], port, username, password, auth_type=method)
+        elif method == "form":
+            result = self._test_form(plan, ip, port, username, password)
+        else:
+            result = CredentialResult(ip, port, "http", "http", username, password, "error",
+                                      f"Unsupported auth method: {method}")
+        # Normalize the result label to a bare host so the results table renders
+        # host:port. Callers may pass a full URL as `ip`, and the Basic/Digest
+        # branch labels with plan["url"]; both would otherwise show a URL:port.
+        result.ip = self._host_label(ip, plan.get("url"))
+        return result
+
+    def _test_form(self, plan: Dict[str, Any], ip: str, port: int, username: str, password: str) -> CredentialResult:
+        """Submit an HTML login form and evaluate the response."""
+        if not requests:
+            return CredentialResult(ip, port, "http", "http-form", username, password, "error", "requests library not installed")
+
+        self.rate_limited_test()
+        # Fresh session per attempt so cookies from one credential never leak
+        # into the next (a stale authenticated cookie would fake a success).
+        session = self._get_requests_session() or requests.Session()
+        page_url = plan.get("page_url") or plan["url"]
+        fields = dict(plan.get("form_fields") or {})
+
+        # Re-fetch the login page so CSRF tokens / session cookies are current.
+        try:
+            pg = session.get(page_url, timeout=self.timeout, verify=False, allow_redirects=True)
+            fresh = self._parse_login_form(pg.text or "", pg.url or page_url)
+            if fresh:
+                if fresh.get("form_fields"):
+                    fields.update(fresh["form_fields"])
+                action = fresh.get("url") or plan["url"]
+                form_method = fresh.get("form_method", plan.get("form_method", "post"))
+                user_field = fresh.get("user_field", plan["user_field"])
+                pass_field = fresh.get("pass_field", plan["pass_field"])
+            else:
+                action, form_method = plan["url"], plan.get("form_method", "post")
+                user_field, pass_field = plan["user_field"], plan["pass_field"]
+        except Exception:
+            action, form_method = plan["url"], plan.get("form_method", "post")
+            user_field, pass_field = plan["user_field"], plan["pass_field"]
+
+        fields[user_field] = username
+        fields[pass_field] = password
 
         try:
-            _session = self._get_requests_session()
-            _get = _session.get if _session else requests.get
-            resp = _get(url, timeout=self.timeout, verify=False, allow_redirects=True)
-            content = resp.text.lower() if resp.text else ""
-
-            # Check for HTTP Basic Auth challenge
-            if resp.status_code == 401:
-                www_auth = resp.headers.get('WWW-Authenticate', '').lower()
-                if 'basic' in www_auth:
-                    return True, "HTTP Basic Auth (401 challenge)"
-                return True, "Authentication required (401)"
-
-            # CRITICAL: Check if this is actually a login page by URL path first
-            # This catches redirects to login pages
-            parsed_url = resp.url.lower()
-            login_paths = [
-                '/login', '/admin', '/wp-admin', '/wp-login.php',
-                '/user/login', '/auth', '/signin', '/sign-in',
-                '/administrator', '/admin/login', '/manager/html',
-                '/console', '/dashboard', '/logon'
-            ]
-
-            if any(path in parsed_url for path in login_paths):
-                return True, f"Login URL path detected ({resp.url})"
-
-            # Check for password input field (REQUIRED for form-based login)
-            password_patterns = [
-                'type="password"',
-                'type=\'password\'',
-                '<input type="password"',
-                'name="password"',
-                'id="password"',
-                'name="passwd"',
-                'id="passwd"',
-                'name="pwd"',
-                'id="pwd"'
-            ]
-
-            has_password_field = any(pattern in content for pattern in password_patterns)
-
-            if not has_password_field:
-                # No password field = definitely not a login form on this page
-                return False, "No password input field detected"
-
-            # If we have a password field, check for form element
-            has_form = '<form' in content
-
-            # Check for username field
-            username_patterns = [
-                'name="username"',
-                'id="username"',
-                'name="user"',
-                'id="user"',
-                'name="email"',
-                'id="email"',
-                'name="login"',
-                'id="login"',
-                'type="text"',
-                'type=\'text\''
-            ]
-            has_username_field = any(pattern in content for pattern in username_patterns)
-
-            # STRICT REQUIREMENT: Password field + (Form OR Username field)
-            if has_password_field and (has_form or has_username_field):
-                indicators = ["password field"]
-                if has_form:
-                    indicators.append("form element")
-                if has_username_field:
-                    indicators.append("username/email field")
-                return True, f"Login form detected ({', '.join(indicators)})"
-
-            # If we only have a password field without form/username context, it's suspicious
-            # but we'll be conservative and reject it
-            return False, "Password field present but no complete login form structure"
-
+            if form_method == "get":
+                resp = session.get(action, params=fields, timeout=self.timeout, verify=False, allow_redirects=False)
+            else:
+                resp = session.post(action, data=fields, timeout=self.timeout, verify=False, allow_redirects=False)
         except requests.exceptions.Timeout:
-            return False, "Timeout during detection"
+            return CredentialResult(ip, port, "http", "http-form", username, password, "error", "Timeout during form login")
+        except requests.exceptions.ConnectionError as e:
+            return CredentialResult(ip, port, "http", "http-form", username, password, "error", f"Connection error during form login: {e}")
         except Exception as e:
-            return False, f"Detection error: {str(e)}"
+            return CredentialResult(ip, port, "http", "http-form", username, password, "error", f"Form login error: {e}")
+
+        return self._evaluate_form_response(resp, session, ip, port, username, password)
+
+    def _evaluate_form_response(self, resp, session, ip, port, username, password) -> CredentialResult:
+        """Decide success/failure for a form-login response. Conservative: only
+        report success on positive evidence (redirect away from login, success
+        markers, or a session cookie + the login form disappearing)."""
+        svc = "http-form"
+        body = resp.text or ""
+        low = body.lower()
+
+        # Redirects are the strongest signal for form logins.
+        if resp.status_code in (301, 302, 303, 307, 308):
+            location = resp.headers.get("Location", "")
+            loc_low = location.lower()
+            if any(k in loc_low for k in ("login", "signin", "sign-in", "logon", "auth", "error", "denied", "invalid")):
+                return CredentialResult(ip, port, "http", svc, username, password, "failed",
+                                        f"Redirected back to login ({location})")
+            return CredentialResult(ip, port, "http", svc, username, password, "success",
+                                    f"Login redirected to {location or 'authenticated page'}")
+
+        if resp.status_code in (401, 403):
+            return CredentialResult(ip, port, "http", svc, username, password, "failed",
+                                    f"HTTP {resp.status_code} - credentials rejected")
+
+        if resp.status_code == 200:
+            if any(ind in low for ind in HTTP_AUTH_FAILURE_INDICATORS):
+                return CredentialResult(ip, port, "http", svc, username, password, "failed",
+                                        "Login page reports authentication failure")
+            has_success = any(ind in low for ind in HTTP_AUTH_SUCCESS_INDICATORS)
+            session_cookie = any(
+                any(tok in c.name.lower() for tok in ("sess", "sid", "token", "auth"))
+                for c in session.cookies
+            )
+            still_login_form = ('type="password"' in low or "type='password'" in low)
+
+            if has_success and not still_login_form:
+                return CredentialResult(ip, port, "http", svc, username, password, "success",
+                                        "Login succeeded (authenticated content detected)")
+            if session_cookie and not still_login_form:
+                return CredentialResult(ip, port, "http", svc, username, password, "success",
+                                        "Login succeeded (session cookie set, login form cleared)")
+            return CredentialResult(ip, port, "http", svc, username, password, "failed",
+                                    "No success indicators - login form still present")
+
+        return CredentialResult(ip, port, "http", svc, username, password, "failed",
+                                f"HTTP {resp.status_code} - unexpected form-login response")
+
+    def _test_omv(self, base_url: str, ip: str, port: int, username: str, password: str) -> CredentialResult:
+        """Authenticate to OpenMediaVault via its JSON-RPC Session.login endpoint.
+
+        OMV is a single-page app (``/#/login`` is a client-side route); the real
+        login is a POST of {"service":"Session","method":"login",...} to /rpc.php.
+        Success is confirmed by the JSON envelope (error==null, authenticated)
+        and the session cookie OMV sets on the response."""
+        svc = "openmediavault"
+        if not requests:
+            return CredentialResult(ip, port, "http", svc, username, password, "error", "requests library not installed")
+
+        self.rate_limited_test()
+        session = self._get_requests_session() or requests.Session()
+        rpc_url = base_url.rstrip("/") + "/rpc.php"
+        payload = {"service": "Session", "method": "login",
+                   "params": {"username": username, "password": password}}
+        try:
+            resp = session.post(rpc_url, json=payload, timeout=self.timeout, verify=False,
+                                headers={"Content-Type": "application/json"})
+        except requests.exceptions.Timeout:
+            return CredentialResult(ip, port, "http", svc, username, password, "error", "Timeout contacting OMV /rpc.php")
+        except requests.exceptions.ConnectionError as e:
+            return CredentialResult(ip, port, "http", svc, username, password, "error", f"Connection error to OMV /rpc.php: {e}")
+        except Exception as e:
+            return CredentialResult(ip, port, "http", svc, username, password, "error", f"OMV login error: {e}")
+
+        try:
+            data = resp.json()
+        except Exception:
+            return CredentialResult(ip, port, "http", svc, username, password, "error",
+                                    f"OMV /rpc.php returned non-JSON (HTTP {resp.status_code}) - not an OMV endpoint?")
+
+        if not isinstance(data, dict):
+            return CredentialResult(ip, port, "http", svc, username, password, "error", "Unexpected OMV RPC response")
+
+        err = data.get("error")
+        if err:
+            msg = err.get("message") if isinstance(err, dict) else str(err)
+            return CredentialResult(ip, port, "http", svc, username, password, "failed", f"OMV: {msg or 'login rejected'}")
+
+        response = data.get("response")
+        authenticated = isinstance(response, dict) and response.get("authenticated") is True
+        has_session = any("SESSIONID" in c.name.upper() for c in session.cookies)
+
+        if authenticated or has_session:
+            detail = "OMV JSON-RPC login OK"
+            if has_session:
+                detail += " - session cookie established"
+            return CredentialResult(ip, port, "http", svc, username, password, "success", detail)
+
+        return CredentialResult(ip, port, "http", svc, username, password, "failed",
+                                "OMV login returned no error but no session/authentication")
 
     def test(self, ip: str, port: int, username: str, password: str, use_https: bool = False) -> CredentialResult:
         if not requests:
@@ -590,12 +953,13 @@ class HTTPTester(ProtocolTester):
         except Exception as e:
             return CredentialResult(ip, port, "http", "http-basic", username, password, "error", str(e))
 
-    def test_url(self, url: str, port: int, username: str, password: str) -> CredentialResult:
-        """Test HTTP authentication against a full URL with path."""
+    def test_url(self, url: str, port: int, username: str, password: str, auth_type: str = "basic") -> CredentialResult:
+        """Test HTTP Basic/Digest authentication against a full URL with path."""
         if not requests:
             return CredentialResult(url, port, "http", "http", username, password, "error", "requests library not installed")
 
         self.rate_limited_test()
+        auth_obj = HTTPDigestAuth(username, password) if auth_type == "digest" else HTTPBasicAuth(username, password)
 
         try:
             _session = self._get_requests_session()
@@ -621,7 +985,7 @@ class HTTPTester(ProtocolTester):
 
             # Now test with credentials
             try:
-                resp = _get(url, auth=HTTPBasicAuth(username, password), timeout=self.timeout, verify=False, allow_redirects=False)
+                resp = _get(url, auth=auth_obj, timeout=self.timeout, verify=False, allow_redirects=False)
             except requests.exceptions.Timeout:
                 return CredentialResult(url, port, "http", "http-basic", username, password, "error", f"Authentication request timeout - service not responding")
             except requests.exceptions.ConnectionError as e:
@@ -2692,6 +3056,40 @@ def detect_protocol_with_probe(host: str, port: int, timeout: float = 5.0, verbo
 
     return ("unknown", 0.0, {"detection_method": "unknown port"})
 
+
+def probe_fingerprint_for_protocol(host: str, port: int, protocol: str,
+                                   timeout: float = 5.0) -> Optional[Dict[str, Any]]:
+    """Probe a service whose protocol is ALREADY known to obtain its
+    product/vendor fingerprint, without changing the protocol verdict.
+
+    Used when the user forces ``--protocol`` (or the protocol was decided by URL
+    detection): we still want a fingerprint so credential selection can put the
+    service's proper defaults first instead of spraying generic creds. Returns a
+    service_info dict (vendor/product/version/...) or None if no confident match.
+    """
+    try:
+        from cygor.credrecon.validation import PROTOCOL_PROBE_MAP
+    except Exception:
+        return None
+    probe = PROTOCOL_PROBE_MAP.get(protocol)
+    if probe is None:
+        return None
+    try:
+        fp = probe(host, port, timeout)
+    except Exception:
+        return None
+    if not fp or fp.confidence < 0.5:
+        return None
+    return {
+        "vendor": fp.vendor,
+        "product": fp.product,
+        "version": fp.version,
+        "os_hint": fp.os_hint,
+        "features": fp.features or [],
+        "detection_method": fp.detection_method,
+        "banner": fp.raw_banner,
+    }
+
 # ----------------------------------------------------------------------
 # Main scanner
 # ----------------------------------------------------------------------
@@ -2700,6 +3098,16 @@ def scan_target_http(url: str, port: int, creds: List[Dict], timeout: int = 5, r
     Returns: (results, skip_info) where skip_info is None if tested, or a dict with skip details if skipped."""
     results = []
     tester = HTTPTester(timeout, rate_limit, source_ip=source_ip)
+
+    # Normalize to a fully-qualified URL (callers may pass a bare host/IP, e.g.
+    # from a credfile, or a URL with a client-side fragment like /#/login).
+    if not url.startswith(("http://", "https://")):
+        url = f"{scheme or 'http'}://{url.rstrip('/')}:{port}/"
+
+    # Fingerprint hints carried on the selected credentials (set when probing
+    # identified the product/vendor) steer login discovery to the right handler.
+    product_hint = next((c.get("product") for c in creds if c.get("product")), None)
+    vendor_hint = next((c.get("vendor") for c in creds if c.get("vendor")), None)
 
     # Pre-flight: Check if URL is reachable
     if verbose:
@@ -2763,16 +3171,16 @@ def scan_target_http(url: str, port: int, creds: List[Dict], timeout: int = 5, r
         if verbose:
             logger.warning(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Pre-flight check failed: {str(e)}, continuing anyway...")
 
-    # First, detect if there's a login form/panel
+    # Discover how to authenticate: Basic/Digest, HTML form, or a product API.
     if verbose:
-        logger.info(f"{Fore.CYAN}[*]{Style.RESET_ALL} Checking for login form/panel...")
+        logger.info(f"{Fore.CYAN}[*]{Style.RESET_ALL} Discovering login mechanism...")
 
-    has_login, detection_info = tester.detect_login_form(url)
+    plan = tester.discover_login(url, product=product_hint, vendor=vendor_hint)
 
-    if not has_login:
-        detailed_reason = f"No authentication mechanism detected - {detection_info}"
-        logger.info(f"{Fore.YELLOW}[!]{Style.RESET_ALL} {detection_info}")
-        logger.info(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Skipping credential testing - {detailed_reason}")
+    if not plan:
+        detailed_reason = "No authentication mechanism detected (no Basic/Digest challenge, login form, or known login API)"
+        logger.info(f"{Fore.YELLOW}[!]{Style.RESET_ALL} {detailed_reason}")
+        logger.info(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Skipping credential testing")
 
         # Save skipped credentials to DB if scan_id provided
         if scan_id:
@@ -2800,13 +3208,36 @@ def scan_target_http(url: str, port: int, creds: List[Dict], timeout: int = 5, r
         return results, skip_info
 
     if verbose:
-        logger.info(f"{Fore.GREEN}[✓]{Style.RESET_ALL} {detection_info}")
+        logger.info(f"{Fore.GREEN}[✓]{Style.RESET_ALL} {plan.get('detail', plan.get('method'))}")
+
+    # When discovery identifies a specific product, test that product's known
+    # default credentials first - even if the port-probe never fingerprinted it.
+    # This makes "just give the IP" auto-try the right defaults for the portal.
+    if plan.get("product"):
+        prod_key = plan["product"]
+        try:
+            all_prod, _ = get_credentials_for_service("http", fingerprint={"product": prod_key})
+            prod_only = [c for c in all_prod if prod_key.lower() in (c.get("product") or "").lower()]
+        except Exception:
+            prod_only = []
+        if prod_only:
+            seen = set()
+            merged = []
+            for c in prod_only + list(creds):
+                k = (c.get("username"), c.get("password"))
+                if k in seen:
+                    continue
+                seen.add(k)
+                merged.append(c)
+            creds = merged
+            if verbose:
+                logger.info(f"{Fore.CYAN}[*]{Style.RESET_ALL} Prioritizing {Fore.GREEN}{len(prod_only)}{Style.RESET_ALL} {prod_key}-specific credential(s) for the identified portal")
 
     for i, cred in enumerate(creds, 1):
         if verbose:
             logger.info(f"  [{i}/{len(creds)}] Testing {Fore.CYAN}{cred['username']}{Style.RESET_ALL}:{Fore.YELLOW}{cred['password'] or '(empty)'}{Style.RESET_ALL}")
 
-        result = tester.test_url(url, port, cred["username"], cred["password"])
+        result = tester.test_auth(plan, url, port, cred["username"], cred["password"])
         if source_ip:
             result.source_ip = source_ip
         results.append(result)
@@ -2896,21 +3327,23 @@ def scan_target(ip: str, port: int, protocol: str, creds: List[Dict], timeout: i
     loop_kwargs = dict(verbose=verbose, scan_id=scan_id, max_attempts_per_user=max_attempts_per_user, source_ip=source_ip)
 
     # Select tester and run
-    if protocol == "http":
+    if protocol in ("http", "https"):
         tester = HTTPTester(timeout, rate_limit, jitter, source_ip=source_ip)
 
-        # First, detect if there's a login form/panel
-        scheme = "https" if port == 443 else "http"
+        scheme = "https" if protocol == "https" or port in (443, 8443, 9443) else "http"
         url = f"{scheme}://{ip}:{port}/"
+        product_hint = next((c.get("product") for c in creds if c.get("product")), None)
+        vendor_hint = next((c.get("vendor") for c in creds if c.get("vendor")), None)
 
         if verbose:
-            logger.info(f"{Fore.CYAN}[*]{Style.RESET_ALL} Checking for login form/panel...")
+            logger.info(f"{Fore.CYAN}[*]{Style.RESET_ALL} Discovering login mechanism...")
 
-        has_login, detection_info = tester.detect_login_form(url)
+        plan = tester.discover_login(url, product=product_hint, vendor=vendor_hint)
 
-        if not has_login:
+        if not plan:
+            detection_info = "No authentication mechanism detected (no Basic/Digest challenge, login form, or known login API)"
             logger.info(f"{Fore.YELLOW}[!]{Style.RESET_ALL} {detection_info}")
-            logger.info(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Skipping credential testing - no authentication mechanism detected")
+            logger.info(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Skipping credential testing")
 
             if scan_id:
                 for cred in creds:
@@ -2928,9 +3361,29 @@ def scan_target(ip: str, port: int, protocol: str, creds: List[Dict], timeout: i
             return results
 
         if verbose:
-            logger.info(f"{Fore.GREEN}[✓]{Style.RESET_ALL} {detection_info}")
+            logger.info(f"{Fore.GREEN}[✓]{Style.RESET_ALL} {plan.get('detail', plan.get('method'))}")
 
-        results = _run_credential_loop(tester, ip, port, protocol, creds, use_https=(port == 443), **loop_kwargs)
+        user_attempt_counts = defaultdict(int)
+        for i, cred in enumerate(creds, 1):
+            username = cred['username']
+            if max_attempts_per_user > 0 and user_attempt_counts[username] >= max_attempts_per_user:
+                if verbose:
+                    logger.info(f"  [{i}/{len(creds)}] Skipping {Fore.CYAN}{username}{Style.RESET_ALL} - max attempts ({max_attempts_per_user}) reached")
+                continue
+            user_attempt_counts[username] += 1
+            if verbose:
+                display_pass = cred.get('password') or '(empty)'
+                logger.info(f"  [{i}/{len(creds)}] Testing {Fore.CYAN}{username}{Style.RESET_ALL}:{Fore.YELLOW}{display_pass}{Style.RESET_ALL}")
+
+            result = tester.test_auth(plan, ip, port, username, cred.get("password", ""))
+            if source_ip:
+                result.source_ip = source_ip
+            results.append(result)
+            if scan_id:
+                save_result_to_db_sync(scan_id, result=result)
+            if result.status == "success":
+                logger.info(f"{Fore.GREEN}[✓ SUCCESS]{Style.RESET_ALL} {ip}:{port} - {Fore.CYAN}{username}{Style.RESET_ALL}:{Fore.YELLOW}{cred.get('password', '')}{Style.RESET_ALL}")
+                break
 
     elif protocol == "ssh" and paramiko:
         tester = SSHTester(timeout, rate_limit, jitter, source_ip=source_ip)
@@ -3921,8 +4374,9 @@ def credrecon(input_file: str = None, target: str = None, output_dir: str = None
                 _src_ip = None  # IP rotation not available in this build
 
                 # Submit scan_target per group (one target/service combo, multiple creds)
-                if target_service == 'http':
-                    future = executor.submit(scan_target_http, target_ip, target_port, creds, timeout, rate_limit, "http", True, scan_id, source_ip=_src_ip)
+                if target_service in ('http', 'https'):
+                    cf_scheme = 'https' if target_service == 'https' else 'http'
+                    future = executor.submit(scan_target_http, target_ip, target_port, creds, timeout, rate_limit, cf_scheme, True, scan_id, source_ip=_src_ip)
                 else:
                     future = executor.submit(scan_target, target_ip, target_port, target_service, creds, timeout, rate_limit, True, scan_id, ssh_key, ssh_key_passphrase, ssh_cert, source_ip=_src_ip, **extra_scan_kwargs)
                 pending_futures.add(future)
@@ -3971,6 +4425,11 @@ def credrecon(input_file: str = None, target: str = None, output_dir: str = None
                 if force_proto:
                     # Protocol already determined (URL detection or multi-protocol expansion)
                     detected_proto = force_proto
+                    # Still probe (when enabled) to obtain a product/vendor
+                    # fingerprint so credential selection prioritizes the right
+                    # defaults instead of generic creds.
+                    if probe_services and not service_info:
+                        service_info = probe_fingerprint_for_protocol(ip, target_port, detected_proto, timeout=timeout)
                 elif protocol == "auto":
                     # Auto-detect protocol - try probing first if enabled
                     if probe_services:
@@ -3985,8 +4444,14 @@ def credrecon(input_file: str = None, target: str = None, output_dir: str = None
                             logger.warning(f"{Fore.YELLOW}[!]{Style.RESET_ALL} Unknown port {target_port} - specify --protocol or enable --probe")
                             continue
                 else:
-                    # User specified protocol
+                    # User specified protocol explicitly. Honor it, but still probe
+                    # (when enabled) for a fingerprint to prioritize proper defaults.
                     detected_proto = protocol
+                    if probe_services and not service_info:
+                        logger.info(f"\n{Fore.CYAN}[*]{Style.RESET_ALL} Probing {Fore.WHITE}{ip}:{target_port}{Style.RESET_ALL} for {detected_proto.upper()} fingerprint...")
+                        service_info = probe_fingerprint_for_protocol(ip, target_port, detected_proto, timeout=timeout)
+                        if service_info and service_info.get("product") and verbose:
+                            logger.info(f"{Fore.GREEN}[✓]{Style.RESET_ALL} Fingerprint: {Fore.WHITE}{service_info.get('product')}{Style.RESET_ALL}")
 
                 # Warn if protocol is unknown
                 if detected_proto == "unknown":
@@ -4073,9 +4538,11 @@ def credrecon(input_file: str = None, target: str = None, output_dir: str = None
 
                 _src_ip = None  # IP rotation not available in this build
 
-                # Pass scheme information for HTTP testing
-                if detected_proto == 'http' and scheme:
-                    future = executor.submit(scan_target_http, ip, target_port, limited_creds, timeout, rate_limit, scheme, True, scan_id, source_ip=_src_ip)
+                # HTTP and HTTPS both run through the HTTP tester; carry the scheme
+                # so TLS endpoints (443/8443/...) are tested over https.
+                if detected_proto in ('http', 'https'):
+                    eff_scheme = scheme or ('https' if detected_proto == 'https' else 'http')
+                    future = executor.submit(scan_target_http, ip, target_port, limited_creds, timeout, rate_limit, eff_scheme, True, scan_id, source_ip=_src_ip)
                 else:
                     future = executor.submit(scan_target, ip, target_port, detected_proto, limited_creds, timeout, rate_limit, True, scan_id, ssh_key, ssh_key_passphrase, ssh_cert, source_ip=_src_ip, **extra_scan_kwargs)
                 pending_futures.add(future)

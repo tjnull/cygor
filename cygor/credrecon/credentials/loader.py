@@ -478,9 +478,61 @@ def get_credential_stats(db: CredentialDatabase = None) -> Dict[str, Any]:
 
 def invalidate_cache() -> None:
     """Clear the credential cache to force reload."""
-    global _credential_cache, _cache_timestamp
+    global _credential_cache, _cache_timestamp, _generic_pairs_cache
     _credential_cache = None
     _cache_timestamp = None
+    _generic_pairs_cache = None
+
+
+# Bare web servers / reverse proxies / app servers. Identifying one of these
+# tells us the transport, not the application behind it (e.g. an nginx banner in
+# front of an OpenMediaVault or Jenkins app). When the "product" is only a
+# transport, we must NOT narrow the credential pool to that product + generics,
+# because the real app's defaults would be dropped. Treat as "app unknown".
+_TRANSPORT_PRODUCTS = (
+    "nginx", "apache", "httpd", "http server", "iis", "lighttpd",
+    "openresty", "caddy", "jetty", "gunicorn", "uvicorn", "werkzeug",
+    "kestrel", "tornado", "cherrypy", "litespeed", "haproxy", "traefik proxy",
+)
+
+
+def _is_transport_only(product: Optional[str], vendor: Optional[str]) -> bool:
+    """True if the identified product is just a web server / proxy rather than
+    the actual application, so the generic pool should stay broad."""
+    p = (product or "").strip().lower()
+    if not p:
+        return False
+    return any(t in p for t in _TRANSPORT_PRODUCTS)
+
+
+# Cache of {protocol: set of (username, password) pairs} from the generic file.
+_generic_pairs_cache: Optional[Dict[str, set]] = None
+
+
+def _generic_credential_pairs(protocol: str) -> set:
+    """Return the (username, password) pairs declared as generic for ``protocol``
+    in generic.yaml.
+
+    Needed because merge dedup keeps only the first-loaded copy of each
+    (user, pass, protocol); since product files load before generic.yaml, a
+    common pair like admin/admin survives ATTRIBUTED TO A PRODUCT (e.g.
+    Jenkins). Recognizing generic creds by value lets us treat them as generic
+    regardless of the deduped survivor's product label. Protocol-scoped so an
+    elasticsearch generic (elastic/changeme) is not treated as an http generic.
+    """
+    global _generic_pairs_cache
+    if _generic_pairs_cache is None:
+        by_proto: Dict[str, set] = {}
+        data = load_yaml_file(BUILTIN_DIR / "generic.yaml")
+        for entry in (data.get("credentials") or []):
+            if not (isinstance(entry, dict) and "username" in entry):
+                continue
+            pair = (entry.get("username", ""), entry.get("password", ""))
+            for proto in (entry.get("protocols") or ["*"]):
+                by_proto.setdefault(proto, set()).add(pair)
+        _generic_pairs_cache = by_proto
+    cache = _generic_pairs_cache
+    return cache.get(protocol, set()) | cache.get("*", set())
 
 
 def get_credentials_by_fingerprint(
@@ -531,17 +583,21 @@ def get_credentials_by_fingerprint(
     seen_keys = set()
 
     def add_creds(creds: List[Credential], source: str) -> int:
-        """Add credentials avoiding duplicates, return count added."""
-        added = 0
+        """Append a tier of credentials, deduped, highest-priority FIRST within
+        the tier. Tiers are concatenated in call order, so product creds always
+        precede vendor creds, which always precede generic creds. Returns count
+        added."""
+        fresh = []
         for cred in creds:
             key = (cred.username, cred.password)
             if key not in seen_keys:
                 seen_keys.add(key)
-                selected_creds.append(cred)
-                added += 1
-        if added > 0:
-            rationale_parts.append(f"{added} {source}")
-        return added
+                fresh.append(cred)
+        fresh.sort(key=lambda c: c.priority, reverse=True)
+        selected_creds.extend(fresh)
+        if fresh:
+            rationale_parts.append(f"{len(fresh)} {source}")
+        return len(fresh)
 
     # Priority 1: Product-specific credentials
     if product:
@@ -558,15 +614,35 @@ def get_credentials_by_fingerprint(
                        and (c.username, c.password) not in seen_keys]
         add_creds(vendor_creds, f"{vendor}-vendor")
 
-    # Priority 3: Generic protocol credentials
+    # Priority 3: Generic fallback credentials.
     protocol_creds = db.get_credentials_for_protocol(protocol)
-    generic_creds = [c for c in protocol_creds if (c.username, c.password) not in seen_keys]
+    if (product or vendor) and not _is_transport_only(product, vendor):
+        # Service positively identified (a real application, not just a web
+        # server/proxy): fall back ONLY to common/generic creds
+        # (admin/admin, root/root, ... as declared in generic.yaml). Do NOT mix
+        # in OTHER products' specific defaults (e.g. Harbor's admin/Harbor12345
+        # against an OMV box) - they are guaranteed-fail attempts that waste
+        # tries and risk service/account lockout. Match by VALUE, not by the
+        # deduped survivor's product label (see _generic_credential_pairs).
+        generic_values = _generic_credential_pairs(protocol)
+        generic_pool = [c for c in protocol_creds
+                        if not c.product or (c.username, c.password) in generic_values]
+    else:
+        # Nothing identified: keep broad coverage across all known creds for the
+        # protocol so an unrecognized product can still be matched.
+        generic_pool = protocol_creds
+    generic_creds = [c for c in generic_pool if (c.username, c.password) not in seen_keys]
     add_creds(generic_creds, "generic")
 
-    # Sort by priority
-    selected_creds.sort(key=lambda c: c.priority, reverse=True)
+    # NOTE: deliberately NOT re-sorting selected_creds globally by priority.
+    # A global sort lets a high-priority generic credential (e.g. admin/admin at
+    # priority 95) jump ahead of an identified product's own default whenever
+    # that default's priority is < the generic's (Meraki=85, Aruba Central=90,
+    # etc.). Testing wrong creds first wastes attempts and risks account/service
+    # lockout. Tier order (product -> vendor -> generic) is the guarantee that
+    # the service's proper defaults are always tried before generic/random ones.
 
-    # Limit results
+    # Limit results (keeps the highest-priority product creds when truncating)
     if max_credentials and len(selected_creds) > max_credentials:
         selected_creds = selected_creds[:max_credentials]
 

@@ -847,17 +847,24 @@ def probe_telnet(host: str, port: int, timeout: float = 5.0) -> Optional[Service
 # =============================================================================
 
 # HTTP application patterns: (patterns, product, vendor, cred_category)
+# (page/header patterns, product, vendor, cred_category).
+# IMPORTANT: ``product`` must be a SUBSTRING of the matching credential-DB
+# product name (the credential loader matches product.lower() in
+# db_product.lower()). e.g. use "Tomcat" (not "Apache Tomcat") so it matches the
+# DB product "Tomcat"; use "Nexus" so it matches "Nexus Repository". The first
+# field (patterns) is what we look for in the page/headers and can be anything
+# distinctive. Keep patterns distinctive to avoid false positives.
 HTTP_APPLICATION_PATTERNS = [
-    (["Apache Tomcat", "Tomcat/", "/manager/html"], "Apache Tomcat", "apache", "tomcat"),
+    (["Apache Tomcat", "Tomcat/", "/manager/html"], "Tomcat", "apache", "tomcat"),
     (["X-Jenkins:", "/jenkins", "Dashboard [Jenkins]"], "Jenkins", "jenkins", "jenkins"),
     (["grafana", "Grafana"], "Grafana", "grafana", "grafana"),
     (["X-GitLab", "/gitlab", "GitLab"], "GitLab", "gitlab", "gitlab"),
-    (["Jira", "Atlassian JIRA"], "Atlassian Jira", "atlassian", "jira"),
-    (["RabbitMQ", "rabbitmq"], "RabbitMQ", "vmware", "rabbitmq"),
-    (["elasticsearch", "Elasticsearch"], "Elasticsearch", "elastic", "elasticsearch"),
-    (["kibana", "Kibana"], "Kibana", "elastic", "kibana"),
+    (["Atlassian JIRA", "JIRA Dashboard", "/secure/Dashboard.jspa"], "Jira", "atlassian", "jira"),
+    (["RabbitMQ", "rabbitmq"], "RabbitMQ", "rabbitmq", "rabbitmq"),
+    (["elasticsearch", "Elasticsearch", "X-elastic-product"], "Elasticsearch", "elastic", "elasticsearch"),
+    (["kibana", "Kibana", "kbn-name"], "Kibana", "elastic", "kibana"),
     (["Webmin", "webmin"], "Webmin", "webmin", "webmin"),
-    (["phpMyAdmin", "phpmyadmin"], "phpMyAdmin", "phpmyadmin", "phpmyadmin"),
+    (["phpMyAdmin", "phpmyadmin", "pma_password"], "phpMyAdmin", "phpmyadmin", "phpmyadmin"),
     (["Zabbix", "zabbix"], "Zabbix", "zabbix", "zabbix"),
     (["Nagios", "nagios"], "Nagios", "nagios", "nagios"),
     (["pfSense", "pfsense"], "pfSense", "netgate", "pfsense"),
@@ -865,6 +872,34 @@ HTTP_APPLICATION_PATTERNS = [
     (["WordPress", "wp-admin", "wp-login"], "WordPress", "wordpress", "wordpress"),
     (["Drupal", "drupal"], "Drupal", "drupal", "drupal"),
     (["Joomla", "joomla"], "Joomla", "joomla", "joomla"),
+    # --- Storage / NAS / home server ---
+    (["openmediavault", "OpenMediaVault", "/rpc.php"], "OpenMediaVault", "openmediavault", "openmediavault"),
+    (["Synology", "DiskStation", "DSM Login", "/webman/"], "DiskStation", "synology", "diskstation"),
+    (["QNAP", "QTS", "/cgi-bin/authLogin.cgi"], "NAS", "qnap", "qnap"),
+    (["Unraid", "unraid"], "Unraid", "lime technology", "unraid"),
+    (["Nextcloud", "nextcloud"], "Nextcloud", "nextcloud", "nextcloud"),
+    (["ownCloud", "owncloud"], "ownCloud", "owncloud", "owncloud"),
+    # --- Virtualization / containers / registries ---
+    (["Proxmox", "pve-", "PVE Manager"], "Proxmox", "proxmox", "proxmox"),
+    (["Portainer", "portainer"], "Portainer", "portainer", "portainer"),
+    (["Harbor", "goharbor"], "Harbor", "harbor", "harbor"),
+    (["Sonatype Nexus", "Nexus Repository", "nexus"], "Nexus", "sonatype", "nexus"),
+    (["MinIO", "minio"], "MinIO", "minio", "minio"),
+    (["Rancher", "rancher"], "Rancher", "rancher", "rancher"),
+    # --- Linux mgmt / SSO / DevOps ---
+    (["Cockpit", "cockpit"], "Cockpit", "cockpit", "cockpit"),
+    (["Keycloak", "keycloak"], "Keycloak", "red hat", "keycloak"),
+    (["Gitea", "gitea"], "Gitea", "gitea", "gitea"),
+    (["SonarQube", "sonarqube"], "SonarQube", "sonarsource", "sonarqube"),
+    (["Guacamole", "guacamole"], "Guacamole", "apache", "guacamole"),
+    # --- Monitoring / ITSM / collaboration ---
+    (["Cacti", "cacti"], "Cacti", "cacti", "cacti"),
+    (["Splunk", "splunkd"], "Splunk", "splunk", "splunk"),
+    (["GLPI", "glpi"], "GLPI", "glpi", "glpi"),
+    (["Mattermost", "mattermost"], "Mattermost", "mattermost", "mattermost"),
+    # --- Network / infra UIs ---
+    (["UniFi", "unifi"], "UniFi", "ubiquiti", "unifi"),
+    (["MikroTik", "RouterOS", "hotspot"], "RouterOS", "mikrotik", "routeros"),
 ]
 
 
