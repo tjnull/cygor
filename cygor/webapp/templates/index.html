@@ -915,9 +915,12 @@ body.light-theme hr {
               {% for item in os_summary.top_items %}
               <tr>
                 <td><code class="cy-mono">{{ item.host.address }}</code></td>
-                <td>
+                <td style="word-break: break-all;">
                   {% if item.hostname_display %}
-                    <span class="cy-cell-strong">{{ item.hostname_display }}</span>
+                    <span class="cy-cell-strong" title="{{ item.hostname_display }}{% if item.hostname_source %} (source: {{ item.hostname_source }}){% endif %}">{{ item.hostname_display }}</span>
+                    {% if item.hostname_source %}
+                      <div class="cy-cell-muted" style="font-size: var(--fs-xs);">{{ item.hostname_source }}</div>
+                    {% endif %}
                   {% else %}
                     <span class="cy-cell-muted">—</span>
                   {% endif %}

@@ -163,16 +163,25 @@ async def dashboard(request: Request, session: AsyncSession = Depends(get_sessio
         buckets[fam] = buckets.get(fam, 0) + 1
         classified_host_ids.add(h.id)
 
-        # Resolve hostname: host.hostname > DeviceInfo.netbios_name > ssl_common_name > scripts
+        # Resolve hostname: host.hostname > DeviceInfo.netbios_name > ssl_common_name > scripts.
+        # Track the source so the UI can label it -- otherwise a TLS cert CN
+        # (e.g. "gittea-server.brea") reads like a broken DNS hostname.
         hostname_display = h.hostname or ""
+        hostname_source = "DNS (PTR)" if hostname_display else ""
         if not hostname_display and di:
-            hostname_display = di.netbios_name or di.ssl_common_name or ""
+            if di.netbios_name:
+                hostname_display = di.netbios_name
+                hostname_source = "NetBIOS"
+            elif di.ssl_common_name:
+                hostname_display = di.ssl_common_name
+                hostname_source = "TLS cert"
         if not hostname_display and h.scripts:
             for s in h.scripts:
                 if s.name in ("nbstat", "smb-os-discovery") and s.output:
                     m = re.search(r"(?:NetBIOS computer name|Computer name):\s*(\S+)", s.output, re.IGNORECASE)
                     if m:
                         hostname_display = m.group(1)
+                        hostname_source = "SMB"
                         break
 
         # Best OS display string
@@ -201,6 +210,7 @@ async def dashboard(request: Request, session: AsyncSession = Depends(get_sessio
             "manufacturer": manufacturer,
             "device_type": device_type,
             "hostname_display": hostname_display,
+            "hostname_source": hostname_source,
             "os_family": fam,
             "_sort_key": sort_key,
         })
