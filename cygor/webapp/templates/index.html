@@ -318,6 +318,30 @@ body.light-theme #scanTimelineWrap .dropdown-item:hover {
   color: #ffffff !important;
 }
 
+/* Identification Trust card */
+.id-trust-headline { display: flex; align-items: baseline; gap: .5rem; margin-bottom: .85rem; }
+.id-trust-pct { font-size: 2rem; font-weight: 700; color: #3fb950; line-height: 1; }
+.id-trust-caption { color: #8b949e; font-size: .8rem; }
+.id-trust-bar {
+  display: flex; width: 100%; height: 16px; border-radius: 8px;
+  overflow: hidden; background: #21262d; margin-bottom: .6rem;
+}
+.id-seg { height: 100%; }
+.id-seg + .id-seg { box-shadow: inset 1px 0 0 rgba(0,0,0,.35); }
+.id-trust-legend {
+  display: flex; flex-wrap: wrap; gap: .25rem 1rem;
+  font-size: .75rem; color: #c9d1d9; margin-bottom: 1rem;
+}
+.id-trust-legend .id-dot {
+  display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+  margin-right: .4rem; vertical-align: middle;
+}
+.id-trust-sub { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: #8b949e; margin-bottom: .35rem; }
+body.light-theme .id-trust-caption,
+body.light-theme .id-trust-sub { color: #57606a; }
+body.light-theme .id-trust-bar { background: #eaeef2; }
+body.light-theme .id-trust-legend { color: #24292f; }
+
 /* Material OS Discovery section */
 .display-6 {
   font-weight: 700 !important;
@@ -708,9 +732,10 @@ body.light-theme hr {
     </div>
   </div>
 
-  <!-- Row 3: Device Categories -->
-  {% if device_categories is defined and device_categories %}
+  <!-- Row 3: Device Categories + Identification Trust -->
+  {% if (device_categories is defined and device_categories) or (identification_trust is defined and identification_trust) %}
   <div class="row gx-3 gy-3 mb-3">
+    {% if device_categories is defined and device_categories %}
     <div class="col-lg-6">
       <div class="card bg-dark shadow-sm h-100 chart-card">
         <div class="card-header border-0">
@@ -724,6 +749,48 @@ body.light-theme hr {
         </div>
       </div>
     </div>
+    {% endif %}
+
+    {% if identification_trust is defined and identification_trust %}
+    <div class="col-lg-6">
+      <div class="card bg-dark shadow-sm h-100 chart-card">
+        <div class="card-header border-0">
+          <h5 class="card-title text-white mb-0"><i class="bi bi-patch-check me-2"></i> Identification Trust</h5>
+          <small class="text-secondary">How well-corroborated each device's identity is</small>
+        </div>
+        <div class="card-body">
+          <!-- Headline: share of assets confirmed by 2+ independent sources -->
+          <div class="id-trust-headline">
+            <span class="id-trust-pct">{{ identification_trust.validated_pct }}%</span>
+            <span class="id-trust-caption">of {{ identification_trust.total }} assets confirmed by 2+ independent sources</span>
+          </div>
+
+          <!-- Segmented status bar -->
+          <div class="id-trust-bar" role="img"
+               aria-label="Identification status breakdown">
+            {% set st = identification_trust.status_counts %}
+            {% set tot = identification_trust.total %}
+            {% if st.VALIDATED %}<div class="id-seg" style="width: {{ (st.VALIDATED * 100 / tot) }}%; background:#3fb950;" title="Validated: {{ st.VALIDATED }}"></div>{% endif %}
+            {% if st.PLAUSIBLE %}<div class="id-seg" style="width: {{ (st.PLAUSIBLE * 100 / tot) }}%; background:#58a6ff;" title="Plausible: {{ st.PLAUSIBLE }}"></div>{% endif %}
+            {% if st.SUSPECT %}<div class="id-seg" style="width: {{ (st.SUSPECT * 100 / tot) }}%; background:#d29922;" title="Suspect: {{ st.SUSPECT }}"></div>{% endif %}
+            {% if st.UNKNOWN %}<div class="id-seg" style="width: {{ (st.UNKNOWN * 100 / tot) }}%; background:#6e7681;" title="Unknown: {{ st.UNKNOWN }}"></div>{% endif %}
+          </div>
+          <div class="id-trust-legend">
+            <span><i class="id-dot" style="background:#3fb950;"></i>Validated {{ st.VALIDATED }}</span>
+            <span><i class="id-dot" style="background:#58a6ff;"></i>Plausible {{ st.PLAUSIBLE }}</span>
+            <span><i class="id-dot" style="background:#d29922;"></i>Suspect {{ st.SUSPECT }}</span>
+            <span><i class="id-dot" style="background:#6e7681;"></i>Unknown {{ st.UNKNOWN }}</span>
+          </div>
+
+          <!-- Corroborating-source histogram -->
+          <div class="id-trust-sub">Corroborating sources per device</div>
+          <div class="chart-canvas-wrap" style="flex:1 1 auto; min-height:120px;">
+            <canvas id="idTrustSourcesChart" style="width:100%; height:140px; display:block;"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
   {% endif %}
 
@@ -1301,6 +1368,44 @@ function renderDeviceCategoryChart() {
   });
 }
 
+/* ---- Identification Trust: corroborating-source histogram ---- */
+function renderIdTrustSourcesChart() {
+  const el = document.getElementById('idTrustSourcesChart');
+  if (!el) return;
+  const trust = {{ identification_trust | default(none) | tojson }};
+  if (!trust || !trust.source_buckets) return;
+  const buckets = trust.source_buckets;
+  const labels = ['1-2', '3-4', '5-6', '7+'];
+  const data = labels.map(l => buckets[l] || 0);
+  const ctx = el.getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: data,
+        backgroundColor: ['#6e7681', '#58a6ff', '#3fb950', '#2ea043'],
+        borderWidth: 0,
+        borderRadius: 4,
+        barThickness: 18,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { beginAtZero: true, ticks: { color: '#8b949e', precision: 0 }, grid: { color: 'rgba(139,148,158,0.12)' } },
+        y: { ticks: { color: '#c9d1d9', font: { size: 11 } }, grid: { display: false } }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (c) => `${c.parsed.x} device(s) corroborated by ${c.label} sources` } }
+      }
+    }
+  });
+}
+
 /* ---- Popup modal behavior ---- */
 document.addEventListener('DOMContentLoaded', () => {
   try { renderServicesChart(); } catch (e) { console.error(e); }
@@ -1308,6 +1413,7 @@ document.addEventListener('DOMContentLoaded', () => {
   try { renderLiveHostsChart(); } catch (e) { console.error(e); }
   try { renderPortsScanSpeedChart(); } catch (e) { console.error(e); }
   try { renderDeviceCategoryChart(); } catch (e) { console.error(e); }
+  try { renderIdTrustSourcesChart(); } catch (e) { console.error(e); }
 
   setTimeout(syncChartHeights, 220);
 

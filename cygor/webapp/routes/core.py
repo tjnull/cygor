@@ -272,6 +272,56 @@ async def dashboard(request: Request, session: AsyncSession = Depends(get_sessio
         device_categories = []
 
     # ==========================================================
+    # Identification trust: how well-corroborated each device's identity is.
+    # Unique to cygor -- built on the multi-source fingerprint validation that
+    # commercial discovery tools don't expose. Status breakdown answers "can I
+    # trust this inventory", the source histogram shows depth of evidence.
+    # ==========================================================
+    identification_trust = None
+    try:
+        status_rows = (await session.execute(
+            select(DeviceInfo.validation_status, func.count(DeviceInfo.id))
+            .group_by(DeviceInfo.validation_status)
+        )).all()
+        # Normalise statuses into a fixed, ordered set so the chart is stable.
+        order = ["VALIDATED", "PLAUSIBLE", "SUSPECT", "UNKNOWN"]
+        status_counts = {s: 0 for s in order}
+        for status, count in status_rows:
+            key = (status or "UNKNOWN").upper()
+            status_counts[key] = status_counts.get(key, 0) + count
+
+        # Corroborating-source histogram, bucketed for readability.
+        src_rows = (await session.execute(
+            select(DeviceInfo.validation_sources, func.count(DeviceInfo.id))
+            .group_by(DeviceInfo.validation_sources)
+        )).all()
+        buckets_src = {"1-2": 0, "3-4": 0, "5-6": 0, "7+": 0}
+        for sources, count in src_rows:
+            n = sources or 0
+            if n <= 0:
+                continue  # 0 sources == no corroboration; not plotted as a bar
+            elif n <= 2:
+                buckets_src["1-2"] += count
+            elif n <= 4:
+                buckets_src["3-4"] += count
+            elif n <= 6:
+                buckets_src["5-6"] += count
+            else:
+                buckets_src["7+"] += count
+
+        total_devices = sum(status_counts.values())
+        validated = status_counts.get("VALIDATED", 0)
+        if total_devices > 0:
+            identification_trust = {
+                "status_counts": status_counts,
+                "source_buckets": buckets_src,
+                "total": total_devices,
+                "validated_pct": round(validated * 100 / total_devices),
+            }
+    except Exception:
+        identification_trust = None
+
+    # ==========================================================
     # Render
     # ==========================================================
     logger.debug(f"[Dashboard] Rendering with {len(scan_times)} CLI scans and {len(ondemand_scan_times)} on-demand scans")
@@ -289,6 +339,7 @@ async def dashboard(request: Request, session: AsyncSession = Depends(get_sessio
             "ondemand_scan_times": ondemand_scan_times,
             "service_summary": service_summary,
             "device_categories": device_categories,
+            "identification_trust": identification_trust,
         },
     )
 
