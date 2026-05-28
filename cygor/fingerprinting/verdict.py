@@ -113,11 +113,11 @@ def fallback_device_category(device_type: Optional[str]) -> str:
            "media_player", "streamer", "presentation", "conference_camera", "remote",
            "kitchen_display") or s == "tv":
         return "Media"
-    if has("camera", "nvr", "_dvr", "doorbell", "ptz", "smart_", "vacuum", "sensor",
+    if has("camera", "nvr", "dvr", "doorbell", "ptz", "smart_", "vacuum", "sensor",
            "alarm", "smoke", "fire_panel", "thermostat", "bulb", "_light", "dimmer",
            "led_controller", "_fan", "humidifier", "air_purifier", "ev_charger",
            "dc_fast", "energy", "battery", "lighting_controller", "iot", "ups",
-           "gps") or s == "automation":
+           "gps", "solar", "inverter", "pdu", "garage", "charger") or s == "automation":
         return "IoT"
     if has("storage", "_das", "nas", "object_storage", "backup", "replication", "_san"):
         return "Storage"

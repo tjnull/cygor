@@ -440,8 +440,12 @@ HOSTNAME_PATTERNS = [
     (r"iMac", 'workstation', 'Apple', 'macOS'),
     (r"Mac-?mini", 'workstation', 'Apple', 'macOS'),
     (r"Mac-?Pro", 'workstation', 'Apple', 'macOS'),
-    (r"Apple-?TV", 'smart_tv', 'Apple', 'tvOS'),
-    (r"HomePod", 'smart_speaker', 'Apple', None),
+    (r"Mac-?Studio", 'workstation', 'Apple', 'macOS'),
+    (r"Apple-?TV", 'streaming_device', 'Apple', 'tvOS'),
+    (r"HomePod", 'smart_speaker', 'Apple', 'audioOS'),
+    (r"Apple-?Watch|Watch\d", 'smartwatch', 'Apple', 'watchOS'),
+    (r"Vision-?Pro|AppleVision", 'ar_headset', 'Apple', 'visionOS'),
+    (r"AirPods|AirTag", 'wearable', 'Apple', None),
 
     # Android devices
     (r'android', 'mobile', None, 'Android'),
@@ -503,6 +507,37 @@ HOSTNAME_PATTERNS = [
     (r'august|schlage|yale-lock', 'smart_lock', None, None),
     (r'ratgdo', 'iot', None, None),  # ESP32 garage-door controller (ESPHome)
     (r'esphome|esp32|esp8266', 'iot', None, None),
+
+    # Smart garage door openers
+    (r'myq|chamberlain|liftmaster', 'garage_door', 'Chamberlain', None),
+    (r'genie-?garage|aladdin-?connect', 'garage_door', None, None),
+
+    # Solar inverters / energy gateways (web/API-managed, commonly scanned)
+    (r'solaredge', 'solar_inverter', 'SolarEdge', None),
+    (r'envoy|enphase', 'solar_inverter', 'Enphase', None),
+    (r'fronius', 'solar_inverter', 'Fronius', None),
+    (r'sungrow', 'solar_inverter', 'Sungrow', None),
+    (r'growatt', 'solar_inverter', 'Growatt', None),
+    (r'sma-?(inverter|solar)|sunny-?(boy|tripower|island)', 'solar_inverter', 'SMA', None),
+    (r'solis|ginlong', 'solar_inverter', 'Solis', None),
+    (r'powerwall|tesla-?energy|gateway-?\d', 'energy_gateway', 'Tesla', None),
+    (r'ecoflow', 'energy_gateway', 'EcoFlow', None),
+    (r'\b(inverter|solar)[-_]?\d*\b', 'solar_inverter', None, None),
+
+    # Network-managed UPS / PDU (server-room gear with web/SNMP cards)
+    (r'apc|smart-?ups|back-?ups', 'ups', 'APC', None),
+    (r'eaton-?ups|powerware|eaton', 'ups', 'Eaton', None),
+    (r'cyberpower', 'ups', 'CyberPower', None),
+    (r'vertiv|liebert|geist|netsure', 'ups', 'Vertiv', None),
+    (r'tripp-?lite|tripplite', 'ups', 'Tripp Lite', None),
+    (r'\bups[-_]?\d*\b', 'ups', None, None),
+    (r'\b(pdu|rpdu)[-_]?\d*\b', 'pdu', None, None),
+
+    # Building automation controllers (BACnet / web)
+    (r'distech', 'building_automation', 'Distech', None),
+    (r'webctrl|automated-?logic', 'building_automation', 'Automated Logic', None),
+    (r'jci|metasys|johnson-?controls', 'building_automation', 'Johnson Controls', None),
+    (r'kmc-?controls|delta-?controls', 'building_automation', None, None),
 
     # Media players / streamers
     (r'libreelec|openelec|libreelec|osmc|kodi|xbmc', 'streaming_device', None, 'Linux'),
@@ -583,9 +618,16 @@ HOSTNAME_PATTERNS = [
     (r'^(RTU)[0-9-]*$', 'rtu', None, None),
     (r'^(SCADA|DCS)[0-9-]*$', 'scada_server', None, None),
     (r'modicon|schneider', 'plc', 'Schneider Electric', None),
-    (r'allen-bradley|controllogix|compactlogix', 'plc', 'Rockwell', None),
+    (r'allen-bradley|controllogix|compactlogix|micrologix|guardlogix', 'plc', 'Rockwell', None),
     (r'omron|mitsubishi-plc|melsec', 'plc', None, None),
     (r'beckhoff|twincat', 'plc', 'Beckhoff', None),
+    (r'wago|pfc\d{3}', 'plc', 'WAGO', None),
+    (r'codesys', 'plc', None, None),
+    (r'yokogawa|centum|stardom', 'dcs', 'Yokogawa', None),
+    (r'ge-?fanuc|rx3i|versamax|proficy', 'plc', 'GE', None),
+    (r'red-?lion|crimson', 'hmi', 'Red Lion', None),
+    (r'automationdirect|productivity\d|do-?more|click-?plc', 'plc', 'AutomationDirect', None),
+    (r'phoenix-?contact|pcworx|ilc\d', 'plc', 'Phoenix Contact', None),
     (r'^(BMS|HVAC|BACNET)[0-9-]*$', 'building_automation', None, None),
     (r'niagara|tridium', 'building_automation', 'Tridium', None),
     (r'moxa|hirschmann', 'industrial_switch', None, None),
@@ -1014,6 +1056,59 @@ def _detect_virtualization_by_ports(open_ports: set, host) -> List[FingerprintMa
     return matches
 
 
+# ICS / SCADA / OT protocol ports. A host exposing one of these is almost
+# certainly industrial control / building automation gear -- these ports are
+# very rarely used by anything else, so they're a high-signal device-type +
+# (often) vendor indicator. port -> (device_type, vendor_or_None, protocol).
+_ICS_PORT_SIGNATURES = {
+    102:   ("plc", "Siemens", "Siemens S7comm (ISO-TSAP)"),
+    502:   ("plc", None, "Modbus/TCP"),
+    789:   ("hmi", "Red Lion", "Red Lion Crimson"),
+    1089:  ("plc", None, "Foundation Fieldbus HSE"),
+    1911:  ("building_automation", "Tridium", "Niagara Fox"),
+    1962:  ("plc", "Phoenix Contact", "PCWorx"),
+    2222:  ("plc", None, "EtherNet/IP I/O (CIP)"),
+    2404:  ("rtu", None, "IEC 60870-5-104"),
+    4840:  ("scada_server", None, "OPC-UA"),
+    4911:  ("building_automation", "Tridium", "Niagara Fox (TLS)"),
+    9600:  ("plc", "Omron", "Omron FINS"),
+    18245: ("plc", "GE", "GE SRTP"),
+    18246: ("plc", "GE", "GE SRTP"),
+    20000: ("rtu", None, "DNP3"),
+    34962: ("plc", None, "PROFINET RT"),
+    34964: ("plc", None, "PROFINET CM"),
+    44818: ("plc", None, "EtherNet/IP (CIP)"),
+    47808: ("building_automation", None, "BACnet/IP"),
+    48898: ("plc", "Beckhoff", "Beckhoff TwinCAT ADS"),
+    5006:  ("plc", "Mitsubishi", "MELSEC MC"),
+    5007:  ("plc", "Mitsubishi", "MELSEC MC"),
+}
+
+
+def _detect_ics_by_ports(open_ports: set) -> List[FingerprintMatch]:
+    """Emit evidence for ICS/SCADA/OT protocol ports. These ports are highly
+    distinctive (Modbus 502, S7 102, EtherNet/IP 44818, BACnet 47808, DNP3
+    20000, OPC-UA 4840, ...), so an open one is a strong industrial signal --
+    higher confidence than the virt heuristic. Where the protocol implies a
+    vendor (S7->Siemens, FINS->Omron), that is asserted too."""
+    matches: List[FingerprintMatch] = []
+    for port in open_ports or ():
+        sig = _ICS_PORT_SIGNATURES.get(port)
+        if not sig:
+            continue
+        dtype, vendor, protocol = sig
+        matches.append(FingerprintMatch(
+            source="ics_ports",
+            match_type="port",
+            confidence=0.80,
+            device_type=dtype,
+            manufacturer=vendor,
+            os_family="Embedded",
+            raw_data={"port": port, "protocol": protocol},
+        ))
+    return matches
+
+
 # ---------------------------------------------------------------------------
 # Windows build → version resolver
 # ---------------------------------------------------------------------------
@@ -1126,6 +1221,75 @@ def _extract_windows_build_evidence(
                 "resolved_name": friendly,
                 "harvested_from": [s for s in candidate_strings if build in s][:3],
             },
+        ))
+    return matches
+
+
+def _extract_ics_info(host) -> List[FingerprintMatch]:
+    """Parse ICS/SCADA NSE script results (s7-info, enip-info, modbus-discover,
+    bacnet-info, omron-info, ...). These return vendor / model / firmware
+    directly from the control protocol, so they're high-confidence OT
+    identifications -- e.g. s7-info exposes the Siemens module order number,
+    enip-info the Rockwell product name."""
+    matches: List[FingerprintMatch] = []
+
+    def _scripts():
+        for s in getattr(host, "scripts_results", []) or []:
+            yield s
+        for svc in getattr(host, "services", []) or []:
+            for s in getattr(svc, "scripts_results", []) or []:
+                yield s
+
+    for script in _scripts():
+        sid = (script.get("id") or "").lower()
+        out = script.get("output") or ""
+        if not out:
+            continue
+        vendor = dtype = model = os_family = None
+        proto = None
+
+        if sid == "s7-info" or "s7-info" in sid:
+            vendor, dtype, os_family, proto = "Siemens", "plc", "Embedded", "S7comm"
+            m = re.search(r"Module:\s*(.+)", out) or re.search(r"Basic Hardware:\s*(.+)", out)
+            if m:
+                model = m.group(1).strip()
+        elif "enip" in sid:  # enip-info / enip-enumerate (EtherNet/IP CIP)
+            dtype, os_family, proto = "plc", "Embedded", "EtherNet/IP"
+            vm = re.search(r"Vendor:\s*([^\n(]+)", out)
+            if vm:
+                vendor = vm.group(1).strip()
+            pm = re.search(r"Product Name:\s*([^\n]+)", out)
+            if pm:
+                model = pm.group(1).strip()
+        elif "modbus" in sid:  # modbus-discover
+            dtype, os_family, proto = "plc", "Embedded", "Modbus"
+            dm = re.search(r"Device identification:\s*([^\n]+)", out)
+            if dm:
+                model = dm.group(1).strip()
+                vendor = model.split()[0] if model else None
+        elif "bacnet" in sid:  # bacnet-info
+            dtype, os_family, proto = "building_automation", "Embedded", "BACnet"
+            vm = re.search(r"Vendor (?:Name|ID):\s*([^\n]+)", out)
+            if vm:
+                vendor = vm.group(1).strip()
+        elif "omron" in sid:
+            vendor, dtype, os_family, proto = "Omron", "plc", "Embedded", "Omron FINS"
+        elif "fox" in sid or "niagara" in sid:  # niagara fox
+            vendor, dtype, os_family, proto = "Tridium", "building_automation", "Embedded", "Niagara Fox"
+        elif "pcworx" in sid or "proconos" in sid:
+            vendor, dtype, os_family, proto = "Phoenix Contact", "plc", "Embedded", "PCWorx"
+        else:
+            continue
+
+        matches.append(FingerprintMatch(
+            source="ics_nse",
+            match_type="protocol",
+            confidence=0.92,  # protocol-confirmed OT identification
+            device_type=dtype,
+            manufacturer=vendor,
+            model=model,
+            os_family=os_family,
+            raw_data={"script": sid, "protocol": proto, "output": out[:500]},
         ))
     return matches
 
@@ -1675,6 +1839,17 @@ async def fingerprint_from_host(
     for vmatch in _detect_virtualization_by_ports(open_ports, host):
         evidence.append(vmatch)
         logger.debug(f"Virt port match: {vmatch.device_type} ({vmatch.raw_data.get('signature')})")
+
+    # === 7c'. ICS / SCADA / OT protocol detection ===
+    # Open ICS protocol ports (Modbus/S7/EtherNet-IP/BACnet/DNP3/OPC-UA/...) are
+    # a strong industrial signal; ICS NSE scripts add protocol-confirmed vendor
+    # and model when run.
+    for ics_match in _detect_ics_by_ports(open_ports):
+        evidence.append(ics_match)
+        logger.debug(f"ICS port match: {ics_match.device_type} ({ics_match.raw_data.get('protocol')})")
+    for ics_match in _extract_ics_info(host):
+        evidence.append(ics_match)
+        logger.debug(f"ICS NSE match: {ics_match.manufacturer} / {ics_match.model} ({ics_match.raw_data.get('protocol')})")
 
     # === 7d. Virtualization-specific NSE script extraction ===
     for vscript_match in _extract_virt_scripts(host):
@@ -2749,6 +2924,21 @@ def _aggregate_os_info(
 
         nmap_os_family = best_match.get('osfamily')
         result['os_kernel'] = kernel_version
+
+        # macOS: promote the nmap osmatch ("Apple macOS 13 (Ventura)",
+        # "Apple Mac OS X 10.13", or a Darwin uname) into a clean
+        # "macOS 14 (Sonoma)" with codename, mirroring the Debian/Windows paths.
+        if (nmap_os_family in ('Mac OS X', 'macOS', 'Apple macOS')
+                or re.search(r'mac\s*os|macos|darwin|os\s*x', nmap_os_name, re.IGNORECASE)):
+            from .os_intelligence import macos_release_from_text
+            mac_full = macos_release_from_text(nmap_os_name)
+            if mac_full:
+                distro_hints.append({
+                    'source': 'nmap_macos',
+                    'confidence': 0.82,
+                    'distro': 'macOS',
+                    'os_full': mac_full,
+                })
 
     # 5b. Pull resolved Windows-build evidence (source="windows_build") —
     # it's the highest-precision Windows version source we have.

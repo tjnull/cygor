@@ -85,6 +85,67 @@ def resolve_windows_build(build_str: str) -> Optional[str]:
 
 
 # =============================================================================
+# macOS VERSION MAP
+# =============================================================================
+# macOS marketing version -> codename, and Darwin (kernel) major -> macOS
+# release. Apple's nmap osmatch names ("Apple macOS 13 (Ventura)", "Apple
+# Mac OS X 10.13"), Darwin uname strings, and SMB OS strings carry one of
+# these; this lets a Mac report "macOS 14 (Sonoma)" instead of bare "macOS".
+MACOS_CODENAMES = {
+    "26": "Tahoe", "15": "Sequoia", "14": "Sonoma", "13": "Ventura",
+    "12": "Monterey", "11": "Big Sur",
+    "10.15": "Catalina", "10.14": "Mojave", "10.13": "High Sierra",
+    "10.12": "Sierra", "10.11": "El Capitan", "10.10": "Yosemite",
+    "10.9": "Mavericks", "10.8": "Mountain Lion", "10.7": "Lion",
+    "10.6": "Snow Leopard", "10.5": "Leopard", "10.4": "Tiger",
+    "10.3": "Panther", "10.2": "Jaguar", "10.1": "Puma", "10.0": "Cheetah",
+}
+# Darwin kernel major -> (macOS marketing version, codename). Complete range
+# so a Darwin uname always resolves consistently with MACOS_CODENAMES.
+DARWIN_TO_MACOS = {
+    25: ("26", "Tahoe"), 24: ("15", "Sequoia"), 23: ("14", "Sonoma"),
+    22: ("13", "Ventura"), 21: ("12", "Monterey"), 20: ("11", "Big Sur"),
+    19: ("10.15", "Catalina"), 18: ("10.14", "Mojave"),
+    17: ("10.13", "High Sierra"), 16: ("10.12", "Sierra"),
+    15: ("10.11", "El Capitan"), 14: ("10.10", "Yosemite"),
+    13: ("10.9", "Mavericks"), 12: ("10.8", "Mountain Lion"),
+    11: ("10.7", "Lion"), 10: ("10.6", "Snow Leopard"),
+    9: ("10.5", "Leopard"), 8: ("10.4", "Tiger"),
+}
+
+
+def macos_codename(version: Optional[str]) -> Optional[str]:
+    """Return the macOS codename for a marketing version ("14" -> Sonoma,
+    "10.15" -> Catalina)."""
+    if not version:
+        return None
+    v = str(version).strip()
+    parts = v.split(".")
+    for key in (v, ".".join(parts[:2]), parts[0]):
+        if key in MACOS_CODENAMES:
+            return MACOS_CODENAMES[key]
+    return None
+
+
+def macos_release_from_text(text: Optional[str]) -> Optional[str]:
+    """Parse a macOS release string out of an nmap osmatch name, Darwin uname,
+    or SMB OS string. Returns e.g. "macOS 14 (Sonoma)" or None."""
+    if not text:
+        return None
+    m = re.search(r"(?:mac\s*os\s*x|macos|os\s*x)\s*(\d+(?:\.\d+){0,2})", text, re.IGNORECASE)
+    if m:
+        ver = m.group(1)
+        cn = macos_codename(ver)
+        return f"macOS {ver} ({cn})" if cn else f"macOS {ver}"
+    d = re.search(r"darwin\s*(\d+)", text, re.IGNORECASE)
+    if d:
+        info = DARWIN_TO_MACOS.get(int(d.group(1)))
+        if info:
+            return f"macOS {info[0]} ({info[1]})"
+    return None
+
+
+# =============================================================================
 # VENDOR OS DATABASE
 # =============================================================================
 # Maps manufacturers to their expected OS/firmware information.
@@ -430,13 +491,20 @@ VENDOR_OS_DATABASE: Dict[str, Dict[str, Any]] = {
         "firmware_patterns": [
             (r"macOS\s*([\d.]+)?", "macOS", r"([\d.]+)"),
             (r"Mac\s*OS\s*X\s*([\d.]+)?", "macOS", r"([\d.]+)"),
+            (r"iPadOS\s*([\d.]+)?", "iPadOS", r"([\d.]+)"),
             (r"iOS\s*([\d.]+)?", "iOS", r"([\d.]+)"),
             (r"tvOS\s*([\d.]+)?", "tvOS", r"([\d.]+)"),
+            (r"watchOS\s*([\d.]+)?", "watchOS", r"([\d.]+)"),
+            (r"visionOS\s*([\d.]+)?", "visionOS", r"([\d.]+)"),
+            (r"audioOS\s*([\d.]+)?", "audioOS", r"([\d.]+)"),
             (r"AirPort", "AirPort Firmware", None),
         ],
         "expected_kernels": [],  # Darwin kernel, version scheme different
-        "device_types": ["workstation", "phone", "tablet", "media_player", "access_point"],
-        "expected_os_families": ["macOS", "iOS", "tvOS", "Darwin"],
+        "device_types": ["workstation", "laptop", "phone", "smartphone", "tablet",
+                         "media_player", "streaming_device", "smart_speaker",
+                         "smartwatch", "wearable", "ar_headset", "access_point"],
+        "expected_os_families": ["macOS", "iOS", "iPadOS", "tvOS", "watchOS",
+                                "visionOS", "audioOS", "bridgeOS", "Darwin"],
     },
 
     # =========================================================================
@@ -1360,6 +1428,150 @@ VENDOR_OS_DATABASE: Dict[str, Dict[str, Any]] = {
         "expected_kernels": [],
         "device_types": ["storage_array", "san"],
     },
+
+    # --- Server / out-of-band management (BMC) vendors ---
+    # iDRAC / iLO / IMM / IPMI controllers run embedded Linux; the host servers
+    # run Windows, Linux, or ESXi. Without these, BMC/server hosts skipped
+    # vendor plausibility + firmware inference entirely.
+    "Dell": {
+        "os_family": "Linux",
+        "aliases": ["Dell Inc", "Dell Inc.", "Dell EMC", "Dell Technologies", "iDRAC"],
+        "firmware_patterns": [
+            (r"iDRAC\s*([\d.]+)?", "Dell iDRAC", r"([\d.]+)"),
+            (r"PowerEdge", "Dell PowerEdge", None),
+        ],
+        "expected_kernels": [],
+        "device_types": ["server", "bmc", "workstation", "laptop", "switch"],
+        "expected_os_families": ["Linux", "Windows", "VMkernel", "Embedded"],
+    },
+    "HPE": {
+        "os_family": "Linux",
+        "aliases": ["Hewlett Packard Enterprise", "HP Enterprise", "HPE", "iLO",
+                    "Integrated Lights-Out"],
+        "firmware_patterns": [
+            (r"iLO\s*([\d]+)?", "HPE iLO", r"([\d.]+)"),
+            (r"ProLiant", "HPE ProLiant", None),
+        ],
+        "expected_kernels": [],
+        "device_types": ["server", "bmc"],
+        "expected_os_families": ["Linux", "Windows", "VMkernel", "Embedded"],
+    },
+    "Lenovo": {
+        "os_family": "Linux",
+        "aliases": ["Lenovo Group", "IBM", "XClarity", "ThinkSystem"],
+        "firmware_patterns": [
+            (r"XClarity|IMM2?", "Lenovo XClarity/IMM", None),
+            (r"ThinkSystem|ThinkServer", "Lenovo ThinkSystem", None),
+        ],
+        "expected_kernels": [],
+        "device_types": ["server", "bmc", "workstation", "laptop"],
+        "expected_os_families": ["Linux", "Windows", "VMkernel", "Embedded"],
+    },
+    "Supermicro": {
+        "os_family": "Linux",
+        "aliases": ["Super Micro Computer", "Supermicro Computer"],
+        "firmware_patterns": [(r"IPMI|BMC|ASPEED", "Supermicro BMC/IPMI", None)],
+        "expected_kernels": [],
+        "device_types": ["server", "bmc"],
+        "expected_os_families": ["Linux", "Windows", "VMkernel", "Embedded"],
+    },
+
+    # --- Enterprise firewall / security appliance vendors ---
+    "Palo Alto Networks": {
+        "os_family": "PAN-OS",
+        "aliases": ["Palo Alto", "PaloAlto"],
+        "firmware_patterns": [(r"PAN-?OS\s*([\d.]+)?", "PAN-OS", r"([\d.]+)")],
+        "expected_kernels": [],
+        "device_types": ["firewall"],
+        "expected_os_families": ["PAN-OS", "Linux"],
+    },
+    "Check Point": {
+        "os_family": "Gaia",
+        "aliases": ["CheckPoint", "Check Point Software"],
+        "firmware_patterns": [(r"Gaia|GAiA|SecurePlatform", "Check Point Gaia", None)],
+        "expected_kernels": [],
+        "device_types": ["firewall"],
+        "expected_os_families": ["Gaia", "Linux"],
+    },
+    "Extreme Networks": {
+        "os_family": "EXOS",
+        "aliases": ["Extreme", "Enterasys"],
+        "firmware_patterns": [(r"EXOS|ExtremeXOS\s*([\d.]+)?", "ExtremeXOS", r"([\d.]+)")],
+        "expected_kernels": [],
+        "device_types": ["switch", "router", "access_point"],
+        "expected_os_families": ["EXOS", "Linux"],
+    },
+
+    # --- Building automation / lighting ---
+    "Lutron": {
+        "os_family": "Linux",
+        "aliases": ["Lutron Electronics"],
+        "firmware_patterns": [],
+        "expected_kernels": [],
+        "device_types": ["lighting_controller", "automation", "smart_home"],
+        "expected_os_families": ["Linux", "Embedded"],
+    },
+
+    # --- Network-managed UPS / power (web + SNMP management cards) ---
+    "APC": {
+        "os_family": "Embedded",
+        "aliases": ["American Power Conversion", "Schneider Electric IT"],
+        "firmware_patterns": [(r"AOS\s*([\d.]+)?", "APC AOS", r"([\d.]+)"),
+                              (r"Smart-?UPS|Back-?UPS|Symmetra", "APC UPS", None)],
+        "expected_kernels": [],
+        "device_types": ["ups", "pdu"],
+        "expected_os_families": ["Embedded", "Linux", "RTOS"],
+    },
+    "Eaton": {
+        "os_family": "Embedded",
+        "aliases": ["Eaton Corporation", "Powerware"],
+        "firmware_patterns": [(r"Eaton|Powerware|9PX|5PX", "Eaton UPS", None)],
+        "expected_kernels": [],
+        "device_types": ["ups", "pdu"],
+        "expected_os_families": ["Embedded", "Linux", "RTOS"],
+    },
+    "CyberPower": {
+        "os_family": "Embedded",
+        "aliases": ["CyberPower Systems"],
+        "firmware_patterns": [(r"CyberPower|PR\d{3,4}|OR\d{3,4}", "CyberPower UPS", None)],
+        "expected_kernels": [],
+        "device_types": ["ups", "pdu"],
+        "expected_os_families": ["Embedded", "Linux", "RTOS"],
+    },
+    "Vertiv": {
+        "os_family": "Embedded",
+        "aliases": ["Liebert", "Geist", "Emerson Network Power"],
+        "firmware_patterns": [(r"Liebert|Vertiv|Geist|GXT|PSI", "Vertiv UPS/PDU", None)],
+        "expected_kernels": [],
+        "device_types": ["ups", "pdu"],
+        "expected_os_families": ["Embedded", "Linux", "RTOS"],
+    },
+    "Tripp Lite": {
+        "os_family": "Embedded",
+        "aliases": ["TrippLite", "Eaton Tripp Lite"],
+        "firmware_patterns": [(r"Tripp[- ]?Lite|SMART\d{3,4}", "Tripp Lite UPS", None)],
+        "expected_kernels": [],
+        "device_types": ["ups", "pdu"],
+        "expected_os_families": ["Embedded", "Linux", "RTOS"],
+    },
+
+    # --- Solar inverters / energy gateways ---
+    "SolarEdge": {
+        "os_family": "Linux",
+        "aliases": ["SolarEdge Technologies"],
+        "firmware_patterns": [(r"SolarEdge", "SolarEdge", None)],
+        "expected_kernels": [],
+        "device_types": ["solar_inverter", "energy_gateway"],
+        "expected_os_families": ["Linux", "Embedded"],
+    },
+    "Enphase": {
+        "os_family": "Linux",
+        "aliases": ["Enphase Energy", "Envoy", "IQ Gateway"],
+        "firmware_patterns": [(r"Envoy|Enphase|IQ\s*Gateway", "Enphase Envoy", None)],
+        "expected_kernels": [],
+        "device_types": ["solar_inverter", "energy_gateway"],
+        "expected_os_families": ["Linux", "Embedded"],
+    },
 }
 
 
@@ -1482,9 +1694,9 @@ WINDOWS_VERSION_DATABASE: Dict[str, str] = {
 
 # Device types and their plausible OS families
 DEVICE_TYPE_OS_RULES: Dict[str, List[str]] = {
-    "router": ["Linux", "RouterOS", "Cisco IOS", "JunOS", "FortiOS", "BSD", "FreeBSD"],
-    "switch": ["Linux", "Cisco IOS", "JunOS", "RouterOS", "ArubaOS"],
-    "firewall": ["Linux", "FortiOS", "Cisco IOS", "BSD", "FreeBSD"],
+    "router": ["Linux", "RouterOS", "Cisco IOS", "JunOS", "FortiOS", "BSD", "FreeBSD", "EXOS", "PAN-OS"],
+    "switch": ["Linux", "Cisco IOS", "JunOS", "RouterOS", "ArubaOS", "EXOS", "NX-OS"],
+    "firewall": ["Linux", "FortiOS", "Cisco IOS", "BSD", "FreeBSD", "PAN-OS", "Gaia", "JunOS"],
     "access_point": ["Linux", "ArubaOS", "Cisco IOS", "RouterOS"],
     "printer": ["Linux", "Embedded", "Windows"],
     "camera": ["Linux", "Embedded", "RTOS"],
@@ -1495,11 +1707,61 @@ DEVICE_TYPE_OS_RULES: Dict[str, List[str]] = {
     "server": ["Linux", "Windows", "FreeBSD", "BSD", "VMkernel"],
     "workstation": ["Linux", "Windows", "macOS"],
     "phone": ["iOS", "Android", "Linux"],
-    "tablet": ["iOS", "Android", "Linux", "Windows"],
+    "tablet": ["iOS", "iPadOS", "Android", "Linux", "Windows"],
+    "smartwatch": ["watchOS", "Wear OS", "Tizen", "RTOS", "Embedded"],
+    "wearable": ["watchOS", "Wear OS", "RTOS", "Embedded", "Linux"],
+    "ar_headset": ["visionOS", "Android", "Linux"],
+    "vr_headset": ["visionOS", "Android", "Linux"],
     "iot": ["Linux", "RTOS", "Embedded"],
     "embedded": ["Linux", "RTOS", "Embedded"],
     "general purpose": ["Linux", "Windows", "macOS", "BSD", "FreeBSD"],
     "hypervisor": ["VMkernel", "Linux"],
+    # Added: device types emitted by patterns/Huginn that previously had no
+    # plausibility rule (so the device-type OS check was skipped for them).
+    "ip_camera": ["Linux", "Embedded", "RTOS", "Android"],
+    "ptz_camera": ["Linux", "Embedded", "RTOS"],
+    "doorbell": ["Linux", "Embedded", "RTOS", "Android"],
+    "bmc": ["Linux", "Embedded"],
+    "esxi": ["VMkernel"],
+    "vcenter": ["Linux", "VMkernel"],
+    "controller": ["Linux", "Embedded", "RTOS"],
+    "wireless_controller": ["Linux", "ArubaOS", "Cisco IOS"],
+    "streaming_device": ["Linux", "Android", "tvOS", "Embedded"],
+    "media_server": ["Linux", "Windows", "FreeBSD"],
+    "media_player": ["Linux", "Android", "Embedded"],
+    "smart_speaker": ["Linux", "Android", "Embedded", "RTOS", "audioOS"],
+    "smart_tv": ["Linux", "Android", "tvOS", "Tizen", "webOS"],
+    "game_console": ["FreeBSD", "Linux", "Windows"],
+    "voip_phone": ["Linux", "Embedded", "Android"],
+    "pbx": ["Linux", "FreeBSD", "Embedded"],
+    "lighting_controller": ["Linux", "Embedded", "RTOS"],
+    "smart_home": ["Linux", "Embedded", "RTOS"],
+    "home_hub": ["Linux", "Embedded", "RTOS"],
+    "smartphone": ["iOS", "Android"],
+    "mobile": ["iOS", "Android", "Linux"],
+    "plc": ["RTOS", "Embedded", "Linux"],
+    "smart_plug": ["Embedded", "RTOS", "Linux"],
+    "smart_lighting": ["Embedded", "RTOS", "Linux"],
+    "thermostat": ["Embedded", "RTOS", "Linux"],
+    "ups": ["Embedded", "RTOS", "Linux"],
+    "pdu": ["Embedded", "RTOS", "Linux"],
+    "solar_inverter": ["Linux", "Embedded", "RTOS"],
+    "energy_gateway": ["Linux", "Embedded", "RTOS"],
+    "ev_charger": ["Linux", "Embedded", "RTOS", "Android"],
+    "garage_door": ["Embedded", "RTOS", "Linux"],
+    "building_automation": ["Embedded", "Linux", "RTOS", "QNX"],
+    "av_controller": ["Embedded", "Linux", "RTOS"],
+    # ICS / SCADA / OT device types
+    "hmi": ["Windows", "Linux", "Embedded", "RTOS", "WinCE"],
+    "rtu": ["Embedded", "RTOS", "Linux", "VxWorks", "QNX"],
+    "scada_server": ["Windows", "Linux"],
+    "dcs": ["Windows", "Linux", "Embedded", "VxWorks", "QNX"],
+    "ied": ["Embedded", "RTOS", "Linux", "VxWorks"],
+    "industrial_switch": ["Linux", "Embedded", "Cisco IOS", "RTOS"],
+    "industrial_router": ["Linux", "Embedded", "RouterOS", "Cisco IOS", "RTOS"],
+    "thermal_camera": ["Linux", "Embedded", "RTOS"],
+    "webcam": ["Linux", "Embedded", "Windows"],
+    "conference_camera": ["Linux", "Embedded", "Android"],
 }
 
 
@@ -1522,23 +1784,29 @@ def normalize_vendor_name(vendor: str) -> Optional[str]:
 
     vendor_lower = vendor.lower()
 
-    # Direct match
+    # Pass 1: EXACT match on vendor name or alias, across ALL vendors first.
+    # Exact must win over any partial -- otherwise an early vendor's loose
+    # alias substring (e.g. Aruba's "HPE Aruba" contains "hp"/"hpe") shadows a
+    # later vendor's exact key, which mis-mapped "HP"/"HPE" -> Aruba.
     for db_vendor, info in VENDOR_OS_DATABASE.items():
         if db_vendor.lower() == vendor_lower:
             return db_vendor
-
-        # Check aliases
-        aliases = info.get("aliases", [])
-        for alias in aliases:
+        for alias in info.get("aliases", []):
             if alias.lower() == vendor_lower:
                 return db_vendor
-            # Partial match for aliases
-            if alias.lower() in vendor_lower or vendor_lower in alias.lower():
+
+    # Pass 2: partial alias match (only after no exact match anywhere). Require
+    # the overlapping token to be >= 4 chars to avoid 2-3 char false hits.
+    for db_vendor, info in VENDOR_OS_DATABASE.items():
+        for alias in info.get("aliases", []):
+            a = alias.lower()
+            if len(a) >= 4 and (a in vendor_lower or vendor_lower in a):
                 return db_vendor
 
-    # Partial match on main vendor name
+    # Pass 3: partial match on the main vendor name.
     for db_vendor in VENDOR_OS_DATABASE:
-        if db_vendor.lower() in vendor_lower or vendor_lower in db_vendor.lower():
+        d = db_vendor.lower()
+        if len(d) >= 4 and (d in vendor_lower or vendor_lower in d):
             return db_vendor
 
     return None
