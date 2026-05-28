@@ -41,6 +41,11 @@ _NON_MANUFACTURER_VALUES = frozenset({
     "bridge", "modem", "nas", "load balancer", "controller", "hub", "repeater",
     "general purpose", "storage", "media device", "media server", "iot",
     "appliance", "device", "unknown", "n/a", "none", "null",
+    # device-category words (leak from Huginn hierarchy levels like
+    # "Surveillance Camera" -> "Surveillance")
+    "surveillance", "imaging", "multimedia", "networking", "computing",
+    "virtualization", "automation", "lighting", "sensor", "wearable",
+    "media", "audio", "video", "telephony", "voip", "peripheral",
 })
 
 
