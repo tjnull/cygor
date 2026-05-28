@@ -632,6 +632,8 @@ async def create_credrecon_task(request: Request, db_session: AsyncSession = Dep
         )
 
         return JSONResponse({"scan_id": scan_id, "status": "created", "redirect": f"/credrecon/scans/{scan_id}"})
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -1509,6 +1511,10 @@ async def get_credrecon_scan_results(
                 "skipped": [serialize_result(r) for r in skipped],
             }
         })
+    except HTTPException:
+        # Re-raise framework exceptions (404 "not found", etc.) untouched
+        # so they don't get re-wrapped as a 500 by the catch-all below.
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()

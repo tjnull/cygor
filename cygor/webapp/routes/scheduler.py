@@ -404,6 +404,8 @@ async def update_scheduled_task(
                 "next_run": updated_task.next_run.isoformat() + "Z" if updated_task.next_run else None
             }
         })
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to update scheduled task: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to update scheduled task: {str(e)}")
@@ -436,6 +438,8 @@ async def delete_scheduled_task(
             raise HTTPException(status_code=404, detail="Scheduled task not found")
 
         return JSONResponse({"status": "deleted"})
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to delete scheduled task: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to delete scheduled task: {str(e)}")
@@ -468,6 +472,8 @@ async def pause_scheduled_task(
             raise HTTPException(status_code=404, detail="Scheduled task not found")
 
         return JSONResponse({"status": "paused"})
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to pause scheduled task: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to pause scheduled task: {str(e)}")
@@ -500,6 +506,8 @@ async def resume_scheduled_task(
             raise HTTPException(status_code=404, detail="Scheduled task not found")
 
         return JSONResponse({"status": "resumed"})
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to resume scheduled task: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to resume scheduled task: {str(e)}")
@@ -589,6 +597,8 @@ async def reschedule_task(
             "status": "rescheduled",
             "next_run": updated.next_run.isoformat() + "Z" if updated.next_run else None
         })
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to reschedule task: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to reschedule: {str(e)}")
@@ -636,6 +646,8 @@ async def reactivate_task(
             "status": "reactivated",
             "next_run": result.next_run.isoformat() + "Z" if result.next_run else None
         })
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to reactivate task: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to reactivate: {str(e)}")

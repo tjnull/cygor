@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import os
+import uuid
 import psutil
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -489,6 +490,19 @@ class SchedulerManager:
                 self.scheduler.remove_job(scheduled_task.apscheduler_job_id)
             except Exception as e:
                 logger.warning(f"Failed to remove job from scheduler: {e}")
+
+        # Clear any RunningTaskRecord rows that point at this scheduled task.
+        # The FK has no ON DELETE CASCADE, so a row from a still-running (or
+        # never-reaped) execution would block the parent delete with a 500.
+        # Set scheduled_task_id NULL rather than deleting the run record so the
+        # task can still finish and surface its status via the tasks API.
+        from sqlalchemy import update
+        from .models import RunningTaskRecord
+        await session.execute(
+            update(RunningTaskRecord)
+            .where(RunningTaskRecord.scheduled_task_id == task_id)
+            .values(scheduled_task_id=None)
+        )
 
         # Delete from database
         await session.delete(scheduled_task)
@@ -1042,7 +1056,6 @@ class SchedulerManager:
 
     async def _execute_port_scan(self, config: Dict[str, Any]) -> tuple[str, str]:
         """Execute a port scan task. Returns (task_id, output_path)."""
-        import uuid
 
         logger.info(f"[PORT_SCAN] Starting _execute_port_scan")
         logger.info(f"[PORT_SCAN] task_manager available: {self.task_manager is not None}")
@@ -1087,7 +1100,6 @@ class SchedulerManager:
 
     async def _execute_module_scan(self, config: Dict[str, Any]) -> tuple[str, str]:
         """Execute a module scan task. Returns (task_id, output_path)."""
-        import uuid
 
         if not self.task_manager:
             raise RuntimeError("TaskManager not configured")
@@ -1130,7 +1142,6 @@ class SchedulerManager:
         if not self.credrecon_manager:
             raise RuntimeError("CredReconManager not configured")
 
-        import uuid
 
         # Generate scan ID with 'sched-' prefix for scheduled tasks
         base_id = str(uuid.uuid4())

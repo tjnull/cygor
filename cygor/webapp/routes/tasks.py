@@ -815,6 +815,8 @@ async def create_credrecon_task(request: Request, db_session: AsyncSession = Dep
         )
 
         return JSONResponse({"scan_id": scan_id, "status": "created", "redirect": f"/credrecon/scans/{scan_id}"})
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()
