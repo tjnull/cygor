@@ -20,6 +20,45 @@ from .os_intelligence import VENDOR_OS_DATABASE, ValidationStatus, check_os_plau
 
 
 # ---------------------------------------------------------------------------
+# Manufacturer hygiene
+# ---------------------------------------------------------------------------
+# OS names, kernels, and device-type words are never manufacturers, but they
+# routinely leak into the manufacturer field from SNMP sysDescr, nmap OS class
+# strings, UPnP descriptions ("Router,"), and CPE parsing. A real vendor is
+# never literally "Linux" or "Router". Reject these as standalone manufacturer
+# values (substrings are fine -- "Bridgewater" must survive while bare "Bridge"
+# is dropped).
+_NON_MANUFACTURER_VALUES = frozenset({
+    # operating systems / kernels / platforms
+    "linux", "windows", "windows server", "windows ce", "freebsd", "openbsd",
+    "netbsd", "unix", "macos", "mac os", "os x", "ios", "ipados", "android",
+    "embedded", "embedded linux", "rtos", "vxworks", "qnx", "junos", "fortios",
+    "chrome os", "chromeos", "tizen", "webos", "solaris", "aix", "hp-ux",
+    # device-type / role words
+    "router", "switch", "firewall", "gateway", "access point", "accesspoint",
+    "ap", "wap", "server", "workstation", "computer", "pc", "desktop",
+    "laptop", "printer", "scanner", "camera", "phone", "smartphone", "tablet",
+    "bridge", "modem", "nas", "load balancer", "controller", "hub", "repeater",
+    "general purpose", "storage", "media device", "media server", "iot",
+    "appliance", "device", "unknown", "n/a", "none", "null",
+})
+
+
+def _clean_manufacturer(value: Optional[str]) -> Optional[str]:
+    """Return a usable manufacturer string, or None if *value* is really an OS
+    name, a device-type word, or garbage. Strips trailing punctuation so a
+    UPnP "Router," collapses to "router" and is then rejected."""
+    if not value:
+        return None
+    cleaned = value.strip().strip(",;:.|/").strip()
+    if not cleaned:
+        return None
+    if cleaned.lower() in _NON_MANUFACTURER_VALUES:
+        return None
+    return cleaned
+
+
+# ---------------------------------------------------------------------------
 # Verdict dataclass
 # ---------------------------------------------------------------------------
 
@@ -272,9 +311,10 @@ class VerdictEngine:
             if m.device_type:
                 field_votes["device_type"][m.device_type] += weight
                 field_sources["device_type"][m.device_type].add(m.source)
-            if m.manufacturer:
-                field_votes["manufacturer"][m.manufacturer] += weight
-                field_sources["manufacturer"][m.manufacturer].add(m.source)
+            mfr = _clean_manufacturer(m.manufacturer)
+            if mfr:
+                field_votes["manufacturer"][mfr] += weight
+                field_sources["manufacturer"][mfr].add(m.source)
             if m.os_family:
                 field_votes["os_family"][m.os_family] += weight
                 field_sources["os_family"][m.os_family].add(m.source)
@@ -418,10 +458,10 @@ class VerdictEngine:
 
         for m in matches:
             if m.source == "oui" and m.manufacturer and oui_manufacturer is None:
-                oui_manufacturer = m.manufacturer
+                oui_manufacturer = _clean_manufacturer(m.manufacturer)
                 oui_device_type = m.device_type
             if m.source == "hostname_domain" and m.manufacturer and domain_manufacturer is None:
-                domain_manufacturer = m.manufacturer
+                domain_manufacturer = _clean_manufacturer(m.manufacturer)
                 domain_device_type = m.device_type
             if m.source == "hostname" and m.device_type and m.confidence >= 0.60 and hostname_device_type is None:
                 hostname_device_type = m.device_type
