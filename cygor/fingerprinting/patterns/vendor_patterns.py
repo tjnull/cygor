@@ -14,6 +14,23 @@ Each vendor entry includes:
 from typing import Dict, List, Tuple, Optional, Any
 import re
 
+
+def _banner_search(pattern: str, text: str):
+    """Word-boundary-aware banner/model match.
+
+    Vendor model codes are often very short ("UX", "B5", "wAP", "hEX"). Bare
+    case-insensitive ``re.search`` matches them as *substrings* of unrelated
+    words -- "UX" inside "Linux" flipped every Linux-based UniFi switch to a
+    "UniFi Express" router, "wAP" inside "swap", "cAP" inside "pcap", etc.
+    Wrapping each pattern in \\b forces a whole-token match, which is what
+    these model codes mean. Falls back to a plain search if the wrapped form
+    is not a valid regex (e.g. the pattern already carries its own anchors).
+    """
+    try:
+        return re.search(rf"\b(?:{pattern})\b", text, re.IGNORECASE)
+    except re.error:
+        return re.search(pattern, text, re.IGNORECASE)
+
 # =============================================================================
 # ZYXEL DEVICE PATTERNS
 # =============================================================================
@@ -391,7 +408,7 @@ UBIQUITI_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "68:D7:9A": ("access_point", "Network Equipment", "UniFi AP"),
     "24:5A:4C": ("access_point", "Network Equipment", "UniFi AP"),
     "44:D9:E7": ("access_point", "Network Equipment", "UniFi AP"),
-    "B4:FB:E4": ("access_point", "Network Equipment", "UniFi AP"),
+    "B4:FB:E4": (None, "Network Equipment", "Ubiquiti"),
     "DC:9F:DB": ("access_point", "Network Equipment", "UniFi AP"),
     "E0:63:DA": ("access_point", "Network Equipment", "UniFi AP"),
     "04:18:D6": ("access_point", "Network Equipment", "UniFi AP"),
@@ -404,7 +421,6 @@ UBIQUITI_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
 
     # UniFi Security Gateway / Dream Machine / Cloud Gateway
     "78:45:58": ("router", "Network Equipment", "UniFi Dream Machine"),
-    "B4:FB:E4": ("router", "Network Equipment", "UniFi Gateway"),
 
     # UniFi Protect Cameras / NVR
     "E4:38:83": ("ip_camera", "Surveillance", "UniFi Protect Camera"),
@@ -786,7 +802,7 @@ CISCO_BANNER_PATTERNS: List[Tuple[str, str, str, Optional[str]]] = [
 
 ARUBA_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
     # Aruba Access Points
-    "00:0B:86": ("access_point", "Network Equipment", "Aruba AP"),
+    "00:0B:86": (None, "Network Equipment", "Aruba"),
     "00:1A:1E": ("access_point", "Network Equipment", "Aruba AP"),
     "00:24:6C": ("access_point", "Network Equipment", "Aruba AP"),
     "04:BD:88": ("access_point", "Network Equipment", "Aruba AP"),
@@ -807,7 +823,6 @@ ARUBA_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "94:F1:28": ("switch", "Network Equipment", "Aruba Switch"),
 
     # Aruba Controllers
-    "00:0B:86": ("controller", "Network Equipment", "Aruba Controller"),
 }
 
 ARUBA_BANNER_PATTERNS: List[Tuple[str, str, str, Optional[str]]] = [
@@ -868,14 +883,13 @@ ARUBA_BANNER_PATTERNS: List[Tuple[str, str, str, Optional[str]]] = [
 # =============================================================================
 
 FORTINET_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
-    "00:09:0F": ("firewall", "Network Equipment", "FortiGate"),
+    "00:09:0F": (None, "Network Equipment", "Fortinet"),
     "08:5B:0E": ("firewall", "Network Equipment", "FortiGate"),
     "08:5B:0F": ("firewall", "Network Equipment", "FortiGate"),
     "70:4C:A5": ("firewall", "Network Equipment", "FortiGate"),
     "90:6C:AC": ("firewall", "Network Equipment", "FortiGate"),
     "B4:A9:FC": ("firewall", "Network Equipment", "FortiGate"),
     "E8:1C:BA": ("firewall", "Network Equipment", "FortiGate"),
-    "00:09:0F": ("access_point", "Network Equipment", "FortiAP"),
 }
 
 FORTINET_BANNER_PATTERNS: List[Tuple[str, str, str, Optional[str]]] = [
@@ -1038,12 +1052,12 @@ TPLINK_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "54:AF:97": ("router", "Network Equipment", "TP-Link"),
     "54:C8:0F": ("router", "Network Equipment", "TP-Link"),
     "5C:A6:E6": ("router", "Network Equipment", "TP-Link"),
-    "60:32:B1": ("router", "Network Equipment", "TP-Link"),
+    "60:32:B1": (None, None, "TP-Link"),
     "60:A4:B7": ("router", "Network Equipment", "TP-Link"),
     "64:66:B3": ("router", "Network Equipment", "TP-Link"),
     "68:FF:7B": ("router", "Network Equipment", "TP-Link"),
     "6C:5A:B0": ("router", "Network Equipment", "TP-Link"),
-    "70:4F:57": ("router", "Network Equipment", "TP-Link"),
+    "70:4F:57": (None, None, "TP-Link"),
     "78:44:76": ("router", "Network Equipment", "TP-Link"),
     "7C:8B:CA": ("router", "Network Equipment", "TP-Link"),
     "84:16:F9": ("router", "Network Equipment", "TP-Link"),
@@ -1073,17 +1087,14 @@ TPLINK_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
     # TP-Link Kasa/Tapo Smart Home
     "1C:61:B4": ("smart_plug", "Smart Home", "TP-Link Tapo"),
     "5C:62:8B": ("smart_plug", "Smart Home", "TP-Link Kasa"),
-    "60:32:B1": ("smart_plug", "Smart Home", "TP-Link Kasa"),
-    "70:4F:57": ("ip_camera", "Smart Home", "TP-Link Tapo"),
     "78:8C:B5": ("smart_plug", "Smart Home", "TP-Link Tapo"),
     "98:25:4A": ("ip_camera", "Smart Home", "TP-Link Tapo"),
-    "B4:B0:24": ("smart_plug", "Smart Home", "TP-Link Tapo"),
+    "B4:B0:24": (None, None, "TP-Link"),
 
     # TP-Link Omada Business
     "10:27:F5": ("access_point", "Network Equipment", "TP-Link Omada"),
     "44:A5:6E": ("access_point", "Network Equipment", "TP-Link Omada"),
     "5C:E9:31": ("access_point", "Network Equipment", "TP-Link Omada"),
-    "B4:B0:24": ("switch", "Network Equipment", "TP-Link Omada"),
 }
 
 TPLINK_BANNER_PATTERNS: List[Tuple[str, str, str, Optional[str]]] = [
@@ -1939,7 +1950,7 @@ DELL_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "00:1C:23": ("server", "Computing", "Dell Server"),
     "00:1D:09": ("server", "Computing", "Dell Server"),
     "00:1E:4F": ("server", "Computing", "Dell Server"),
-    "00:1E:C9": ("server", "Computing", "Dell Server"),
+    "00:1E:C9": (None, None, "Dell"),
     "00:21:9B": ("server", "Computing", "Dell Server"),
     "00:21:70": ("server", "Computing", "Dell Server"),
     "00:22:19": ("server", "Computing", "Dell Server"),
@@ -1959,11 +1970,11 @@ DELL_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "24:6E:96": ("server", "Computing", "Dell Server"),
     "24:B6:FD": ("server", "Computing", "Dell Server"),
     "28:F1:0E": ("server", "Computing", "Dell Server"),
-    "34:17:EB": ("server", "Computing", "Dell Server"),
+    "34:17:EB": (None, None, "Dell"),
     "34:48:ED": ("server", "Computing", "Dell Server"),
     "40:5C:FD": ("server", "Computing", "Dell Server"),
     "44:A8:42": ("server", "Computing", "Dell Server"),
-    "4C:76:25": ("server", "Computing", "Dell Server"),
+    "4C:76:25": (None, None, "Dell"),
     "50:9A:4C": ("server", "Computing", "Dell Server"),
     "54:9F:35": ("server", "Computing", "Dell Server"),
     "5C:26:0A": ("server", "Computing", "Dell Server"),
@@ -1994,7 +2005,7 @@ DELL_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "E4:43:4B": ("server", "Computing", "Dell Server"),
     "EC:F4:BB": ("server", "Computing", "Dell Server"),
     "F0:1F:AF": ("server", "Computing", "Dell Server"),
-    "F4:8E:38": ("server", "Computing", "Dell Server"),
+    "F4:8E:38": (None, None, "Dell"),
     "F8:B1:56": ("server", "Computing", "Dell Server"),
     "F8:BC:12": ("server", "Computing", "Dell Server"),
     "F8:CA:B8": ("server", "Computing", "Dell Server"),
@@ -2002,10 +2013,6 @@ DELL_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
 
     # Dell Networking (switches)
     "00:01:E8": ("switch", "Network Equipment", "Dell Switch"),
-    "00:1E:C9": ("switch", "Network Equipment", "Dell Switch"),
-    "34:17:EB": ("switch", "Network Equipment", "Dell Switch"),
-    "4C:76:25": ("switch", "Network Equipment", "Dell Switch"),
-    "F4:8E:38": ("switch", "Network Equipment", "Dell Switch"),
 }
 
 DELL_BANNER_PATTERNS: List[Tuple[str, str, str, Optional[str]]] = [
@@ -2059,7 +2066,7 @@ HPE_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "00:17:A4": ("server", "Computing", "HPE Server"),
     "00:18:71": ("server", "Computing", "HPE Server"),
     "00:1B:78": ("server", "Computing", "HPE Server"),
-    "00:1E:0B": ("server", "Computing", "HPE Server"),
+    "00:1E:0B": (None, None, "HPE"),
     "00:1F:29": ("server", "Computing", "HPE Server"),
     "00:21:5A": ("server", "Computing", "HPE Server"),
     "00:22:64": ("server", "Computing", "HPE Server"),
@@ -2114,7 +2121,6 @@ HPE_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
     # REMOVED: 00:1A:4B - IEEE assigns to Unknown, not HPE
     "00:1B:3F": ("switch", "Network Equipment", "HPE Switch"),
     "00:1C:2E": ("switch", "Network Equipment", "HPE Switch"),
-    "00:1E:0B": ("switch", "Network Equipment", "HPE Switch"),
     "2C:27:D7": ("switch", "Network Equipment", "HPE Switch"),
     "30:8D:99": ("switch", "Network Equipment", "HPE Switch"),
     "5C:B9:01": ("switch", "Network Equipment", "HPE Switch"),
@@ -4195,7 +4201,6 @@ SCHNEIDER_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "00:0E:41": ("plc", "Industrial", "Schneider PLC"),
     "00:20:D2": ("building_controller", "HVAC", "Schneider BMS"),
     "00:60:35": ("plc", "Industrial", "Schneider PLC"),
-    "00:80:F4": ("plc", "Industrial", "Schneider PLC"),
     "54:10:EC": ("plc", "Industrial", "Schneider PLC"),
     # REMOVED: 70:4D:7B - IEEE assigns to Unknown, not SCHNEIDER
     "C4:EB:E3": ("plc", "Industrial", "Schneider PLC"),
@@ -4953,7 +4958,7 @@ AMAZON_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "10:3D:0A": ("smart_speaker", "IoT", "Amazon Echo"),
     "18:74:2E": ("smart_speaker", "IoT", "Amazon Echo"),
     "24:4C:E3": ("smart_speaker", "IoT", "Amazon Echo"),
-    "34:D2:70": ("smart_speaker", "IoT", "Amazon Echo"),
+    "34:D2:70": (None, None, "Amazon"),
     "38:F7:3D": ("smart_speaker", "IoT", "Amazon Echo"),
     "40:A2:DB": ("smart_speaker", "IoT", "Amazon Echo"),
     "44:65:0D": ("smart_speaker", "IoT", "Amazon Echo"),
@@ -4988,7 +4993,6 @@ AMAZON_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "F0:99:BF": ("mesh_router", "Network Equipment", "eero"),
     "78:31:2B": ("mesh_router", "Network Equipment", "eero"),
     "50:81:40": ("mesh_router", "Network Equipment", "eero"),
-    "34:D2:70": ("mesh_router", "Network Equipment", "eero"),
     "40:B8:9A": ("mesh_router", "Network Equipment", "eero"),
     "68:B6:B3": ("mesh_router", "Network Equipment", "eero"),
     "7C:2A:DB": ("mesh_router", "Network Equipment", "eero"),
@@ -5737,7 +5741,6 @@ POLYCOM_BANNER_PATTERNS: List[Tuple[str, str, str, Optional[str]]] = [
 YEALINK_MAC_PREFIXES: Dict[str, Tuple[str, str, Optional[str]]] = {
     "00:15:65": ("voip_phone", "VoIP", "Yealink Phone"),
     "00:1F:C1": ("voip_phone", "VoIP", "Yealink Phone"),
-    "80:5E:C0": ("voip_phone", "VoIP", "Yealink Phone"),
     "80:5E:C0": ("voip_phone", "VoIP", "Yealink Phone"),
     "58:7B:E5": ("voip_phone", "VoIP", "Yealink Phone"),
     "7C:2F:80": ("voip_phone", "VoIP", "Yealink Phone"),
@@ -11050,7 +11053,7 @@ def enrich_ubiquiti_device(
         banner_text = " ".join(banners)
 
         for pattern, model, device_type, firmware in UBIQUITI_BANNER_PATTERNS:
-            if re.search(pattern, banner_text, re.IGNORECASE):
+            if _banner_search(pattern, banner_text):
                 result["model"] = model
                 result["device_type"] = device_type
                 result["firmware_hint"] = firmware
@@ -11062,7 +11065,7 @@ def enrich_ubiquiti_device(
         hostname_upper = hostname.upper()
 
         for pattern, model, device_type, firmware in UBIQUITI_BANNER_PATTERNS:
-            if re.search(pattern, hostname_upper, re.IGNORECASE):
+            if _banner_search(pattern, hostname_upper):
                 result["model"] = model
                 result["device_type"] = device_type
                 result["firmware_hint"] = firmware
@@ -11142,7 +11145,7 @@ def enrich_mikrotik_device(
         banner_text = " ".join(banners)
 
         for pattern, model, device_type, firmware in MIKROTIK_BANNER_PATTERNS:
-            if re.search(pattern, banner_text, re.IGNORECASE):
+            if _banner_search(pattern, banner_text):
                 result["model"] = model
                 result["device_type"] = device_type
                 result["firmware_hint"] = firmware
@@ -11154,7 +11157,7 @@ def enrich_mikrotik_device(
         hostname_upper = hostname.upper()
 
         for pattern, model, device_type, firmware in MIKROTIK_BANNER_PATTERNS:
-            if re.search(pattern, hostname_upper, re.IGNORECASE):
+            if _banner_search(pattern, hostname_upper):
                 result["model"] = model
                 result["device_type"] = device_type
                 result["firmware_hint"] = firmware
@@ -11378,7 +11381,7 @@ def enrich_vendor_device(
 
         # oVirt / Red Hat Virtualization
         for pattern, model, device_type, firmware in OVIRT_BANNER_PATTERNS:
-            if re.search(pattern, banner_text, re.IGNORECASE):
+            if _banner_search(pattern, banner_text):
                 return {
                     "device_type": device_type,
                     "device_category": "Virtualization",
@@ -11389,7 +11392,7 @@ def enrich_vendor_device(
 
         # OpenStack
         for pattern, model, device_type, firmware in OPENSTACK_BANNER_PATTERNS:
-            if re.search(pattern, banner_text, re.IGNORECASE):
+            if _banner_search(pattern, banner_text):
                 return {
                     "device_type": device_type,
                     "device_category": "Cloud Platform",
@@ -11400,7 +11403,7 @@ def enrich_vendor_device(
 
         # Microsoft Hyper-V
         for pattern, model, device_type, firmware in HYPERV_BANNER_PATTERNS:
-            if re.search(pattern, banner_text, re.IGNORECASE):
+            if _banner_search(pattern, banner_text):
                 return {
                     "device_type": device_type,
                     "device_category": "Virtualization",
@@ -11411,7 +11414,7 @@ def enrich_vendor_device(
 
         # KVM / QEMU / libvirt
         for pattern, model, device_type, firmware in KVM_BANNER_PATTERNS:
-            if re.search(pattern, banner_text, re.IGNORECASE):
+            if _banner_search(pattern, banner_text):
                 return {
                     "device_type": device_type,
                     "device_category": "Virtualization",
@@ -11487,7 +11490,7 @@ def enrich_vendor_device(
     if banners:
         banner_text = " ".join(banners)
         for pattern, model, device_type, firmware in PROXMOX_BANNER_PATTERNS:
-            if re.search(pattern, banner_text, re.IGNORECASE):
+            if _banner_search(pattern, banner_text):
                 return {
                     "device_type": device_type,
                     "device_category": "Virtualization",
@@ -11500,7 +11503,7 @@ def enrich_vendor_device(
     if banners:
         banner_text = " ".join(banners)
         for pattern, model, device_type, firmware in PFSENSE_BANNER_PATTERNS:
-            if re.search(pattern, banner_text, re.IGNORECASE):
+            if _banner_search(pattern, banner_text):
                 return {
                     "device_type": device_type,
                     "device_category": "Network Equipment",
@@ -11509,7 +11512,7 @@ def enrich_vendor_device(
                     "confidence": 0.90,
                 }
         for pattern, model, device_type, firmware in OPNSENSE_BANNER_PATTERNS:
-            if re.search(pattern, banner_text, re.IGNORECASE):
+            if _banner_search(pattern, banner_text):
                 return {
                     "device_type": device_type,
                     "device_category": "Network Equipment",
@@ -12300,7 +12303,7 @@ def _generic_enrich(
         banner_text = " ".join(banners)
 
         for pattern, model, device_type, firmware in banner_patterns:
-            if re.search(pattern, banner_text, re.IGNORECASE):
+            if _banner_search(pattern, banner_text):
                 result["model"] = model
                 result["device_type"] = device_type
                 result["firmware_hint"] = firmware
@@ -12310,7 +12313,7 @@ def _generic_enrich(
     # 3. Check hostname for model hints
     if hostname and result["confidence"] < 0.90:
         for pattern, model, device_type, firmware in banner_patterns:
-            if re.search(pattern, hostname, re.IGNORECASE):
+            if _banner_search(pattern, hostname):
                 result["model"] = model
                 result["device_type"] = device_type
                 result["firmware_hint"] = firmware

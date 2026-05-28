@@ -552,13 +552,19 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
                         elif "general purpose" in type_lower:
                             device_type = "workstation"
 
+                    # nmap's OS-class vendor is the *OS* vendor ("Linux",
+                    # "Microsoft", ...), not the hardware maker. Run it through
+                    # the same hygiene filter the verdict uses so OS names don't
+                    # land in the manufacturer column (the later full-fingerprint
+                    # pass fills in the real vendor, or leaves it null).
+                    from cygor.fingerprinting.verdict import _clean_manufacturer
                     await _get_device_info(
                         session,
                         db_host,
                         device_type=device_type,
                         os_family=family,
                         os_name=guess_name,
-                        manufacturer=vendor,
+                        manufacturer=_clean_manufacturer(vendor),
                         confidence=(int(accuracy or 0) / 100.0)
                     )
             except Exception as e:

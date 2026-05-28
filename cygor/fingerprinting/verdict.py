@@ -46,13 +46,15 @@ _NON_MANUFACTURER_VALUES = frozenset({
     "surveillance", "imaging", "multimedia", "networking", "computing",
     "virtualization", "automation", "lighting", "sensor", "wearable",
     "media", "audio", "video", "telephony", "voip", "peripheral",
+    "internet", "internet gateway", "gateway device", "upnp", "ssdp",
 })
 
 
 def _clean_manufacturer(value: Optional[str]) -> Optional[str]:
     """Return a usable manufacturer string, or None if *value* is really an OS
-    name, a device-type word, or garbage. Strips trailing punctuation so a
-    UPnP "Router," collapses to "router" and is then rejected."""
+    name, a device-type word, a dataset "unknown vendor" placeholder, or other
+    garbage. Strips trailing punctuation so a UPnP "Router," collapses to
+    "router" and is then rejected."""
     if not value:
         return None
     cleaned = value.strip().strip(",;:.|/").strip()
@@ -60,7 +62,85 @@ def _clean_manufacturer(value: Optional[str]) -> Optional[str]:
         return None
     if cleaned.lower() in _NON_MANUFACTURER_VALUES:
         return None
+    # "Unknown MAC Vendor (908d6e)", "Unregistered", "Private" -> not a vendor.
+    if cleaned.lower().startswith(("unknown ", "unknown(", "unregistered", "private ", "unallocated")):
+        return None
     return cleaned
+
+
+def fallback_device_category(device_type: Optional[str]) -> str:
+    """Keyword-based device_type -> category fallback.
+
+    The explicit DEVICE_CATEGORIES map can't enumerate every device_type the
+    pattern/banner/Huginn layers emit (200+ exist), so unmapped types used to
+    fall through to "Unknown". This classifies them into a sensible dashboard
+    bucket and means newly-added device types auto-categorise instead of
+    showing as Unknown. Matched most-specific-first; uses substrings carefully
+    so e.g. "data" doesn't match the VoIP "ata" adapter.
+    """
+    if not device_type:
+        return "Unknown"
+    s = device_type.lower()
+    tok = set(s.split("_"))
+    has = lambda *w: any(x in s for x in w)
+    tokin = lambda *w: bool(tok & set(w))
+
+    if tokin("aed", "defibrillator", "ventilator", "incubator", "cgm", "ultrasound",
+             "xray", "mri", "ct") or has("infusion", "insulin", "dialysis", "anesthesia",
+             "cardiac", "surgical", "patient", "blood_pressure", "thermometer", "infant",
+             "interventional", "health_device"):
+        return "Medical"
+    if has("printer") or s == "mfp":
+        return "Printer"
+    if tokin("smartwatch", "wearable", "earbuds", "headphones") or has(
+            "fitness_tracker", "sleep_tracker", "smart_ring", "_headset", "cycling_computer"):
+        return "Wearable"
+    if has("robot_vacuum", "robot_mop", "robot_cleaner"):
+        return "IoT"
+    if has("plc", "io_module", "safety", "servo", "vfd", "chiller", "rooftop", "hvac",
+           "microcontroller", "_mcu", "industrial", "robot_arm", "unit_controller",
+           "building_controller", "automation_controller") or s == "robot":
+        return "SCADA/ICS"
+    if has("firewall", "ddos", "ssl_inspection", "email_gateway", "mail_gateway",
+           "security", "vpn"):
+        return "Security"
+    if has("pbx", "dect", "conferenc", "collaboration", "contact_center", "messaging",
+           "two_way_radio", "sbc", "telecom", "video_phone", "video_conference",
+           "intercom") or s in ("uc", "ata", "phone", "conference_phone"):
+        return "Communication"
+    if has("av_", "soundbar", "speaker", "subwoofer", "amplifier", "audio", "_dsp",
+           "video_bar", "video_encoder", "projector", "display", "gaming", "game",
+           "media_player", "streamer", "presentation", "conference_camera", "remote",
+           "kitchen_display") or s == "tv":
+        return "Media"
+    if has("camera", "nvr", "_dvr", "doorbell", "ptz", "smart_", "vacuum", "sensor",
+           "alarm", "smoke", "fire_panel", "thermostat", "bulb", "_light", "dimmer",
+           "led_controller", "_fan", "humidifier", "air_purifier", "ev_charger",
+           "dc_fast", "energy", "battery", "lighting_controller", "iot", "ups",
+           "gps") or s == "automation":
+        return "IoT"
+    if has("storage", "_das", "nas", "object_storage", "backup", "replication", "_san"):
+        return "Storage"
+    if has("kubernetes", "vms", "vdi", "hci", "paas", "cloud", "guest_agent", "cluster",
+           "migration", "provisioning", "virtual") or s in ("ha", "dr"):
+        return "Virtualization"
+    if has("database"):
+        return "Database"
+    if has("management", "monitoring", "apm", "npm", "logging", "analytics", "mdm",
+           "identity", "licensing") or s == "data":
+        return "Web Service"
+    if has("gateway", "cgnat", "cpe", "olt", "ont", "mesh_router", "range_extender",
+           "bridge", "router", "sd_wan", "sdwan", "sdn", "wan_optimizer", "base_station",
+           "network", "fc_switch", "ib_switch", "nic", "switch", "load_balancer", "dns",
+           "controller"):
+        return "Network Device"
+    if has("scanner", "barcode", "card_reader", "webcam", "microphone", "touch_panel",
+           "peripheral"):
+        return "Peripheral"
+    if has("computer", "mini_pc", "gaming_pc", "mobile_computer", "rugged_tablet",
+           "vdi_client", "blade_server", "storage_server", "motherboard", "gpu", "dpu") or s == "pc":
+        return "Computing"
+    return "Embedded"
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +240,7 @@ class VerdictEngine:
         "server": "Computing",
         "desktop": "Computing",
         "thin_client": "Computing",
+        "bmc": "Server Management",  # iDRAC / iLO / IPMI out-of-band controllers
 
         # Mobile Devices
         "mobile": "Mobile",
@@ -313,7 +394,12 @@ class VerdictEngine:
         for m in capped:
             weight = self.SOURCE_WEIGHTS.get(m.source, 0.5) * m.confidence
 
-            if m.device_type:
+            # nmap's "general purpose" / "general_purpose" is a catch-all that
+            # means "couldn't classify", not an actual device type. Counting it
+            # as a vote let it outweigh specific evidence (bmc, switch, camera).
+            # Drop it here; step 11 in fingerprint.py backfills a real category
+            # via Huginn when the verdict ends up Unknown.
+            if m.device_type and m.device_type.lower() not in ("general purpose", "general_purpose"):
                 field_votes["device_type"][m.device_type] += weight
                 field_sources["device_type"][m.device_type].add(m.source)
             mfr = _clean_manufacturer(m.manufacturer)
@@ -378,7 +464,7 @@ class VerdictEngine:
 
         return Verdict(
             device_type=device_type,
-            device_category=self.DEVICE_CATEGORIES.get(device_type, "Unknown"),
+            device_category=self.DEVICE_CATEGORIES.get(device_type) or fallback_device_category(device_type),
             manufacturer=manufacturer,
             model=model,
             os_family=os_family,

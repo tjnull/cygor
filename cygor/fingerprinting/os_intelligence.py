@@ -1824,6 +1824,16 @@ def check_os_plausibility(
     normalized_os = detected_os_family.lower()
     plausibility_score = 0.5
 
+    # "embedded" / "embedded linux" is a generic, non-committal OS family that
+    # network appliances, IoT gear, and BMCs all legitimately report. It is
+    # never a *conflicting* signal, so it must not fail vendor/device
+    # plausibility -- doing so falsely marked UniFi controllers and APs SUSPECT
+    # (nmap reports "embedded" while Ubiquiti's expected-family list says
+    # "Linux"). Specific conflicts (Windows on a switch, Cisco IOS on a
+    # non-Cisco device) are still caught below for concrete OS families.
+    if normalized_os in ("embedded", "embedded linux", "linux/embedded", "rtos"):
+        return True, f"Generic OS family '{detected_os_family}' is plausible for any device", 0.6
+
     # Check against device type rules
     device_type_lower = device_type.lower() if device_type else "unknown"
     allowed_os_families = DEVICE_TYPE_OS_RULES.get(device_type_lower, [])

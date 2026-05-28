@@ -141,12 +141,17 @@ SSH_DISTRO_PATTERNS = [
     # Standard Linux Distributions
     # ==========================================================================
 
-    # Ubuntu variants (extracted from SSH version string)
-    (r'ubuntu(\d+)', 'Ubuntu', r'ubuntu(\d+)'),  # ubuntu1, ubuntu3, etc.
-    (r'Ubuntu', 'Ubuntu', None),
+    # Ubuntu variants. The trailing "ubuntu1"/"3ubuntu0.6" in an OpenSSH banner
+    # is the *package* revision, NOT the Ubuntu release, so we must not report
+    # it as a version. Only accept a genuine "Ubuntu XX.YY" release string
+    # (rare in SSH banners); otherwise leave the version to kernel inference.
+    (r'ubuntu', 'Ubuntu', r'Ubuntu[_\s-]+(\d{2}\.\d{2})'),
 
-    # Debian variants
-    (r'Debian[_\s-]*(\d+)?', 'Debian', r'Debian[_\s-]*(\d+)'),
+    # Debian variants. Debian's OpenSSH banner is e.g.
+    # "OpenSSH 9.2p1 Debian 2+deb12u9": the "2" after "Debian" is the package
+    # revision (NOT a Debian release), and the real release lives in "+deb12".
+    # Parse the +deb / ~deb major so we report Debian 12, not "Debian 2".
+    (r'Debian', 'Debian', r'[+~]deb(\d+)'),
 
     # Red Hat / CentOS / RHEL
     (r'RHEL|Red\s*Hat', 'RHEL', None),
@@ -225,6 +230,30 @@ HTTP_SERVER_OS_PATTERNS = [
     (r'PHP/[\d.]+.*[Kk]ali', 'Kali Linux', None),
     (r'PHP/[\d.]+.*[Pp]arrot', 'Parrot Security OS', None),
 ]
+
+# Release-version -> codename, so "Debian 12" reads as "Debian 12 (bookworm)"
+# and the distro release is unambiguous. Keep current + recent releases.
+_DEBIAN_CODENAMES = {
+    "7": "wheezy", "8": "jessie", "9": "stretch", "10": "buster",
+    "11": "bullseye", "12": "bookworm", "13": "trixie", "14": "forky",
+}
+_UBUNTU_CODENAMES = {
+    "14.04": "trusty", "16.04": "xenial", "18.04": "bionic", "20.04": "focal",
+    "22.04": "jammy", "23.04": "lunar", "23.10": "mantic", "24.04": "noble",
+    "24.10": "oracular", "25.04": "plucky",
+}
+
+
+def _distro_codename(os_name, os_version):
+    """Return the release codename for a Debian/Ubuntu version, or None."""
+    if not os_name or not os_version:
+        return None
+    v = str(os_version).strip()
+    if os_name == "Debian":
+        return _DEBIAN_CODENAMES.get(v.split(".")[0])
+    if os_name == "Ubuntu":
+        return _UBUNTU_CODENAMES.get(v)
+    return None
 
 # SSL Certificate CommonName patterns for OS detection
 SSL_CN_PATTERNS = [
@@ -429,10 +458,20 @@ HOSTNAME_PATTERNS = [
     (r'^(LB|LOADBAL|F5|NETSCALER)[0-9-]*$', 'load_balancer', None, None),
     (r'^(VPN|VPNGW)[0-9-]*$', 'vpn_gateway', None, None),
 
+    # Out-of-band server management (BMC) — these prefixes are vendor-specific
+    # and authoritative: an "idrac-*" host IS a Dell BMC, "ilo*" IS HPE, etc.
+    (r'idrac|drac[0-9]?', 'bmc', 'Dell', None),
+    (r'(^|[-_.])ilo[0-9]?([-_.]|$)', 'bmc', 'HPE', None),
+    (r'(^|[-_.])imm([-_.]|$)|xclarity', 'bmc', 'Lenovo', None),
+    (r'(^|[-_.])cimc([-_.]|$)', 'bmc', 'Cisco', None),
+    (r'(^|[-_.])(bmc|ipmi)([-_.0-9]|$)', 'bmc', None, None),
+
     # Servers
     (r'^(SRV|SERVER|DC|SQL|WEB|MAIL|FILE)[0-9-]+$', 'server', None, None),
+    (r'git(ea|lab|hub)', 'server', None, 'Linux'),
     (r'^(ESX|VCENTER|VMWARE)', 'esxi', 'VMware', 'ESXi'),
     (r'^(PROXMOX|PVE)[0-9-]*$', 'proxmox', 'Proxmox', 'Proxmox VE'),
+    (r'(^|[-_.])pve([-_.0-9]|$)', 'proxmox', 'Proxmox', 'Proxmox VE'),
     (r'^(HYPERV|HV)[0-9-]*$', 'hyper_v', 'Microsoft', 'Windows Server'),
     (r'^(DB|DATABASE|MYSQL|POSTGRES|MONGO|REDIS)[0-9-]*$', 'database_server', None, None),
     (r'^(K8S|KUBE|KUBERNETES)[0-9-]*$', 'kubernetes_node', None, None),
@@ -460,7 +499,25 @@ HOSTNAME_PATTERNS = [
     (r'homeassistant|hass', 'home_automation', None, None),
     (r'shelly|tasmota', 'smart_plug', None, None),
     (r'lifx|nanoleaf|yeelight', 'smart_lighting', None, None),
+    (r'lutron|caseta', 'smart_lighting', 'Lutron', None),
     (r'august|schlage|yale-lock', 'smart_lock', None, None),
+    (r'ratgdo', 'iot', None, None),  # ESP32 garage-door controller (ESPHome)
+    (r'esphome|esp32|esp8266', 'iot', None, None),
+
+    # Media players / streamers
+    (r'libreelec|openelec|libreelec|osmc|kodi|xbmc', 'streaming_device', None, 'Linux'),
+    (r'librelec', 'streaming_device', None, 'Linux'),
+    (r'plex|plexmediaserver', 'media_server', None, None),
+    (r'shield-?tv|nvidia-?shield', 'streaming_device', 'NVIDIA', 'Android'),
+    (r'firetv|fire-?tv|aftt', 'streaming_device', 'Amazon', 'Android'),
+    (r'appletv|apple-?tv', 'streaming_device', 'Apple', 'tvOS'),
+    (r'chromecast|googlecast', 'streaming_device', 'Google', None),
+    (r'roku', 'streaming_device', 'Roku', 'Roku OS'),
+    (r'audiocast|musiccast|airplay', 'streaming_device', None, None),
+
+    # Doorbells / surveillance (UniFi Protect G4 line, generic doorbells)
+    (r'g4-?(doorbell|bullet|dome|pro|instant|flex)', 'ip_camera', 'Ubiquiti', None),
+    (r'doorbell', 'doorbell', None, None),
 
     # Mesh WiFi / Home Routers
     (r'eero[- ]?pro', 'mesh_router', 'eero', 'eeroOS'),
@@ -871,8 +928,11 @@ _VIRT_PORT_SIGNATURES = [
     ({443, 902}, {5480, 5989}, "vcenter", "VMware", "VMkernel", "VMware vCenter", "vcenter-port-set"),
     # Proxmox VE: 8006 (web UI) + ssh + corosync ports.
     ({8006}, {22, 5900, 3128, 8007}, "hypervisor", "Proxmox", "Linux", "Proxmox VE", "proxmox-port-set"),
-    # XenServer / XCP-ng: 443 + 80 + iqn iSCSI, distinctive 27000 port.
-    ({80, 443}, {27000, 5900, 5989}, "hypervisor", "Citrix", None, "Citrix XenServer/XCP-ng", "xen-port-set"),
+    # XenServer / XCP-ng: must see the distinctive 27000 (xapi storage) port.
+    # 80+443 alone is universal and 5900/5989 (VNC/WBEM) ride on any web host
+    # with a console -- requiring only those falsely tagged Dell iDRACs and
+    # other BMCs as "Citrix". Pin to 27000 so the signature actually means Xen.
+    ({443, 27000}, {80, 5900, 5989}, "hypervisor", "Citrix", None, "Citrix XenServer/XCP-ng", "xen-port-set"),
 
     # ── Container orchestration ──
     # Kubernetes API server + kubelet + (etcd or NodePort range).
@@ -899,10 +959,12 @@ _VIRT_PORT_SIGNATURES = [
     ({2377}, {7946, 4789}, "container_host", "Docker", "Linux", "Docker Swarm Manager", "swarm-port-set"),
 
     # ── Container registries ──
-    # Docker Registry / Harbor / generic registry.
-    ({5000}, {443, 80}, "container_registry", None, "Linux", "Container Registry (Docker)", "registry-port-set"),
-    # Harbor uses 80/443 + 5000 + 4443 (notary) — distinct enough to warrant
-    # its own signature when notary is observed.
+    # NOTE: a bare "port 5000 + 80/443" signature was removed -- port 5000 is
+    # massively overloaded (Windows UPnP/SSDP, Flask dev servers, AirPlay,
+    # Synology, etc.), so it tagged ordinary Windows/NAS hosts as Docker
+    # registries. Real registries are caught by Harbor's distinctive notary
+    # port below or by the Docker-Distribution-Api banner, not raw 5000.
+    # Harbor uses 443 + 4443 (notary) + 5000 — distinctive enough to keep.
     ({443, 4443}, {5000}, "container_registry", "Harbor", "Linux", "Harbor Registry", "harbor-port-set"),
 
     # ── Management dashboards on top of containers ──
@@ -993,18 +1055,43 @@ def _harvest_windows_builds(*texts: str) -> List[str]:
     return found
 
 
+def _collect_ntlm_build_texts(host) -> List[str]:
+    """Gather NSE script outputs that expose a Windows ``Product_Version`` /
+    build number. NTLM-info scripts (rdp-ntlm-info, http-ntlm-info,
+    mssql-ntlm-info, *-ntlm-info) and smb-os-discovery report e.g.
+    ``Product_Version: 10.0.26100`` -- the single most precise Windows build
+    source, far better than the nmap osmatch's fuzzy "Windows 11 21H2 - 23H2".
+    """
+    texts: List[str] = []
+
+    def _grab(scripts):
+        for s in scripts or []:
+            sid = (s.get("id") or "").lower()
+            out = s.get("output") or ""
+            if out and ("ntlm" in sid or "Product_Version" in out
+                        or sid in ("smb-os-discovery", "nbstat")):
+                texts.append(out)
+
+    _grab(getattr(host, "scripts_results", []))
+    for svc in getattr(host, "services", []) or []:
+        _grab(getattr(svc, "scripts_results", []))
+    return texts
+
+
 def _extract_windows_build_evidence(
     smb_info: Optional[Dict[str, Any]],
     nmap_os_matches: List[Dict[str, Any]],
     services: List[Dict[str, Any]],
+    extra_texts: Optional[List[str]] = None,
 ) -> List[FingerprintMatch]:
     """
-    Find Windows build numbers across SMB/nmap-OS/banner sources and emit
-    one FingerprintMatch per unique build, with the friendly name resolved.
+    Find Windows build numbers across SMB/nmap-OS/banner/NTLM-script sources
+    and emit one FingerprintMatch per unique build, with the friendly name
+    resolved.
     """
     from .os_intelligence import resolve_windows_build
 
-    candidate_strings: List[str] = []
+    candidate_strings: List[str] = list(extra_texts or [])
     if smb_info:
         candidate_strings.append(smb_info.get("os") or "")
         candidate_strings.append(smb_info.get("native_os") or "")
@@ -1023,7 +1110,8 @@ def _extract_windows_build_evidence(
         friendly = resolve_windows_build(build)
         if not friendly:
             continue
-        os_family = "Windows Server" if "Server" in friendly else "Windows"
+        is_server = "Server" in friendly
+        os_family = "Windows Server" if is_server else "Windows"
         matches.append(FingerprintMatch(
             source="windows_build",
             match_type="build_number",
@@ -1031,6 +1119,8 @@ def _extract_windows_build_evidence(
             os_family=os_family,
             os_vendor="Microsoft",
             os_version=build,
+            # A resolved Server build is authoritative for device_type.
+            device_type="server" if is_server else None,
             raw_data={
                 "build": build,
                 "resolved_name": friendly,
@@ -1436,6 +1526,17 @@ async def fingerprint_from_host(
                         os_version=os_info.get('os_full'),
                         raw_data={'cn': cn, **os_info}
                     ))
+                # The cert CN is often the only identifying name a host exposes
+                # (no PTR / NetBIOS) -- e.g. an iDRAC presents CN=idrac-XXXX.
+                # Run the same hostname-pattern inference on it so vendor /
+                # device-type signals ("idrac" -> Dell BMC, "pve" -> Proxmox)
+                # aren't lost. Slightly lower confidence than a real hostname.
+                if cn != hostname:
+                    cn_match = _analyze_hostname(cn)
+                    if cn_match and (cn_match.manufacturer or cn_match.device_type):
+                        cn_match.source = "ssl_cn"
+                        cn_match.confidence = min(cn_match.confidence, 0.70)
+                        evidence.append(cn_match)
 
     # === 7. Extract SMB/NetBIOS Info ===
     smb_info = _extract_smb_info(host)
@@ -1584,8 +1685,13 @@ async def fingerprint_from_host(
     nmap_os_matches = _extract_os_matches(host)
     result.nmap_os_matches = nmap_os_matches
 
-    for os_match in nmap_os_matches:
-        # Create FingerprintMatch from Nmap OS detection
+    for idx, os_match in enumerate(nmap_os_matches):
+        # Only the top (highest-accuracy) osmatch contributes a device_type
+        # vote. nmap routinely returns several osmatches at the SAME accuracy
+        # (e.g. "general purpose Linux" AND "router RouterOS" both at 100%);
+        # counting the lower guesses let a spurious "router/RouterOS" override
+        # the primary classification of an ordinary Linux host. Lower guesses
+        # still vote on os_family, where consensus across them is useful.
         evidence.append(FingerprintMatch(
             source="nmap_os",
             match_type="fingerprint",
@@ -1593,7 +1699,7 @@ async def fingerprint_from_host(
             os_family=os_match.get("osfamily"),
             os_version=os_match.get("name"),
             os_vendor=os_match.get("vendor"),
-            device_type=os_match.get("type"),
+            device_type=os_match.get("type") if idx == 0 else None,
             raw_data=os_match
         ))
 
@@ -1636,6 +1742,7 @@ async def fingerprint_from_host(
         smb_info=getattr(result, "smb_info", None),
         nmap_os_matches=nmap_os_matches,
         services=services,
+        extra_texts=_collect_ntlm_build_texts(host),
     ):
         evidence.append(win_match)
         logger.debug(
@@ -1844,7 +1951,15 @@ async def fingerprint_from_host(
         # os_name + version: distro extractor wins. It's the more specific
         # source ("Ubuntu" vs voting's "Linux") for the cases it covers.
         result.os_name = os_info.get('os_name') or aggregated.get("os_name")
-        result.os_version = os_info.get('os_version') or aggregated.get("os_version")
+        # os_version must stay consistent with os_name. When the distro
+        # extractor identified a specific distro (e.g. "Debian") but no version,
+        # do NOT borrow the voting layer's version -- that value is the raw nmap
+        # osmatch string (e.g. "OpenWrt 21.02 (Linux 5.4)") and pairing it with
+        # "Debian" produces a self-contradicting "Debian / OpenWrt" result.
+        if os_info.get('os_name'):
+            result.os_version = os_info.get('os_version')
+        else:
+            result.os_version = aggregated.get("os_version")
         # Kernel + free-form full string come exclusively from the distro
         # extractor — voting doesn't compute these.
         result.os_kernel = os_info.get('os_kernel')
@@ -2686,7 +2801,8 @@ def _aggregate_os_info(
     if not result['os_full'] and result['os_name']:
         parts = [result['os_name']]
         if result['os_version']:
-            parts.append(result['os_version'])
+            codename = _distro_codename(result['os_name'], result['os_version'])
+            parts.append(f"{result['os_version']} ({codename})" if codename else result['os_version'])
         if kernel_version:
             parts.append(f"(Linux {kernel_version})")
         result['os_full'] = ' '.join(parts)
