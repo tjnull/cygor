@@ -212,10 +212,11 @@ async def create_workspace(req: Dict[str, Any]):
         if "workspaces" not in cfg:
             cfg["workspaces"] = {}
 
+        now = datetime.datetime.utcnow().isoformat() + "Z"
         cfg["workspaces"][ws_name] = {
             "path": str(ws),
-            "created_at": meta["created_at"],
-            "last_used": datetime.datetime.utcnow().isoformat() + "Z",
+            "created_at": now,
+            "last_used": now,
         }
         if description:
             cfg["workspaces"][ws_name]["description"] = description

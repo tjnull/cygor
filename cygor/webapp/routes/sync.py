@@ -57,7 +57,11 @@ async def sync_status_page(request: Request):
     """Sync status page."""
     if templates is None:
         return HTMLResponse("<h1>Sync status — check /api/sync-status for JSON</h1>")
-    return templates.TemplateResponse("sync_status.html", {"request": request})
+    # New Starlette signature: (request, name, context). The legacy form
+    # `TemplateResponse(name, {"request": request, ...})` raises
+    # 'TypeError: unhashable type: dict' on current starlette because the
+    # first positional is being interpreted as the request object.
+    return templates.TemplateResponse(request, "sync_status.html", {})
 
 
 @router.get("/api/sync-history")
