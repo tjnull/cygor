@@ -9,7 +9,6 @@ import json
 import subprocess
 from typing import Optional
 from pathlib import Path
-from .precheck import run_once_precheck
 
 # Import colorama for colored output
 try:
@@ -277,8 +276,9 @@ def _ensure_root_for_scan(cmd_args: list[str], workspace: str | None = None) -> 
 
     We preserve workspace by prefixing it into the sudo environment using 'env'.
     """
-    # Help/usage never needs root — don't escalate just to print the help text.
-    if "-h" in cmd_args or "--help" in cmd_args:
+    # Help/usage / empty-args paths never need root — don't escalate just to
+    # print help text or to surface an argparse "missing --ips" error.
+    if not cmd_args or "-h" in cmd_args or "--help" in cmd_args:
         return
 
     # already root — nothing to do
@@ -362,13 +362,17 @@ def _ensure_env_for_workspace():
 
 def _exec_module_argv(module_name: str, prog: str, argv: list[str]) -> None:
     """Re-exec a module with a custom program name and argv."""
-    # Try to let the module use a direct entrypoint if present
+    # Try to let the module use a direct entrypoint if present.
+    # Propagate the module's return code (workspace, etc. return non-zero
+    # on user-facing failures like "workspace not found").
     try:
         mod = __import__(module_name, fromlist=['__name__'])
         if hasattr(mod, "main"):
             sys.argv = [prog] + list(argv)
-            mod.main()  # type: ignore[attr-defined]
-            return
+            rc = mod.main()  # type: ignore[attr-defined]
+            sys.exit(rc if isinstance(rc, int) else 0)
+    except SystemExit:
+        raise
     except Exception:
         pass
 
@@ -618,35 +622,6 @@ def main():
     # --- No command provided ---
     if not argv:
         _print_help()
-        # Automatically run the one-time precheck on first-time use
-        try:
-            run_once_precheck()
-        except Exception as e:
-            print(f"[!] Precheck skipped: {e}", file=sys.stderr)
-        sys.exit(0)
-
-    # --- Manual precheck command ---
-    if argv[0] == "precheck":
-        # `--help` / `-h` must NOT trigger the actual precheck -- it
-        # installs OS-level dependencies via apt/sudo and downloads
-        # Chromium (~115 MB), so "I just wanted help" would be a nasty
-        # surprise. Handle the help flags here BEFORE invoking the runner.
-        if len(argv) > 1 and argv[1] in ("-h", "--help"):
-            print("Usage: cygor precheck")
-            print()
-            print("  Run the one-time dependency check that installs system tools")
-            print("  (nmap, masscan, naabu, ...) and downloads the Playwright")
-            print("  Chromium browser. Re-runs cleanly; does not re-download if")
-            print("  everything is already in place.")
-            print()
-            print("  Requires sudo for the apt step. Pass nothing else.")
-            sys.exit(0)
-        print("[*] Running manual dependency check...")
-        try:
-            run_once_precheck(force=True)
-            print("[✓] Dependency verification complete.")
-        except Exception as e:
-            print(f"[!] Precheck error: {e}", file=sys.stderr)
         sys.exit(0)
 
     # --- Proceed with normal commands ---
@@ -656,12 +631,6 @@ def main():
         sys.exit(0)
 
     cmd, cmd_args = rest[0], rest[1:]
-
-    # Note: there used to be a second 'precheck' dispatch and a duplicate
-    # _parse_chown_paths() call here. Both were unreachable -- the early
-    # 'if argv[0] == "precheck"' branch above always handles precheck
-    # first, and the chown_paths/rest values from the prior parse are
-    # still valid (argv hasn't changed). Removed in the Pass 3 cleanup.
 
     # --- Help flags ---
     if cmd in ("-h", "--help", "help"):
@@ -699,6 +668,12 @@ def main():
         # Ensure we know the workspace and set CYGOR_WORKSPACE for the current process
         ws = _ensure_env_for_workspace()
 
+        # Capture the *user-supplied* args before we inject --outdir. The
+        # privilege-check below must operate on these — otherwise an empty
+        # `cygor scan` (which would error out in argparse) escalates to sudo
+        # just to surface the missing-argument error.
+        user_cmd_args = list(cmd_args)
+
         # If workspace exists and the user hasn't provided an explicit outdir, inject it.
         # Accept both `-o`/`--outdir` (common) and `--out-dir` (other modules).
         has_outdir_flag = any(flag in cmd_args for flag in ("-o", "--outdir", "--out-dir"))
@@ -708,7 +683,7 @@ def main():
 
         # Now, if we require raw sockets, re-exec with sudo — workspace is already in cmd_args,
         # and we additionally export CYGOR_WORKSPACE into the elevated process env.
-        _ensure_root_for_scan(cmd_args, workspace=ws)
+        _ensure_root_for_scan(user_cmd_args, workspace=ws)
 
         _exec_module_argv("cygor.scan", "cygor-scan", cmd_args)
 
@@ -798,8 +773,7 @@ def main():
     # real subcommand before dumping the full banner (which is huge).
     _KNOWN_COMMANDS = (
         "scan", "parse", "enrich", "enum", "credrecon", "workspace", "proxy",
-        "plugin", "sync", "web", "setup-privileges", "banner", "precheck",
-        "status",
+        "plugin", "sync", "web", "setup-privileges", "banner", "status",
     )
     import difflib
     suggestion = difflib.get_close_matches(cmd, _KNOWN_COMMANDS, n=1, cutoff=0.6)
