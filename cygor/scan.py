@@ -284,6 +284,41 @@ def parse_exclusions(exclusions):
     return ip_set, net_set, dom_set
 
 
+def get_local_host_ips():
+    """Return the set of IP addresses bound to this machine's own interfaces
+    (the system running cygor).
+
+    These are excluded from discovery by default -- cygor should never scan
+    the box it runs on. Besides the obvious "don't scan yourself", it also
+    avoids a confusing engine mismatch: masscan transmits raw packets on the
+    TX adapter and structurally cannot scan the host's own IPs (self-traffic
+    is routed through loopback and never seen by masscan), while naabu/nmap
+    go through the OS stack and *do* see them -- so leaving the local IP in
+    scope makes the two discovery engines disagree on the host count.
+    """
+    import socket as _socket
+    ips = set()
+    try:
+        import psutil
+        for addrs in psutil.net_if_addrs().values():
+            for a in addrs:
+                if a.family in (_socket.AF_INET, _socket.AF_INET6):
+                    ip = a.address.split('%')[0]  # strip IPv6 zone id, e.g. fe80::1%eth0
+                    try:
+                        ipaddress.ip_address(ip)
+                        ips.add(ip)
+                    except ValueError:
+                        pass
+    except Exception:
+        # psutil missing / platform quirk: fall back to a hostname lookup.
+        try:
+            for info in _socket.getaddrinfo(_socket.gethostname(), None):
+                ips.add(info[4][0].split('%')[0])
+        except Exception:
+            pass
+        ips.add("127.0.0.1")
+    return ips
+
 
 def filter_excluded_hosts(hosts, exclusions):
     """
@@ -550,7 +585,13 @@ def run_masscan(host, interface=None, base_outdir=None, ports=None, rate=1000, e
         cmd_args.extend(["-p", "21,22,23,25,80,88,111,135,139,389,443,445,636,1099,1433,2049,3389,4786,5900,5985,8080,9100"])
     if exclude_file:
         cmd_args.extend(["--excludefile", exclude_file])
-    cmd_args.extend(["--rate", str(rate), "--wait", "0", "--open-only", "-oL", output_file])
+    # --wait is how long masscan keeps listening for SYN-ACK replies AFTER it
+    # finishes transmitting. With --wait 0 it exits the instant the last packet
+    # is sent, so any host whose reply is still in flight (slow IoT device, ARP
+    # delay, latency) is silently dropped -- the exact false-negatives that made
+    # masscan discover fewer hosts than naabu. 5s catches late responders
+    # without masscan's heavier 10s default.
+    cmd_args.extend(["--rate", str(rate), "--wait", "5", "--open-only", "-oL", output_file])
 
     # Wrap with proxychains if jumpbox routing is active
     cmd_args = wrap_command_if_needed(cmd_args, 'masscan')
@@ -1917,6 +1958,16 @@ def main():
 
         # dedupe
         nmap_targets = sorted(set(nmap_targets))
+
+        # Never scan the box cygor runs on, even when targets come from a
+        # pre-existing discovery file.
+        local_ips = get_local_host_ips()
+        self_targets = [h for h in nmap_targets if h in local_ips]
+        if self_targets:
+            nmap_targets = [h for h in nmap_targets if h not in local_ips]
+            print(f"{Fore.YELLOW}[i] Excluding this host's own IP(s) from the scan: "
+                  f"{', '.join(sorted(self_targets))}{Style.RESET_ALL}")
+
         if not nmap_targets:
             print(f"{Fore.RED}No hosts loaded from discovery patterns: {discovery_patterns}")
             return
@@ -1972,14 +2023,33 @@ def main():
 
     hosts = process_hosts(hosts)
 
+    # Build the exclusion set. Always exclude this machine's own IP addresses
+    # (cygor must never scan the system it runs on), then merge any
+    # user-supplied --exclusions on top.
+    ip_excl, net_excl, dom_excl = set(), set(), set()
     if args.exclusions:
-        exclusions = parse_exclusions(args.exclusions)
-        before = len(hosts)
-        hosts = filter_excluded_hosts(hosts, exclusions)
+        u_ip, u_net, u_dom = parse_exclusions(args.exclusions)
+        ip_excl |= u_ip
+        net_excl |= u_net
+        dom_excl |= u_dom
+
+    local_ips = get_local_host_ips()
+    if local_ips:
+        announce = sorted(local_ips - ip_excl)
+        if announce:
+            print(f"{Fore.YELLOW}[i] Excluding this host's own IP(s) from the scan: "
+                  f"{', '.join(announce)}{Style.RESET_ALL}")
+        ip_excl |= local_ips
+
+    exclusions = (ip_excl, net_excl, dom_excl)
+
+    before = len(hosts)
+    hosts = filter_excluded_hosts(hosts, exclusions)
+    if len(hosts) != before:
         print(f"{Fore.YELLOW}[Exclusions Summary]{Style.RESET_ALL} kept {len(hosts)}/{before} targets after filtering")
-        if not hosts:
-            print(f"{Fore.RED}All hosts excluded")
-            return
+    if not hosts:
+        print(f"{Fore.RED}All hosts excluded")
+        return
 
 
 
@@ -2003,7 +2073,7 @@ def main():
                 hosts,
                 interface=args.interface,
                 base_outdir=args.outdir,
-                exclusions=exclusions if args.exclusions else None
+                exclusions=exclusions
             )
         elif icmp_tool == 'icmp-fping':
             rotation_entry = get_next_ip(target_ip=None, context="scan")
@@ -2013,7 +2083,7 @@ def main():
                 hosts,
                 interface=rotation_iface,
                 base_outdir=args.outdir,
-                exclusions=exclusions if args.exclusions else None,
+                exclusions=exclusions,
                 source_ip=rotation_ip
             )
 
@@ -2046,7 +2116,7 @@ def main():
                         base_outdir=args.outdir,
                         ports=args.masscan_ports,      # custom Masscan ports if set
                         rate=_ms_rate,
-                        exclusions=exclusions if args.exclusions else None,
+                        exclusions=exclusions,
                         source_ip=rotation_ip
                     )
                 )
@@ -2100,7 +2170,7 @@ def main():
                     interface=rotation_iface,
                     base_outdir=args.outdir,
                     ports=args.naabu_ports,        # custom Naabu ports if set
-                    exclusions=exclusions if args.exclusions else None,
+                    exclusions=exclusions,
                     source_ip=rotation_ip
                 )
             )
@@ -2181,10 +2251,11 @@ def main():
     else:
         nmap_targets = list(discovered_hosts_merge)
 
-    # NEW: Apply exclusions again before Nmap
-    if args.exclusions:
-        before_nmap = len(nmap_targets)
-        nmap_targets = filter_excluded_hosts(nmap_targets, exclusions)
+    # Apply exclusions again before Nmap (defense in depth: drops the host's
+    # own IP and any user exclusions even if a discovery tool reported them).
+    before_nmap = len(nmap_targets)
+    nmap_targets = filter_excluded_hosts(nmap_targets, exclusions)
+    if len(nmap_targets) != before_nmap:
         print(f"{Fore.YELLOW}[Exclusions Summary]{Style.RESET_ALL} kept {len(nmap_targets)}/{before_nmap} targets before Nmap")
 
     if not nmap_targets:
