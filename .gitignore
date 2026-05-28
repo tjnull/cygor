@@ -261,3 +261,9 @@ ferox-*.state
 # Design/implementation plans: keep locally, never commit
 docs/plans/
 cygor-*-linux-*/
+
+# Presentation decks + their build scripts: keep local, never commit
+*.pptx
+cygor-presentation.*
+build_cygor_deck.py
+*_deck.py
