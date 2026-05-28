@@ -206,32 +206,128 @@ def discover_and_print_domain_ips(hosts):
         print('\n'.join(resolved_domains))
 
 
-def resolve_domain_to_ip(domain):
+# RFC-1123 hostname: 1-253 chars, dot-separated labels of 1-63 chars,
+# alphanumeric + hyphen, no leading/trailing hyphen, optional trailing dot.
+_HOSTNAME_RE = re.compile(
+    r'^(?=.{1,253}\.?$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.?$'
+)
+
+
+def resolve_domain_to_ips(domain):
+    """Resolve a hostname to ALL of its IP addresses (IPv4 first, then IPv6),
+    de-duplicated with first-seen order preserved. Returns [] if it does not
+    resolve.
+
+    Silent by design -- callers own the user-facing messaging. Uses getaddrinfo
+    (handles IPv6 + IDN, and returns every A/AAAA record) rather than the old
+    gethostbyname, which was IPv4-only and returned just one address.
+    """
     try:
-        ip_address = socket.gethostbyname(domain)
-        print(f"{Fore.GREEN}Domain {domain} resolved to IP: {ip_address}")
-        return ip_address
-    except socket.gaierror:
-        print(f"{Fore.RED}Failed to resolve domain: {domain}")
-        return None
+        infos = socket.getaddrinfo(domain, None)
+    except (socket.gaierror, OSError, UnicodeError):
+        return []
+    ips = []
+    seen = set()
+    for family in (socket.AF_INET, socket.AF_INET6):
+        for info in infos:
+            if info[0] == family:
+                ip = info[4][0]
+                if ip not in seen:
+                    seen.add(ip)
+                    ips.append(ip)
+    return ips
+
+
+def resolve_domain_to_ip(domain):
+    """Resolve a hostname to a single IP (IPv4 preferred). Returns the IP
+    string or None. Thin wrapper over resolve_domain_to_ips()."""
+    ips = resolve_domain_to_ips(domain)
+    return ips[0] if ips else None
+
 
 def process_hosts(hosts):
+    """Normalise a raw target list into validated, scannable IPs/CIDRs.
+
+    Each entry is classified explicitly (instead of the old "does it contain a
+    digit" guess, which resolved digit-free hostnames but silently passed
+    everything else through untouched):
+
+      - CIDR network  -> validated, kept as-is
+      - IP address    -> validated, kept as-is (v4 or v6)
+      - hostname      -> shape-checked, then resolved to an IP and the
+                         translation printed so the operator can confirm it
+                         matched the intended host
+      - anything else -> reported and dropped
+
+    Discovery tools need an address (masscan can't resolve names), so resolved
+    hostnames are added as their IP; nmap re-derives the PTR name afterwards.
+    Result is de-duplicated, first-seen order preserved.
+    """
     processed_hosts = []
-    for host in hosts:
+    seen = set()
+    resolved = skipped = 0
+
+    def _add(value):
+        if value not in seen:
+            seen.add(value)
+            processed_hosts.append(value)
+
+    for raw in hosts:
+        host = (raw or "").strip()
+        if not host or host.startswith('#'):
+            continue
+
+        # CIDR network (e.g. 192.168.1.0/24)
+        if '/' in host:
+            try:
+                net = ipaddress.ip_network(host, strict=False)
+                print(f"{Fore.GREEN}Network: {net}{Style.RESET_ALL}")
+                _add(str(net))
+            except ValueError:
+                print(f"{Fore.RED}[!] Invalid network, skipping: {host}{Style.RESET_ALL}")
+                skipped += 1
+            continue
+
+        # Bare IP address (v4 or v6)
         try:
             ip = ipaddress.ip_address(host)
-            if ip.version == 6:
-                print(f"{Fore.GREEN}IPv6 Host: {host}")
-            else:
-                print(f"{Fore.GREEN}IPv4 Host: {host}")
-            processed_hosts.append(str(ip))
+            print(f"{Fore.GREEN}IPv{ip.version} host: {ip}{Style.RESET_ALL}")
+            _add(str(ip))
+            continue
         except ValueError:
-            if '.' in host and not any(c.isdigit() for c in host):
-                ip = resolve_domain_to_ip(host)
-                if ip:
-                    processed_hosts.append(ip)
-            else:
-                processed_hosts.append(host)
+            pass
+
+        # Hostname: reject malformed entries before bothering the resolver.
+        if not _HOSTNAME_RE.match(host):
+            print(f"{Fore.RED}[!] Not a valid IP/CIDR/hostname, skipping: {host}{Style.RESET_ALL}")
+            skipped += 1
+            continue
+
+        ips = resolve_domain_to_ips(host)
+        if not ips:
+            # Surface unresolvable hostnames loudly -- the operator needs to
+            # know a target in scope could not be translated and is being
+            # dropped, rather than silently scanning fewer hosts than intended.
+            print(f"{Fore.RED}[!] Hostname does not resolve, skipping: {host}{Style.RESET_ALL}")
+            skipped += 1
+            continue
+
+        if len(ips) > 1:
+            # A name bound to several IPs (round-robin / multiple A records):
+            # show every address and scan them all, so nothing the name points
+            # at is missed and the operator can verify the expansion.
+            print(f"{Fore.YELLOW}[i] {host} resolves to {len(ips)} addresses: "
+                  f"{', '.join(ips)} -- scanning all{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.GREEN}Resolved {host} -> {ips[0]}{Style.RESET_ALL}")
+        for ip in ips:
+            _add(ip)
+        resolved += 1
+
+    if resolved or skipped:
+        print(f"{Fore.YELLOW}[Targets] {len(processed_hosts)} scannable "
+              f"({resolved} hostname(s) resolved); {skipped} skipped as invalid/unresolvable"
+              f"{Style.RESET_ALL}")
     return processed_hosts
 
 def parse_exclusions(exclusions):
