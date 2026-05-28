@@ -733,9 +733,42 @@ class FingerprintCache:
 
         if not candidate_scores:
             return None
-        # Pick the candidate with highest accumulated token-length overlap
-        # — longer matched tokens carry more weight than several short ones.
-        best_id = max(candidate_scores, key=candidate_scores.get)
+
+        # The token index stores device IDs in sets, so iterating it (above)
+        # inserts them into candidate_scores in hash-seed-dependent order; a
+        # plain ``max(..., key=.get)`` then breaks score ties by that order,
+        # which made fuzzy-match results vary per process (flaky tests, and
+        # worse, non-reproducible classifications in the field).
+        top_score = max(candidate_scores.values())
+        top_ids = [did for did, sc in candidate_scores.items() if sc == top_score]
+        if len(top_ids) == 1:
+            return self._huginn_devices_cache.get(top_ids[0])
+
+        # Many candidates tie on token overlap (e.g. the bare token "galaxy"
+        # matches 1200+ records). A single discriminating token shouldn't let a
+        # lone obscure brand ("Hurricane Galaxy") outvote the family the token
+        # overwhelmingly denotes. Resolve toward the most common manufacturer
+        # among the tied set -- "galaxy" -> Samsung, "iphone" -> Apple --
+        # deterministically. Final tiebreaks: the more canonical (fewest-token)
+        # name, then device_id, so the result never depends on iteration order.
+        from collections import Counter
+        from .huginn_normalize import normalize_huginn_record
+        norm_by_id = {}
+        mfr_counts = Counter()
+        for did in top_ids:
+            norm = normalize_huginn_record(self._huginn_devices_cache.get(did) or {})
+            norm_by_id[did] = norm
+            if norm.get("manufacturer"):
+                mfr_counts[norm["manufacturer"]] += 1
+        dominant_mfr = mfr_counts.most_common(1)[0][0] if mfr_counts else None
+
+        def _candidate_rank(did):
+            info = self._huginn_devices_cache.get(did) or {}
+            name = info.get("name") or info.get("simplified_name") or ""
+            in_dominant = 1 if norm_by_id[did].get("manufacturer") == dominant_mfr else 0
+            return (in_dominant, -len(_tokenize_for_match(name)), str(did))
+
+        best_id = max(top_ids, key=_candidate_rank)
         return self._huginn_devices_cache.get(best_id)
 
     def search_huginn_devices(
