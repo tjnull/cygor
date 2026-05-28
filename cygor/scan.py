@@ -1875,13 +1875,29 @@ def main():
         _sync_fingerprint_databases()
         return
 
-    # Check if running with required privileges for scanning tools
-    # Only required if doing actual discovery (not when using --use-discovery)
+    # Check if running with required privileges for scanning tools.
+    # Only required if doing actual discovery (not when using --use-discovery).
+    # "Privileged" means: euid 0, OR the installed scan tools have
+    # cap_net_raw/cap_net_admin set via `cygor setup-privileges --caps-only`,
+    # OR a NOPASSWD sudoers entry exists. The CLI dispatcher already does this
+    # check before invoking us; keep this one as a defense-in-depth fallback so
+    # somebody running `python -m cygor.scan` directly still gets a clean
+    # error instead of a permission denied deep inside masscan.
     if not args.use_discovery and args.discover:
         if os.geteuid() != 0:
-            print(f"{Fore.RED}[!] Error: Scanner requires root privileges (masscan/naabu/nmap need raw socket access)")
-            print(f"{Fore.YELLOW}[i] Please run with: sudo cygor scan ...{Style.RESET_ALL}")
-            sys.exit(1)
+            try:
+                from cygor.privileges import get_privilege_status
+                priv = get_privilege_status()
+                installed = [t for t in priv.get("tools", []) if t.get("installed")]
+                tools_privileged = bool(installed) and all(t.get("privileged") for t in installed)
+            except Exception:
+                tools_privileged = False
+            if not tools_privileged:
+                print(f"{Fore.RED}[!] Error: Scanner requires elevated privileges "
+                      f"(masscan/naabu/nmap need raw socket access)")
+                print(f"{Fore.YELLOW}[i] Either run with sudo, or grant capabilities once "
+                      f"with: sudo cygor setup-privileges --caps-only{Style.RESET_ALL}")
+                sys.exit(1)
 
     # Resolve the output workspace. There is no implicit ./results default:
     # require an explicit -o, $CYGOR_WORKSPACE, or a configured active workspace.
