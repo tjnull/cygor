@@ -96,7 +96,7 @@ class JSONSyncEngine:
         "huginn_dhcp_vendor",    # ~62MB, 425K DHCP vendor IDs from Huginn-Muninn
         "huginn_dhcpv6",         # ~1.6K DHCPv6 signatures for IPv6 device identification
         "huginn_dhcpv6_enterprise",  # ~58K DHCPv6 enterprise IDs for IPv6 vendor identification
-        "huginn_mac_vendors",    # ~1.5GB, 10.1M MAC vendor mappings from Huginn-Muninn (31 JSON files)
+        "huginn_mac_vendors",    # ~1.5GB, 10.1M MAC vendor mappings from Huginn-Muninn (31 JSON files, pXX_cY naming)
         "satori_ssh",
         "satori_smb",
         "satori_http",
@@ -157,30 +157,27 @@ class JSONSyncEngine:
             "format": "json",
         },
         "huginn_dhcp": {
-            # DHCP Option 55 fingerprints. Upstream split this into part files;
-            # they are downloaded and merged into one list before parsing.
-            "url_base": "https://raw.githubusercontent.com/Ringmast4r/Huginn-Muninn/main/DHCP_Signatures/json/",
-            "files": ["dhcp_fingerprint_part01.json", "dhcp_fingerprint_part02.json"],
+            # DHCP Option 55 fingerprints (single JSON file)
+            "url": "https://raw.githubusercontent.com/Ringmast4r/Huginn-Muninn/main/DHCP_Signatures/json/dhcp_signature.json",
             "timeout": 300,
-            "format": "json_parts",
+            "format": "json",
         },
         "huginn_dhcp_vendor": {
-            # DHCP vendor class identifiers. Upstream split this into part files.
-            "url_base": "https://raw.githubusercontent.com/Ringmast4r/Huginn-Muninn/main/DHCP_Vendors/json/",
-            "files": ["dhcp_vendor_part01.json", "dhcp_vendor_part02.json"],
+            # DHCP vendor class identifiers (single JSON file)
+            "url": "https://raw.githubusercontent.com/Ringmast4r/Huginn-Muninn/main/DHCP_Vendors/json/dhcp_vendor.json",
             "timeout": 300,
-            "format": "json_parts",
+            "format": "json",
         },
         # DHCPv6 databases for IPv6 device identification
         "huginn_dhcpv6": {
             # ~1.6K DHCPv6 signatures (IPv6 option request patterns)
-            "url": "https://raw.githubusercontent.com/Ringmast4r/Huginn-Muninn/main/DHCPv6_Signatures/json/dhcpv6_signature.json",
+            "url": "https://raw.githubusercontent.com/Ringmast4r/Huginn-Muninn/main/DHCPv6_Signatures/json/dhcp6_signature.json",
             "timeout": 120,
             "format": "json",
         },
         "huginn_dhcpv6_enterprise": {
             # ~58K DHCPv6 enterprise IDs (vendor identification for IPv6)
-            "url": "https://raw.githubusercontent.com/Ringmast4r/Huginn-Muninn/main/DHCPv6_Enterprise/json/dhcpv6_enterprise.json",
+            "url": "https://raw.githubusercontent.com/Ringmast4r/Huginn-Muninn/main/DHCPv6_Enterprise/json/dhcp6_enterprise.json",
             "timeout": 120,
             "format": "json",
         },
@@ -222,21 +219,21 @@ class JSONSyncEngine:
             "format": "json",
         },
         # MAC Vendors - 10.1M records split across 31 JSON files (~1.5GB total)
+        # Naming: mac_vendor_pXX_cY.json (parts 01-11, chunks c1-c3; part 11 has only c1)
         "huginn_mac_vendors": {
             "url_base": "https://raw.githubusercontent.com/Ringmast4r/Huginn-Muninn/main/MAC_Vendors/json/",
             "files": [
-                "mac_vendor_part01.json", "mac_vendor_part02.json", "mac_vendor_part03.json",
-                "mac_vendor_part04.json", "mac_vendor_part05.json", "mac_vendor_part06.json",
-                "mac_vendor_part07.json", "mac_vendor_part08.json", "mac_vendor_part09.json",
-                "mac_vendor_part10.json", "mac_vendor_part11.json", "mac_vendor_part12.json",
-                "mac_vendor_part13.json", "mac_vendor_part14.json", "mac_vendor_part15.json",
-                "mac_vendor_part16.json", "mac_vendor_part17.json", "mac_vendor_part18.json",
-                "mac_vendor_part19.json", "mac_vendor_part20.json", "mac_vendor_part21.json",
-                "mac_vendor_part22.json", "mac_vendor_part23.json", "mac_vendor_part24.json",
-                "mac_vendor_part25.json", "mac_vendor_part26.json", "mac_vendor_part27.json",
-                "mac_vendor_part28.json", "mac_vendor_part29.json", "mac_vendor_part30.json",
-                "mac_vendor_part31.json", "mac_vendor_part32.json", "mac_vendor_part33.json",
-                "mac_vendor_part34.json",
+                "mac_vendor_p01_c1.json", "mac_vendor_p01_c2.json", "mac_vendor_p01_c3.json",
+                "mac_vendor_p02_c1.json", "mac_vendor_p02_c2.json", "mac_vendor_p02_c3.json",
+                "mac_vendor_p03_c1.json", "mac_vendor_p03_c2.json", "mac_vendor_p03_c3.json",
+                "mac_vendor_p04_c1.json", "mac_vendor_p04_c2.json", "mac_vendor_p04_c3.json",
+                "mac_vendor_p05_c1.json", "mac_vendor_p05_c2.json", "mac_vendor_p05_c3.json",
+                "mac_vendor_p06_c1.json", "mac_vendor_p06_c2.json", "mac_vendor_p06_c3.json",
+                "mac_vendor_p07_c1.json", "mac_vendor_p07_c2.json", "mac_vendor_p07_c3.json",
+                "mac_vendor_p08_c1.json", "mac_vendor_p08_c2.json", "mac_vendor_p08_c3.json",
+                "mac_vendor_p09_c1.json", "mac_vendor_p09_c2.json", "mac_vendor_p09_c3.json",
+                "mac_vendor_p10_c1.json", "mac_vendor_p10_c2.json", "mac_vendor_p10_c3.json",
+                "mac_vendor_p11_c1.json",
             ],
             "timeout": 600,  # 10 minutes per file
             "format": "json_multifile",

@@ -460,9 +460,11 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
         log(f"[i] XML detected, parsing {file}", level=2, verbose=verbose)
 
         # Quick root-tag check with iterparse (reads only the first element, not the whole tree)
+        scanner_attr = None
         try:
             for _event, elem in ET.iterparse(str(file), events=("start",)):
                 root_tag = elem.tag
+                scanner_attr = elem.get("scanner")
                 elem.clear()
                 break
             else:
@@ -478,6 +480,53 @@ async def ingest_file(file: Path, session: AsyncSession, dedupe: bool = True, ve
 
         if root_tag != "nmaprun":
             log(f"[i] Skipping non-Nmap XML file: {file} (root={root_tag})", level=2, verbose=verbose)
+            return
+
+        # --- Masscan XML (libnmap can't parse it — no <service> elements) ---
+        if scanner_attr == "masscan":
+            log(f"[i] Masscan XML detected, using direct parser", level=2, verbose=verbose)
+            try:
+                tree = ET.parse(str(file))
+                root = tree.getroot()
+            except Exception as e:
+                log(f"[!] Failed to parse masscan XML {file}: {e}", level=0, verbose=verbose)
+                return
+
+            for host_elem in root.findall("host"):
+                addr_elem = host_elem.find("address[@addrtype='ipv4']")
+                if addr_elem is None:
+                    addr_elem = host_elem.find("address")
+                if addr_elem is None:
+                    continue
+                address = addr_elem.get("addr", "")
+                if not address:
+                    continue
+
+                db_host = await _get_host(session, address)
+
+                for port_elem in host_elem.findall(".//port"):
+                    protocol = port_elem.get("protocol", "tcp")
+                    portid = port_elem.get("portid")
+                    if not portid:
+                        continue
+
+                    state_elem = port_elem.find("state")
+                    state = state_elem.get("state", "open") if state_elem is not None else "open"
+                    reason = state_elem.get("reason") if state_elem is not None else None
+
+                    if state != "open":
+                        continue
+
+                    await _get_port(
+                        session,
+                        db_host,
+                        int(portid),
+                        protocol=protocol,
+                        state=state,
+                        reason=reason,
+                    )
+
+            log(f"[+] Ingested {file.name} (masscan)", level=2, verbose=verbose)
             return
 
         try:

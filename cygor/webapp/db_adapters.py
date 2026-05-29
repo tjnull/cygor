@@ -1214,8 +1214,12 @@ class DatabaseManager:
             logger.info("Testing PostgreSQL connections (trying in order of preference)")
 
         failed_attempts = []
-        setup_attempted = False
 
+        # Pass 1: try to connect to each detected cluster as-is. The common
+        # case is that cygor's role + database already exist on one of the
+        # running clusters (frequently not the newest one), so we must never
+        # mutate -- or noisily fail to mutate -- a cluster that isn't ours.
+        # The first working connection wins.
         for idx, (port, version) in enumerate(detected, 1):
             adapter.port = port
             adapter._version = version
@@ -1227,45 +1231,43 @@ class DatabaseManager:
             if self.verbose > 1:
                 logger.debug(f"Connection string: postgresql://{adapter.user}@{adapter.host}:{port}/{adapter.database}")
 
-            # Test connection first - if it fails, try setting up user/database
-            if not adapter.test_connection():
-                # Connection failed - try to set up user and database on this specific instance
-                if not setup_attempted:
-                    if self.verbose > 0:
-                        logger.info("Setting up PostgreSQL user and database")
-                    setup_attempted = True
+            if adapter.test_connection():
+                self.adapter = adapter
+                self.info = adapter.get_info()
+                if version and version.isdigit():
+                    logger.info(f"✓ Connected to PostgreSQL {version} on port {port}")
+                else:
+                    logger.info(f"✓ Connected to PostgreSQL on port {port}")
+                return self.info
 
-                if self.verbose > 1:
-                    logger.debug(f"Setting up PostgreSQL on port {port}")
+            version_label = f"PostgreSQL {version}" if version and version.isdigit() else f"port {port}"
+            failed_attempts.append(version_label)
+            if self.verbose > 1:
+                logger.debug(f"No existing '{adapter.database}' database on {version_label}")
 
-                if not adapter.setup(verbose=self.verbose):
-                    if self.verbose > 1:
-                        logger.debug(f"Setup failed on port {port}")
-                    # Setup failed, try connection again anyway (maybe credentials were wrong)
+        # Pass 2: no running cluster already has cygor's database. Attempt a
+        # one-time setup (create role + database) on the preferred -- i.e.
+        # first-detected -- instance, then retry just that one. Setup needs
+        # superuser access (sudo or peer auth); when that isn't available we
+        # fall through quietly to the SQLite fallback rather than logging a
+        # scary "Failed to create database" error once per cluster.
+        setup_port, setup_version = detected[0]
+        adapter.port = setup_port
+        adapter._version = setup_version
+        if self.verbose > 0:
+            logger.info(f"No existing '{adapter.database}' database found; attempting setup on port {setup_port}")
 
-                # Test connection again after setup
-                if not adapter.test_connection():
-                    version_label = f"PostgreSQL {version}" if version and version.isdigit() else f"port {port}"
-                    failed_attempts.append(version_label)
-                    if self.verbose > 0:
-                        logger.warning(f"✗ Connection failed: {version_label}")
-                    continue
-
-            # Connection successful!
+        if adapter.setup(verbose=self.verbose) and adapter.test_connection():
             self.adapter = adapter
             self.info = adapter.get_info()
-            if version and version.isdigit():
-                logger.info(f"✓ Connected to PostgreSQL {version} on port {port}")
-                if failed_attempts:
-                    logger.info(f"Note: {len(failed_attempts)} other version(s) were unavailable: {', '.join(failed_attempts)}")
-            else:
-                logger.info(f"✓ Connected to PostgreSQL on port {port}")
+            logger.info(f"✓ Connected to PostgreSQL on port {setup_port} (newly initialized)")
             return self.info
 
-        logger.warning("All PostgreSQL connection attempts failed")
-        logger.info(f"Tried versions: {', '.join(failed_attempts)}")
-        logger.info("Check PostgreSQL logs: tail -f /var/log/postgresql/postgresql-*-main.log")
-        logger.info("Or try setting CYGOR_DB_PORT to a specific port number")
+        logger.warning(f"Could not connect to or create a PostgreSQL '{adapter.database}' database")
+        if failed_attempts:
+            logger.info(f"Tried: {', '.join(failed_attempts)}")
+        logger.info(f"To create it manually: sudo -u postgres createdb -O {adapter.user} {adapter.database}")
+        logger.info("Or set CYGOR_DB_PORT / CYGOR_DB_URL to point at an existing database")
         return None
 
     def _initialize_sqlite(self) -> DatabaseInfo:
