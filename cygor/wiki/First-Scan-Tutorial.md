@@ -18,7 +18,7 @@ cat > scope.txt << 'EOF'
 EOF
 ```
 
-You can also pass targets inline with `-ips 192.168.1.0/24 10.0.0.5`.
+You can also pass targets inline with `--ips 192.168.1.0/24 10.0.0.5`.
 
 ## Step 2: Choose a discovery method
 

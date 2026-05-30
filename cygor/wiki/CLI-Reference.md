@@ -43,7 +43,7 @@ Discover live hosts and run Nmap against them. Wraps Masscan, Naabu, and Nmap; n
 | Flag | Description |
 |---|---|
 | `-i INTERFACE` | Network interface to scan from |
-| `-f FILE` / `-ips IP [IP ...]` | Scope: file with one target per line, or inline targets |
+| `-f FILE` / `--ips IP [IP ...]` | Scope: file with one target per line, or inline targets |
 | `--discover {masscan,naabu,...}` | Discovery tool(s); pass multiple to combine |
 | `--nmap-source {merge,masscan,naabu}` | Which discovery output feeds Nmap when combining |
 | `--scan-type {top-ports,fullscan,...}` | Nmap profile |

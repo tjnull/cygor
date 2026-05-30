@@ -190,7 +190,7 @@ def _print_help():
         console.print(f"  [{HEADER}]Getting Started[/{HEADER}]")
         steps = [
             ("1.", "Set a workspace:",      "cygor workspace create engagement-1"),
-            ("2.", "Run your first scan:",  "sudo cygor scan -i eth0 -ips 192.168.1.0/24 --discover naabu"),
+            ("2.", "Run your first scan:",  "sudo cygor scan -i eth0 --ips 192.168.1.0/24 --discover naabu"),
             ("3.", "View results:",         "cygor web start"),
         ]
         steps_table = Table(show_header=False, box=None, padding=(0, 0, 0, 0),

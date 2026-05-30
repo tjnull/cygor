@@ -47,6 +47,14 @@ After escaping captivity, Cy-Gor went on violent rampages, even tearing through 
 There are a few methods that are supported to install Cygor: pip, pipx, uv, and docker.
 
 ## Installing With pipx
+
+Some dependencies (e.g. `gssapi` for Kerberos/WinRM) build C extensions, so install the build toolchain and Kerberos headers first:
+
+```bash
+# Debian/Ubuntu/Kali:
+sudo apt install -y build-essential python3-dev libkrb5-dev
+```
+
 ```bash
 # Stable version:
 pipx install cygor
@@ -212,7 +220,7 @@ You will need `sudo` (`root`) privileges to run the scanner in `cygor`:
 
     Run Cygor to discover hosts and scan them with Nmap with a provided lists of IP Addresses or CDRs:
 
-    cygor scan -i eth0 -ips 10.10.10.1 10.10.10.5 10.10.20.0/24 --discover naabu --processes 10 --scan-type fullscan
+    cygor scan -i eth0 --ips 10.10.10.1 10.10.10.5 10.10.20.0/24 --discover naabu --processes 10 --scan-type fullscan
 
     Exclude specific subnets or hosts from scan:
 

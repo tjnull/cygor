@@ -7,6 +7,12 @@ This guide covers every way to install Cygor and the external tools its modules 
 - Python 3.10 or higher (tested through 3.13)
 - Root/sudo privileges for scanning operations (Nmap raw sockets, Masscan)
 - Network access for downloading dependencies
+- Build toolchain and Kerberos headers — some dependencies (e.g. `gssapi` for Kerberos/WinRM) compile C extensions at install time:
+
+```bash
+# Debian/Ubuntu/Kali:
+sudo apt install -y build-essential python3-dev libkrb5-dev
+```
 
 ## Installation Methods
 
@@ -131,7 +137,7 @@ cygor workspace
 
 ```bash
 # Tiny scan on localhost (requires sudo)
-sudo cygor scan -i lo -ips 127.0.0.1 --discover naabu --scan-type top-ports
+sudo cygor scan -i lo --ips 127.0.0.1 --discover naabu --scan-type top-ports
 
 # Start the web UI
 cygor web start

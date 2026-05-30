@@ -97,7 +97,7 @@ sudo cygor scan -i wlan0 -f scope.txt --discover naabu
 
 2. **Test with single IP**:
    ```bash
-   sudo cygor scan -i eth0 -ips 127.0.0.1 --discover naabu
+   sudo cygor scan -i eth0 --ips 127.0.0.1 --discover naabu
    ```
 
 3. **Check firewall**:

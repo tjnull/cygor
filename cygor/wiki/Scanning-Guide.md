@@ -161,16 +161,16 @@ Provide IPs directly without a file.
 
 ```bash
 # Single IP
-sudo cygor scan -i eth0 -ips 192.168.1.1 --discover naabu
+sudo cygor scan -i eth0 --ips 192.168.1.1 --discover naabu
 
 # Multiple IPs
-sudo cygor scan -i eth0 -ips 192.168.1.1 192.168.1.5 10.0.0.1 --discover naabu
+sudo cygor scan -i eth0 --ips 192.168.1.1 192.168.1.5 10.0.0.1 --discover naabu
 
 # CIDR ranges
-sudo cygor scan -i eth0 -ips 192.168.1.0/24 10.0.0.0/16 --discover naabu
+sudo cygor scan -i eth0 --ips 192.168.1.0/24 10.0.0.0/16 --discover naabu
 
 # Mixed
-sudo cygor scan -i eth0 -ips 192.168.1.1 10.0.0.0/24 --discover naabu
+sudo cygor scan -i eth0 --ips 192.168.1.1 10.0.0.0/24 --discover naabu
 ```
 
 ## Workflow Examples
@@ -238,7 +238,7 @@ cygor web start --load-dir results
 Test with a small scope first:
 ```bash
 # Test with single IP
-sudo cygor scan -i eth0 -ips 192.168.1.1 --discover naabu
+sudo cygor scan -i eth0 --ips 192.168.1.1 --discover naabu
 ```
 
 ### 2. Use Discovery-Only First
