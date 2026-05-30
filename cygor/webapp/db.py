@@ -407,8 +407,14 @@ async def _stamp_alembic_head():
         import asyncio
 
         def _stamp():
-            alembic_cfg = Config(
-                str(Path(__file__).resolve().parents[1] / "../../alembic.ini")
+            # Build the config in code rather than reading alembic.ini: the ini
+            # lives at the repo root and isn't shipped in the installed package,
+            # but the migration env (env.py + versions/) is packaged under
+            # cygor/webapp/alembic/. env.py resolves the DB URL itself.
+            alembic_cfg = Config()
+            alembic_cfg.set_main_option(
+                "script_location",
+                str(Path(__file__).resolve().parent / "alembic"),
             )
             command.stamp(alembic_cfg, "head")
 
