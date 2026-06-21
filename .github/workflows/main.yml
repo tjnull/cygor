@@ -49,7 +49,7 @@ jobs:
           if [[ "${GITHUB_REF_TYPE:-branch}" = "tag" ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
-            VERSION="1.0.0"
+            VERSION="1.1.0"
           fi
           chmod +x packaging/build-${{ matrix.format }}.sh
           ./packaging/build-${{ matrix.format }}.sh --arch "$ARCH_FLAG" --version "$VERSION"
@@ -61,7 +61,7 @@ jobs:
           if [[ "${GITHUB_REF_TYPE:-branch}" = "tag" ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
-            VERSION="1.0.0"
+            VERSION="1.1.0"
           fi
 
           DEB_ARCH="amd64"
@@ -89,7 +89,7 @@ jobs:
           if [[ "${GITHUB_REF_TYPE:-branch}" = "tag" ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
-            VERSION="1.0.0"
+            VERSION="1.1.0"
           fi
 
           PLATFORM="linux/amd64"
@@ -136,7 +136,7 @@ jobs:
 
       - name: Build Windows Package
         run: |
-          $version = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" -replace '^v', '' } else { "1.0.0" }
+          $version = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" -replace '^v', '' } else { "1.1.0" }
           .\packaging\build-windows.ps1 -Version $version
 
       - name: Upload Windows EXE
@@ -263,13 +263,16 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ -n "${{ inputs.release_tag }}" ]; then
-              echo "tag=${{ inputs.release_tag }}" >> $GITHUB_OUTPUT
+              TAG="${{ inputs.release_tag }}"
             else
-              echo "tag=v$(date +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
+              TAG="v$(date +%Y%m%d-%H%M%S)"
             fi
           else
-            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            TAG="${{ github.ref_name }}"
           fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          # Bare version (no leading "v") for the artifact filenames in the notes.
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -286,28 +289,28 @@ jobs:
             
             #### Windows (.exe)
             ```powershell
-            Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/cygor-windows-x64.zip" -OutFile cygor-windows-x64.zip
+            Invoke-WebRequest -Uri "https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/cygor-${{ steps.tag.outputs.version }}-windows-x64.zip" -OutFile cygor-windows-x64.zip
             Expand-Archive -Path cygor-windows-x64.zip -DestinationPath .
             .\cygor.exe -h
             ```
-            
+
             #### Debian/Ubuntu (.deb)
             ```bash
             # x64
-            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/cygor_1.0.0_amd64.deb
-            sudo dpkg -i cygor_1.0.0_amd64.deb
+            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/cygor_${{ steps.tag.outputs.version }}_amd64.deb
+            sudo dpkg -i cygor_${{ steps.tag.outputs.version }}_amd64.deb
             ```
-            
+
             #### RHEL/Rocky/Fedora (.rpm)
             ```bash
-            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/cygor-1.0.0-1.x86_64.rpm
-            sudo dnf install cygor-1.0.0-1.x86_64.rpm
+            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/cygor-${{ steps.tag.outputs.version }}-1.el9.x86_64.rpm
+            sudo dnf install cygor-${{ steps.tag.outputs.version }}-1.el9.x86_64.rpm
             ```
 
             #### Any Linux (portable tarball)
             ```bash
-            tar xzf cygor-1.0.0-linux-amd64.tar.gz
-            cd cygor-1.0.0-linux-amd64
+            tar xzf cygor-${{ steps.tag.outputs.version }}-linux-amd64.tar.gz
+            cd cygor-${{ steps.tag.outputs.version }}-linux-amd64
             sudo ./install-deps.sh
             ./bin/cygor --help
             ```
@@ -317,14 +320,14 @@ jobs:
             docker pull ghcr.io/${{ github.repository_owner }}/cygor:${{ steps.tag.outputs.tag }}
             docker pull ghcr.io/${{ github.repository_owner }}/cygor:latest
             ```
-            
+
             ### Checksums
             See `SHA256SUMS.txt` for file verification.
-            
+
             ### Packages Included
-            - `cygor-windows-x64.zip` - Windows x86_64 executable
-            - `cygor_1.0.0_amd64.deb` - Debian/Ubuntu x86_64 package
-            - `cygor-1.0.0-1.x86_64.rpm` - RHEL/Rocky/Fedora x86_64 package
-            - `cygor-1.0.0-linux-amd64.tar.gz` - Portable Linux x86_64 tarball
+            - `cygor-${{ steps.tag.outputs.version }}-windows-x64.zip` - Windows x86_64 executable
+            - `cygor_${{ steps.tag.outputs.version }}_amd64.deb` - Debian/Ubuntu x86_64 package
+            - `cygor-${{ steps.tag.outputs.version }}-1.el9.x86_64.rpm` - RHEL/Rocky/Fedora x86_64 package
+            - `cygor-${{ steps.tag.outputs.version }}-linux-amd64.tar.gz` - Portable Linux x86_64 tarball
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
