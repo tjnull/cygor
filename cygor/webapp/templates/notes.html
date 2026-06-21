@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.notes-header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;
+}
+.notes-title { font-size: 1.75rem; font-weight: 700; color: #e6edf3; margin: 0; }
+.notes-toolbar {
+  display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 1.25rem;
+}
+.notes-search {
+  background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px;
+  min-width: 240px;
+}
+.notes-search:focus { background: #0d1117; border-color: #58a6ff; color: #e6edf3; box-shadow: none; }
+.filter-chip {
+  background: #161b22; border: 1px solid #30363d; color: #c9d1d9;
+  padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.8rem; text-decoration: none;
+}
+.filter-chip:hover { border-color: #58a6ff; color: #e6edf3; }
+.filter-chip.active { background: rgba(88,166,255,0.15); border-color: #58a6ff; color: #58a6ff; }
+.note-card {
+  background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
+  padding: 1rem 1.25rem; margin-bottom: 1rem; transition: border-color 0.15s ease;
+  cursor: pointer;  /* whole card opens the reader view (see scripts) */
+}
+.note-card:hover { border-color: #58a6ff; }
+.note-card.pinned { border-left: 3px solid #d29922; }
+.note-card-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.note-card-title { font-size: 1.1rem; font-weight: 600; color: #e6edf3; text-decoration: none; }
+.note-card-title:hover { color: #58a6ff; }
+.note-meta {
+  color: #8b949e; font-size: 0.82rem; margin-top: 0.35rem;
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+}
+.note-host-badge {
+  background: rgba(88, 166, 255, 0.15); color: #58a6ff; padding: 0.1rem 0.5rem;
+  border-radius: 4px; font-family: monospace; text-decoration: none;
+}
+.note-host-badge:hover { color: #58a6ff; background: rgba(88,166,255,0.28); }
+.note-tag { background: #21262d; color: #c9d1d9; padding: 0.1rem 0.5rem; border-radius: 4px; }
+.note-author { color: #7ee787; }
+.note-preview {
+  color: #c9d1d9; margin-top: 0.75rem; font-size: 0.9rem;
+  max-height: 130px; overflow: hidden; position: relative;
+}
+.note-preview p:first-child { margin-top: 0; }
+/* Fade the bottom edge so the clamped excerpt looks intentional, not cut off. */
+.note-preview::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 34px;
+  background: linear-gradient(transparent, #0d1117); pointer-events: none;
+}
+/* Images in the card are small thumbnails — a full screenshot would overflow
+   the clamped preview and get sliced by the card edge. */
+.note-preview img {
+  max-width: 220px; max-height: 84px; width: auto; height: auto;
+  border: 1px solid #30363d; border-radius: 4px;
+  display: inline-block; vertical-align: top; margin: 0.35rem 0.5rem 0 0;
+}
+.notes-empty {
+  text-align: center; color: #8b949e; padding: 3rem 1rem;
+  border: 1px dashed #30363d; border-radius: 8px;
+}
+.icon-btn { color: #8b949e; }
+.icon-btn:hover { color: #e6edf3; }
+.pin-on { color: #d29922 !important; }
+</style>
+
+<div class="container-fluid px-3 px-md-4 py-4">
+  <div class="notes-header">
+    <h1 class="notes-title"><i class="bi bi-journal-text me-2"></i>Notes</h1>
+    <div class="d-flex gap-2">
+      <a href="/notes/export.zip" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-download me-1"></i>Export vault (.zip)
+      </a>
+      <a href="/notes/new" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg me-1"></i>New note
+      </a>
+    </div>
+  </div>
+
+  <!-- Search + filters -->
+  <form method="get" action="/notes" class="notes-toolbar">
+    <input type="search" name="q" value="{{ q }}" class="form-control form-control-sm notes-search"
+           placeholder="Search title, content, tags, author...">
+    {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag }}">{% endif %}
+    {% if active_host_id %}<input type="hidden" name="host_id" value="{{ active_host_id }}">{% endif %}
+    {% if showing_archived %}<input type="hidden" name="archived" value="1">{% endif %}
+    <button type="submit" class="btn btn-sm btn-outline-light"><i class="bi bi-search"></i></button>
+    {% if q or active_tag or active_host_id %}
+      <a href="/notes{% if showing_archived %}?archived=1{% endif %}" class="btn btn-sm btn-outline-secondary">Clear</a>
+    {% endif %}
+    <span class="ms-auto"></span>
+    {% if showing_archived %}
+      <a href="/notes" class="filter-chip active"><i class="bi bi-archive"></i> Archived ({{ archived_count }})</a>
+    {% elif archived_count %}
+      <a href="/notes?archived=1" class="filter-chip"><i class="bi bi-archive"></i> Archived ({{ archived_count }})</a>
+    {% endif %}
+  </form>
+
+  {% if all_tags and not showing_archived %}
+  <div class="d-flex flex-wrap gap-2 mb-3">
+    {% for t in all_tags %}
+      <a href="/notes?tag={{ t | urlencode }}"
+         class="filter-chip {% if t == active_tag %}active{% endif %}"># {{ t }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% set redirect_to = '/notes' + ('?archived=1' if showing_archived else '') %}
+
+  {% if notes %}
+    {% for note in notes %}
+    <div class="note-card {% if note.pinned %}pinned{% endif %}"
+         data-href="/notes/{{ note.id }}/view" role="link" tabindex="0"
+         aria-label="Open note: {{ note.title }}">
+      <div class="note-card-head">
+        <a href="/notes/{{ note.id }}/view" class="note-card-title">
+          {% if note.pinned %}<i class="bi bi-pin-angle-fill pin-on me-1"></i>{% endif %}{{ note.title }}
+        </a>
+        <div class="d-flex align-items-center gap-1">
+          <form method="post" action="/notes/{{ note.id }}/pin">
+            <input type="hidden" name="redirect" value="{{ redirect_to }}">
+            <button type="submit" class="btn btn-sm btn-link icon-btn {% if note.pinned %}pin-on{% endif %}"
+                    title="{{ 'Unpin' if note.pinned else 'Pin' }}"><i class="bi bi-pin-angle"></i></button>
+          </form>
+          <a href="/notes/{{ note.id }}" class="btn btn-sm btn-link icon-btn" title="Edit"><i class="bi bi-pencil"></i></a>
+          <form method="post" action="/notes/{{ note.id }}/archive">
+            <input type="hidden" name="redirect" value="{{ redirect_to }}">
+            <button type="submit" class="btn btn-sm btn-link icon-btn"
+                    title="{{ 'Unarchive' if note.archived else 'Archive' }}">
+              <i class="bi {{ 'bi-arrow-up-square' if note.archived else 'bi-archive' }}"></i>
+            </button>
+          </form>
+          <form method="post" action="/notes/{{ note.id }}/delete" onsubmit="return confirm('Delete this note?');">
+            <input type="hidden" name="redirect" value="{{ redirect_to }}">
+            <button type="submit" class="btn btn-sm btn-link icon-btn" title="Delete"><i class="bi bi-trash"></i></button>
+          </form>
+        </div>
+      </div>
+      <div class="note-meta">
+        {% for hid, addr in host_links.get(note.id, []) %}
+          <a href="/hosts/{{ hid }}" class="note-host-badge"><i class="bi bi-hdd-network"></i> {{ addr }}</a>
+        {% endfor %}
+        {% if note.author %}<span class="note-author"><i class="bi bi-person"></i> {{ note.author }}</span>{% endif %}
+        {% if note.tags %}
+          {% for tag in note.tags.split(',') %}
+            {% if tag.strip() %}<span class="note-tag">{{ tag.strip() }}</span>{% endif %}
+          {% endfor %}
+        {% endif %}
+        <span class="text-muted">updated {{ note.updated_at.strftime('%Y-%m-%d %H:%M') }}</span>
+      </div>
+      {% if note.content %}
+      <div class="note-preview markdown-body">{{ note.content | note_render }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="notes-empty">
+      <i class="bi bi-journal-text" style="font-size: 2rem;"></i>
+      {% if q or active_tag or active_host_id %}
+        <p class="mt-2 mb-3">No notes match your filters.</p>
+        <a href="/notes" class="btn btn-outline-light btn-sm">Clear filters</a>
+      {% elif showing_archived %}
+        <p class="mt-2 mb-3">No archived notes.</p>
+        <a href="/notes" class="btn btn-outline-light btn-sm">Back to notes</a>
+      {% else %}
+        <p class="mt-2 mb-3">No notes yet.</p>
+        <a href="/notes/new" class="btn btn-primary btn-sm">Create your first note</a>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+
+<script>
+  // Make the whole note card open its reader view, while leaving the action
+  // buttons, host badges, tag/author links, and any links inside the preview
+  // working normally (don't hijack clicks on real interactive elements).
+  (function () {
+    function isInteractive(el, card) {
+      for (let n = el; n && n !== card; n = n.parentElement) {
+        if (n.matches('a, button, form, input, label, [role="button"]')) return true;
+      }
+      return false;
+    }
+    document.querySelectorAll('.note-card[data-href]').forEach(function (card) {
+      card.addEventListener('click', function (e) {
+        if (e.defaultPrevented || isInteractive(e.target, card)) return;
+        if (window.getSelection && String(window.getSelection())) return;  // don't nav on text select
+        window.location.href = card.dataset.href;
+      });
+      card.addEventListener('keydown', function (e) {
+        if ((e.key === 'Enter' || e.key === ' ') && !isInteractive(e.target, card)) {
+          e.preventDefault();
+          window.location.href = card.dataset.href;
+        }
+      });
+    });
+  })();
+</script>
+
+{% endblock %}

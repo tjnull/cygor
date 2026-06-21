@@ -52,6 +52,7 @@ from .routes import scheduler as scheduler_routes
 from .routes import sync as sync_routes
 from .routes import enrichment as enrichment_routes
 from .routes import docs as docs_routes
+from .routes import notes as notes_routes
 from .routes.settings import general as settings_general_routes
 from .routes.settings import database as settings_database_routes
 from .routes.settings import proxy as settings_proxy_routes
@@ -219,6 +220,54 @@ async def lifespan(app: FastAPI):
         return Markup(markdown_filter(text))
     templates.env.filters['markdown_safe'] = markdown_safe_filter
 
+    # Notes are persisted user input rendered back to other authenticated users,
+    # so (unlike the trusted /docs wiki) their markdown must be sanitized to
+    # prevent stored XSS. Render with the `markdown` library, then run the HTML
+    # through nh3 (ammonia) with a tag/attribute allowlist.
+    _NOTE_ALLOWED_TAGS = {
+        "h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "hr",
+        "strong", "em", "del", "code", "pre", "blockquote",
+        "ul", "ol", "li", "a", "img",
+        "table", "thead", "tbody", "tr", "th", "td",
+        "input",  # task-list checkboxes
+    }
+    _NOTE_ALLOWED_ATTRS = {
+        "a": {"href", "title"},  # `rel` is managed by link_rel below
+        "img": {"src", "alt", "title"},
+        "input": {"type", "checked", "disabled"},
+        "code": {"class"},
+        "th": {"align"},
+        "td": {"align"},
+    }
+
+    def note_render_filter(text):
+        """Render a note's markdown to sanitized HTML safe for display."""
+        if not text:
+            return Markup("")
+        try:
+            import markdown as _md
+            html_out = _md.markdown(
+                str(text),
+                extensions=["fenced_code", "tables", "sane_lists", "nl2br"],
+            )
+        except Exception:
+            # Fall back to the lightweight in-house renderer if markdown lib fails.
+            html_out = markdown_filter(text)
+        try:
+            import nh3
+            html_out = nh3.clean(
+                html_out,
+                tags=_NOTE_ALLOWED_TAGS,
+                attributes=_NOTE_ALLOWED_ATTRS,
+                link_rel="noopener noreferrer nofollow",
+            )
+        except ImportError:
+            # nh3 missing: escape everything rather than emit unsanitized HTML.
+            html_out = html.escape(str(text))
+        return Markup(html_out)
+
+    templates.env.filters['note_render'] = note_render_filter
+
     # -------------------------
     # Register all route modules
     # -------------------------
@@ -226,7 +275,7 @@ async def lifespan(app: FastAPI):
         core_routes, modules_routes, search_routes,
         tasks_routes, hosts_routes, credrecon_routes,
         scheduler_routes, sync_routes, enrichment_routes,
-        docs_routes,
+        docs_routes, notes_routes,
         settings_general_routes, settings_database_routes,
         settings_proxy_routes, settings_plugins_routes,
         settings_workspaces_routes,

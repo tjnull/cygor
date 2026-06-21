@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cygor"
-version = "1.0.0"
+version = "1.1.0"
 description = "Cygor: Modular Asset Discovery Framework - scan, parse, enumerate, and assess"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -74,6 +74,7 @@ dependencies = [
   "watchfiles>=1.0.0",
   "PyYAML>=6.0.1",
   "markdown>=3.5",           # Renders cygor/wiki/*.md for the /docs web route
+  "nh3>=0.2.18",             # HTML sanitizer for user-authored notes (stored-XSS guard)
 
   # Imaging (lockon screenshot processing)
   "Pillow>=11.0.0",

@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+.reader-wrap { max-width: 1120px; }
+/* The note reads as a single document card on the OLED-black page. */
+.reader-doc {
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 2rem 2.5rem 2.5rem;
+}
+.reader-header {
+  border-bottom: 1px solid #21262d;
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
+.reader-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #e6edf3;
+  margin: 0 0 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.reader-meta {
+  color: #8b949e;
+  font-size: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+}
+.reader-host-chip {
+  background: rgba(88, 166, 255, 0.15);
+  color: #58a6ff;
+  padding: 0.15rem 0.6rem;
+  border-radius: 4px;
+  font-family: monospace;
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+.reader-host-chip:hover { background: rgba(88, 166, 255, 0.28); color: #58a6ff; }
+.reader-tag {
+  background: #21262d;
+  color: #c9d1d9;
+  padding: 0.15rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+/* Rendered markdown body */
+.reader-body { color: #c9d1d9; font-size: 1.02rem; line-height: 1.75; }
+.reader-body > :first-child { margin-top: 0; }
+.reader-body p { margin: 0 0 1rem; }
+.reader-body h1, .reader-body h2, .reader-body h3,
+.reader-body h4, .reader-body h5, .reader-body h6 { color: #e6edf3; margin: 1.6rem 0 0.75rem; }
+.reader-body h1 { font-size: 1.6rem; border-bottom: 1px solid #21262d; padding-bottom: 0.35rem; }
+.reader-body h2 { font-size: 1.35rem; border-bottom: 1px solid #21262d; padding-bottom: 0.3rem; }
+.reader-body h3 { font-size: 1.15rem; }
+.reader-body a { color: #58a6ff; }
+.reader-body code {
+  background: #161b22; color: #7ee787; padding: 0.12rem 0.4rem; border-radius: 4px;
+  font-size: 0.88em;
+}
+.reader-body pre {
+  background: #0d1117; border: 1px solid #21262d; border-radius: 8px;
+  padding: 1rem; overflow-x: auto;
+}
+.reader-body pre code { background: transparent; color: #c9d1d9; padding: 0; }
+.reader-body blockquote {
+  border-left: 3px solid #30363d; margin: 1rem 0; padding: 0.25rem 0 0.25rem 1rem; color: #8b949e;
+}
+.reader-body table { border-collapse: collapse; margin: 1rem 0; width: 100%; }
+.reader-body th, .reader-body td { border: 1px solid #30363d; padding: 0.45rem 0.7rem; }
+.reader-body th { background: #161b22; color: #e6edf3; }
+/* Screenshots: framed, full reading-width, with breathing room. Click to zoom. */
+.reader-body img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1.25rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: #000;
+  cursor: zoom-in;
+  transition: border-color 0.15s ease;
+}
+.reader-body img:hover { border-color: #58a6ff; }
+.reader-body hr { border: none; border-top: 1px solid #21262d; margin: 1.5rem 0; }
+.pin-badge { color: #d29922; }
+
+/* Click-to-zoom lightbox: screenshots render at column width inline, click to
+   view full-size against a dimmed backdrop. */
+.img-lightbox {
+  position: fixed; inset: 0; z-index: 3000;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex; align-items: center; justify-content: center;
+  padding: 2rem; cursor: zoom-out;
+}
+.img-lightbox img {
+  max-width: 96vw; max-height: 94vh;
+  border-radius: 6px; box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+}
+.img-lightbox .img-lightbox-hint {
+  position: fixed; top: 1rem; right: 1.25rem;
+  color: #8b949e; font-size: 0.85rem;
+}
+
+@media print {
+  .sidebar-nav, .reader-actions, nav, .navbar { display: none !important; }
+  .reader-doc { background: #fff; border: none; padding: 0; }
+  .reader-body { color: #000; }
+  .reader-body img { border-color: #ccc; }
+}
+</style>
+
+<div class="container-fluid px-3 px-md-4 py-4 reader-wrap">
+  <div class="d-flex justify-content-between align-items-start reader-actions mb-3">
+    <a href="/notes" class="btn btn-outline-light btn-sm"><i class="bi bi-arrow-left me-1"></i>All notes</a>
+    <div class="d-flex gap-2">
+      <a href="/notes/{{ note.id }}/export.md" class="btn btn-outline-light btn-sm" title="Download as Markdown">
+        <i class="bi bi-download me-1"></i>.md
+      </a>
+      <button class="btn btn-outline-light btn-sm" onclick="window.print()" title="Print / PDF">
+        <i class="bi bi-printer"></i>
+      </button>
+      <a href="/notes/{{ note.id }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-pencil me-1"></i>Edit
+      </a>
+    </div>
+  </div>
+
+  <article class="reader-doc">
+  <div class="reader-header">
+    <h1 class="reader-title">
+      {% if note.pinned %}<i class="bi bi-pin-angle-fill pin-badge" title="Pinned"></i>{% endif %}
+      {{ note.title }}
+      {% if note.archived %}<span class="badge bg-secondary align-middle">archived</span>{% endif %}
+    </h1>
+    <div class="reader-meta">
+      {% if note.author %}<span><i class="bi bi-person me-1"></i>{{ note.author }}</span>{% endif %}
+      <span><i class="bi bi-clock-history me-1"></i>updated {{ note.updated_at.strftime('%Y-%m-%d %H:%M') }}{% if note.last_edited_by %} by {{ note.last_edited_by }}{% endif %}</span>
+      <span class="text-muted">created {{ note.created_at.strftime('%Y-%m-%d') }}</span>
+    </div>
+    {% if linked_hosts or note.tags %}
+    <div class="reader-meta mt-2">
+      {% for h in linked_hosts %}
+        <a href="/hosts/{{ h.id }}" class="reader-host-chip"><i class="bi bi-hdd-network"></i> {{ h.address }}</a>
+      {% endfor %}
+      {% for t in (note.tags or '').split(',') %}
+        {% if t.strip() %}<span class="reader-tag">{{ t.strip() }}</span>{% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  {% if note.content %}
+    <div class="reader-body markdown-body">{{ note.content | note_render }}</div>
+  {% else %}
+    <p class="text-muted">This note has no content yet. <a href="/notes/{{ note.id }}">Add some</a>.</p>
+  {% endif %}
+  </article>
+</div>
+
+<script>
+  // Click any image in the note to view it full-size; click the backdrop or
+  // press Esc to close. Lets wide screenshots read small inline but expand.
+  (function () {
+    const body = document.querySelector('.reader-body');
+    if (!body) return;
+    let overlay = null;
+    function close() {
+      if (!overlay) return;
+      overlay.remove(); overlay = null;
+      document.removeEventListener('keydown', onKey);
+    }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    body.addEventListener('click', function (e) {
+      const img = e.target.closest('img');
+      if (!img) return;
+      e.preventDefault();
+      overlay = document.createElement('div');
+      overlay.className = 'img-lightbox';
+      overlay.innerHTML = '<span class="img-lightbox-hint">click anywhere or press Esc to close</span>';
+      const full = document.createElement('img');
+      full.src = img.currentSrc || img.src;
+      full.alt = img.alt || '';
+      overlay.appendChild(full);
+      overlay.addEventListener('click', close);
+      document.body.appendChild(overlay);
+      document.addEventListener('keydown', onKey);
+    });
+  })();
+</script>
+
+{% endblock %}

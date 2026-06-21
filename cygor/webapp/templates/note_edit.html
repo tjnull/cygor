@@ -1,0 +1,511 @@
+{% extends "base.html" %}
+{% block content %}
+
+<link rel="stylesheet" href="/static/vendor/easymde/easymde.min.css">
+<style>
+.note-edit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.note-edit-title { font-size: 1.5rem; font-weight: 700; color: var(--text-1); margin: 0; }
+.note-form-label { color: var(--text-3); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.note-form-input {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text-1);
+  border-radius: var(--radius-md);
+}
+.note-form-input:focus {
+  background: var(--surface-2);
+  border-color: var(--accent);
+  color: var(--text-1);
+  box-shadow: 0 0 0 0.15rem var(--accent-soft);
+}
+.note-host-pill {
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+/* ---- EasyMDE theme aligned with cygor's OLED-black web UI ---- */
+.EasyMDEContainer { border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--border-subtle); }
+
+/* Toolbar */
+.EasyMDEContainer .editor-toolbar {
+  background: var(--surface-1);
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.35rem 0.5rem;
+  opacity: 1;
+}
+.EasyMDEContainer .editor-toolbar button,
+.EasyMDEContainer .editor-toolbar a {
+  color: var(--text-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  width: 32px;
+  height: 32px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+  text-decoration: none;
+}
+.EasyMDEContainer .editor-toolbar button:hover,
+.EasyMDEContainer .editor-toolbar a:hover {
+  background: var(--surface-3);
+  border-color: var(--border-subtle);
+  color: var(--text-1);
+}
+.EasyMDEContainer .editor-toolbar button.active,
+.EasyMDEContainer .editor-toolbar a.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.EasyMDEContainer .editor-toolbar i.separator {
+  border-left: 1px solid var(--border-subtle);
+  border-right: none;
+  margin: 0 0.35rem;
+}
+/* Bootstrap-Icons glyphs render via ::before on the .bi class */
+.EasyMDEContainer .editor-toolbar button::before,
+.EasyMDEContainer .editor-toolbar a::before { font-family: "bootstrap-icons" !important; }
+
+/* Editing surface */
+.EasyMDEContainer .CodeMirror {
+  background: var(--bg-base);
+  color: var(--text-1);
+  border: none;
+  /* Height comes from EasyMDE's `minHeight` option (it sizes the inner
+     scroller correctly); setting it on this outer box instead leaves the
+     scrollbar floating mid-editor with dead space below. */
+  padding: 0.5rem 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+}
+.EasyMDEContainer .CodeMirror-cursor { border-color: var(--text-1); }
+.EasyMDEContainer .CodeMirror-selected { background: rgba(88, 166, 255, 0.22) !important; }
+.EasyMDEContainer .CodeMirror-placeholder { color: var(--text-3) !important; }
+
+/* Markdown syntax highlight tweaks for dark bg */
+.EasyMDEContainer .cm-header { color: var(--accent); }
+/* EasyMDE sizes editor headers with viewport units (calc(... + 1.5vw)), so they
+   balloon to ~60px in a wide fullscreen window. Pin them to fixed em sizes. */
+.EasyMDEContainer .cm-header-1 { font-size: 1.6em !important; }
+.EasyMDEContainer .cm-header-2 { font-size: 1.4em !important; }
+.EasyMDEContainer .cm-header-3 { font-size: 1.2em !important; }
+.EasyMDEContainer .cm-header-4 { font-size: 1.1em !important; }
+.EasyMDEContainer .cm-header-5 { font-size: 1em !important; }
+.EasyMDEContainer .cm-header-6 { font-size: 0.95em !important; }
+.EasyMDEContainer .cm-quote { color: var(--text-3); }
+.EasyMDEContainer .cm-link, .EasyMDEContainer .cm-url { color: var(--accent); }
+.EasyMDEContainer .cm-comment { color: var(--success); background: var(--surface-2); border-radius: 3px; }
+.EasyMDEContainer .cm-strong { color: var(--text-1); }
+
+/* Preview pane */
+.EasyMDEContainer .editor-preview,
+.EasyMDEContainer .editor-preview-side {
+  background: var(--bg-base);
+  color: var(--text-2);
+  padding: 1rem 1.25rem;
+}
+.EasyMDEContainer .editor-preview-side { border-left: 1px solid var(--border-subtle); }
+/* Constrain pasted/attached images to the pane — screenshots are often larger
+   than the preview, and without this they overflow and only the top-left corner
+   shows (reads as "no image"). */
+.EasyMDEContainer .editor-preview img,
+.EasyMDEContainer .editor-preview-side img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+  display: block;
+}
+.EasyMDEContainer .editor-preview h1,
+.EasyMDEContainer .editor-preview h2,
+.EasyMDEContainer .editor-preview-side h1,
+.EasyMDEContainer .editor-preview-side h2 { color: var(--text-1); border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.3rem; }
+.EasyMDEContainer .editor-preview a,
+.EasyMDEContainer .editor-preview-side a { color: var(--accent); }
+.EasyMDEContainer .editor-preview code,
+.EasyMDEContainer .editor-preview-side code {
+  background: var(--surface-2); color: var(--success); padding: 0.1rem 0.35rem; border-radius: var(--radius-sm);
+}
+
+/* ---- Fullscreen mode ----
+   EasyMDE's fullscreen uses a white background and z-index 8/9, which sits
+   BELOW cygor's navbar (1200) and sidebar (1100), so "fullscreen" only filled a
+   small window with the wrong theme. Lift it above the chrome and re-dark it. */
+.EasyMDEContainer .CodeMirror-fullscreen {
+  background: var(--bg-base) !important;
+  z-index: 2050 !important;
+}
+.editor-toolbar.fullscreen {
+  background: var(--surface-1) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  z-index: 2051 !important;
+}
+/* Kill the white fade gradients EasyMDE paints at the toolbar edges. */
+.editor-toolbar.fullscreen::before,
+.editor-toolbar.fullscreen::after { background: none !important; }
+.EasyMDEContainer .editor-preview-active-side,
+.EasyMDEContainer .editor-preview-side.editor-preview-active-side {
+  background: var(--bg-base) !important;
+  z-index: 2050 !important;
+}
+
+/* The "Note details" button only matters in fullscreen, where the side panel
+   is hidden — show it there, hide it in the normal split layout. */
+.EasyMDEContainer .editor-toolbar .note-details-btn { display: none !important; }
+.EasyMDEContainer .editor-toolbar.fullscreen .note-details-btn { display: inline-flex !important; }
+
+/* Fullscreen: the metadata sidebar collapses into an on-demand overlay panel
+   opened by the toolbar's details button (z-index above the fullscreen editor). */
+.note-layout.note-fs .note-side { display: none; }
+.note-layout.note-fs .note-side.fs-open {
+  display: block;
+  position: fixed;
+  top: 58px;            /* clear of the 50px fullscreen toolbar */
+  right: 20px;
+  width: 340px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  z-index: 2060;
+  background: var(--surface-2);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* Status bar */
+.EasyMDEContainer .editor-statusbar {
+  background: var(--surface-1);
+  color: var(--text-3);
+  border-top: 1px solid var(--border-subtle);
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+}
+
+/* Host picker */
+.host-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
+.host-chip {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  background: var(--accent-soft); color: var(--accent);
+  padding: 0.2rem 0.5rem 0.2rem 0.6rem; border-radius: var(--radius-sm);
+  font-family: monospace; font-size: 0.85rem;
+}
+.host-chip button {
+  background: none; border: none; color: var(--accent); padding: 0; line-height: 1;
+  cursor: pointer; font-size: 0.95rem; opacity: 0.7;
+}
+.host-chip button:hover { opacity: 1; color: var(--danger); }
+.host-picker { position: relative; }
+.host-suggestions {
+  position: absolute; z-index: 2065; left: 0; right: 0; top: 100%;
+  background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+  margin-top: 2px; max-height: 260px; overflow-y: auto; display: none;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.host-suggestions.open { display: block; }
+.host-suggestion {
+  padding: 0.45rem 0.7rem; cursor: pointer; color: var(--text-2); font-size: 0.88rem;
+  display: flex; justify-content: space-between; gap: 0.5rem;
+}
+.host-suggestion:hover, .host-suggestion.active { background: var(--surface-3); color: var(--text-1); }
+.host-suggestion .addr { font-family: monospace; }
+.host-suggestion .hn { color: var(--text-3); }
+.host-suggestion.empty { cursor: default; color: var(--text-3); justify-content: flex-start; }
+.host-suggestion.empty:hover { background: transparent; }
+.form-check-input:checked { background-color: var(--accent); border-color: var(--accent); }
+
+/* ---- Two-column layout: editor takes the space, metadata to the side ---- */
+.note-layout { display: flex; gap: 1.25rem; align-items: flex-start; }
+.note-main { flex: 1 1 auto; min-width: 0; }   /* min-width:0 lets the editor shrink */
+.note-side {
+  flex: 0 0 300px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  position: sticky;
+  top: 1rem;
+}
+.note-side-section { margin-bottom: 1rem; }
+.note-side-section:last-child { margin-bottom: 0; }
+.note-side .note-form-label { display: block; margin-bottom: 0.35rem; }
+.note-side-divider { border: none; border-top: 1px solid var(--border-subtle); margin: 1rem 0; }
+.note-actions { display: flex; flex-direction: column; gap: 0.5rem; }
+/* Big, prominent title that reads as the note's identity, not a form field */
+.note-title-input {
+  font-size: 1.4rem;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.85rem;
+}
+/* Stack to a single column on narrow screens */
+@media (max-width: 991.98px) {
+  .note-layout { flex-direction: column; }
+  .note-side { flex-basis: auto; width: 100%; position: static; }
+}
+</style>
+
+<div class="container-fluid px-3 px-md-4 py-4" style="max-width: 1400px;">
+  {% set cancel_url = ('/notes/' ~ note.id ~ '/view') if note else (('/hosts/' ~ origin_host_id) if origin_host_id else '/notes') %}
+  <div class="note-edit-header">
+    <h1 class="note-edit-title">
+      <i class="bi bi-journal-text me-2"></i>{{ 'Edit note' if note else 'New note' }}
+    </h1>
+    <a href="{{ cancel_url }}" class="btn btn-outline-light btn-sm">
+      <i class="bi bi-x-lg me-1"></i>Cancel
+    </a>
+  </div>
+
+  <form method="post" action="/notes/save">
+    {% if note %}<input type="hidden" name="note_id" value="{{ note.id }}">{% endif %}
+    {% if origin_host_id %}<input type="hidden" name="origin_host_id" value="{{ origin_host_id }}">{% endif %}
+    <input type="hidden" name="host_ids" id="host_ids"
+           value="{{ selected_hosts | map(attribute='id') | join(',') }}">
+
+    <div class="note-layout">
+      <!-- Main column: title + the markdown editor get the full width/height -->
+      <div class="note-main">
+        <input type="text" id="title" name="title" class="form-control note-form-input note-title-input"
+               value="{{ note.title if note else '' }}" placeholder="Untitled" autofocus
+               aria-label="Note title">
+        <textarea id="content" name="content">{{ note.content if note else '' }}</textarea>
+      </div>
+
+      <!-- Side column: everything about the note except its body -->
+      <aside class="note-side">
+        <div class="note-side-section">
+          <label class="note-form-label" for="author">Author (your name)</label>
+          <input type="text" id="author" name="author" class="form-control note-form-input"
+                 value="{{ note.author if note and note.author else '' }}" placeholder="e.g. alice">
+        </div>
+
+        <div class="note-side-section">
+          <label class="note-form-label" for="tags">Tags (comma-separated)</label>
+          <input type="text" id="tags" name="tags" class="form-control note-form-input"
+                 value="{{ note.tags if note and note.tags else '' }}" placeholder="recon, web, todo">
+        </div>
+
+        <div class="note-side-section">
+          <label class="note-form-label">Linked hosts</label>
+          <div id="host-chips" class="host-chips"></div>
+          <div class="host-picker">
+            <input type="text" id="host-search" class="form-control note-form-input" autocomplete="off"
+                   placeholder="Search hosts...">
+            <div id="host-suggestions" class="host-suggestions"></div>
+          </div>
+        </div>
+
+        <hr class="note-side-divider">
+
+        <div class="note-side-section">
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" name="pinned" value="1" id="pinned"
+                   {% if note and note.pinned %}checked{% endif %}>
+            <label class="form-check-label text-light" for="pinned"><i class="bi bi-pin-angle me-1"></i>Pin to top</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="archived" value="1" id="archived"
+                   {% if note and note.archived %}checked{% endif %}>
+            <label class="form-check-label text-light" for="archived"><i class="bi bi-archive me-1"></i>Archived</label>
+          </div>
+        </div>
+
+        <hr class="note-side-divider">
+
+        <div class="note-actions">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg me-1"></i>Save note
+          </button>
+          <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+      </aside>
+    </div>
+  </form>
+</div>
+
+<script id="selected-hosts-data" type="application/json">{{ selected_hosts | tojson }}</script>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/vendor/easymde/easymde.min.js"></script>
+<script>
+  // EasyMDE markdown editor. We disable EasyMDE's bundled FontAwesome and drive
+  // the toolbar with Bootstrap Icons (already loaded by base.html). `name` keeps
+  // EasyMDE's canonical id (its toggle logic looks buttons up by name); `icon`
+  // is the Bootstrap Icons glyph so the toolbar matches the rest of the UI.
+  const btn = (name, action, icon, title, extra) => Object.assign(
+    { name, action, className: 'bi bi-' + icon, title }, extra || {}
+  );
+  // Toggle the metadata side panel. In fullscreen the sidebar is hidden, so this
+  // button (only visible in fullscreen) re-opens it as a floating panel so you
+  // can still set author, tags, linked hosts, and the pin/archive options.
+  function toggleDetails() {
+    const side = document.querySelector('.note-side');
+    if (!side) return;
+    const open = side.classList.toggle('fs-open');
+    const btnEl = document.querySelector('.editor-toolbar .note-details-btn');
+    if (btnEl) btnEl.classList.toggle('active', open);
+  }
+  const easymde = new EasyMDE({
+    element: document.getElementById('content'),
+    spellChecker: false,
+    autoDownloadFontAwesome: false,
+    minHeight: 'calc(100vh - 250px)',
+    status: ['lines', 'words'],
+    placeholder: 'Write your note in Markdown...',
+    // Paste a screenshot, drag-drop, or use the image button — all upload to the
+    // backend, which stores the bytes and returns a URL inserted as Markdown.
+    uploadImage: true,
+    imageUploadEndpoint: '/api/notes/upload-image',
+    // Our endpoint returns a root-relative URL ("/static/..."). Without this,
+    // EasyMDE prepends `origin + "/"`, yielding a broken `origin//static` double
+    // slash. `true` inserts our path verbatim so it resolves and stays portable.
+    imagePathAbsolute: true,
+    imageMaxSize: 10 * 1024 * 1024,
+    imageAccept: 'image/png, image/jpeg, image/gif, image/webp, image/bmp, image/svg+xml, image/avif',
+    imageTexts: { sbInit: 'Paste, drop, or click the image button to attach an image.' },
+    toolbar: [
+      btn('bold', EasyMDE.toggleBold, 'type-bold', 'Bold (Ctrl-B)'),
+      btn('italic', EasyMDE.toggleItalic, 'type-italic', 'Italic (Ctrl-I)'),
+      btn('strikethrough', EasyMDE.toggleStrikethrough, 'type-strikethrough', 'Strikethrough'),
+      btn('heading', EasyMDE.toggleHeadingSmaller, 'type-h1', 'Heading'),
+      '|',
+      btn('quote', EasyMDE.toggleBlockquote, 'quote', 'Quote'),
+      btn('code', EasyMDE.toggleCodeBlock, 'code-slash', 'Code block'),
+      btn('unordered-list', EasyMDE.toggleUnorderedList, 'list-ul', 'Bulleted list'),
+      btn('ordered-list', EasyMDE.toggleOrderedList, 'list-ol', 'Numbered list'),
+      '|',
+      btn('link', EasyMDE.drawLink, 'link-45deg', 'Insert link'),
+      btn('image', EasyMDE.drawImage, 'image', 'Insert image by URL'),
+      btn('upload-image', EasyMDE.drawUploadedImage, 'file-earmark-image', 'Upload / attach image'),
+      btn('table', EasyMDE.drawTable, 'table', 'Insert table'),
+      btn('horizontal-rule', EasyMDE.drawHorizontalRule, 'dash-lg', 'Horizontal rule'),
+      '|',
+      btn('preview', EasyMDE.togglePreview, 'eye', 'Toggle preview (Ctrl-P)', { noDisable: true }),
+      btn('side-by-side', EasyMDE.toggleSideBySide, 'layout-split', 'Side-by-side', { noDisable: true }),
+      btn('fullscreen', EasyMDE.toggleFullScreen, 'arrows-fullscreen', 'Fullscreen (F11)', { noDisable: true }),
+      btn('note-details', toggleDetails, 'sliders', 'Note details (author, tags, hosts)',
+          { noDisable: true, className: 'bi bi-sliders note-details-btn' }),
+      '|',
+      btn('guide', 'https://www.markdownguide.org/basic-syntax/', 'question-circle', 'Markdown guide', { noDisable: true }),
+    ],
+  });
+  document.querySelector('form').addEventListener('submit', function () {
+    easymde.codemirror.save();
+  });
+
+  // Keep the layout in sync with EasyMDE's fullscreen state. The toolbar gains a
+  // `fullscreen` class whether triggered by the button, F11, or Esc — watch it so
+  // the side panel switches to overlay mode (and closes again on exit) reliably.
+  (function () {
+    const toolbarEl = document.querySelector('.EasyMDEContainer .editor-toolbar');
+    const layout = document.querySelector('.note-layout');
+    if (!toolbarEl || !layout) return;
+    new MutationObserver(function () {
+      const fs = toolbarEl.classList.contains('fullscreen');
+      layout.classList.toggle('note-fs', fs);
+      if (!fs) {
+        const side = document.querySelector('.note-side');
+        if (side) side.classList.remove('fs-open');
+        const btnEl = toolbarEl.querySelector('.note-details-btn');
+        if (btnEl) btnEl.classList.remove('active');
+      }
+    }).observe(toolbarEl, { attributes: true, attributeFilter: ['class'] });
+  })();
+
+  // ---- Host picker: autocomplete against /api/hosts/targets, manage chips ----
+  (function () {
+    const hidden = document.getElementById('host_ids');
+    const chipsEl = document.getElementById('host-chips');
+    const search = document.getElementById('host-search');
+    const sugEl = document.getElementById('host-suggestions');
+    let selected = [];
+    try { selected = JSON.parse(document.getElementById('selected-hosts-data').textContent) || []; }
+    catch (e) { selected = []; }
+    let activeIdx = -1, suggestions = [], debounce;
+
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    function sync() {
+      hidden.value = selected.map(h => h.id).join(',');
+      chipsEl.innerHTML = selected.map(h =>
+        `<span class="host-chip"><i class="bi bi-hdd-network"></i> ${esc(h.address)}` +
+        `<button type="button" data-id="${h.id}" title="Remove">&times;</button></span>`).join('');
+      chipsEl.querySelectorAll('button[data-id]').forEach(b =>
+        b.addEventListener('click', () => {
+          selected = selected.filter(h => String(h.id) !== b.dataset.id); sync();
+        }));
+    }
+
+    function closeSug() { sugEl.classList.remove('open'); sugEl.innerHTML = ''; activeIdx = -1; suggestions = []; }
+
+    function showMessage(msg) {
+      suggestions = [];
+      sugEl.innerHTML = `<div class="host-suggestion empty">${esc(msg)}</div>`;
+      sugEl.classList.add('open');
+    }
+
+    function renderSug() {
+      if (!suggestions.length) { showMessage('No matching hosts'); return; }
+      sugEl.innerHTML = suggestions.map((h, i) =>
+        `<div class="host-suggestion ${i === activeIdx ? 'active' : ''}" data-i="${i}">` +
+        `<span class="addr">${esc(h.address)}</span>` +
+        `<span class="hn">${esc(h.hostname || '')}</span></div>`).join('');
+      sugEl.classList.add('open');
+      sugEl.querySelectorAll('.host-suggestion').forEach(d =>
+        d.addEventListener('mousedown', e => { e.preventDefault(); pick(suggestions[+d.dataset.i]); }));
+    }
+
+    function pick(h) {
+      if (h && !selected.some(s => String(s.id) === String(h.id))) {
+        selected.push({ id: h.id, address: h.address }); sync();
+      }
+      search.value = ''; closeSug(); search.focus();
+    }
+
+    async function lookup(q) {
+      showMessage('Searching…');
+      try {
+        const r = await fetch(`/api/hosts/targets?search=${encodeURIComponent(q)}&limit=10`,
+                              { headers: { 'Accept': 'application/json' } });
+        if (!r.ok) { showMessage('Could not load hosts (HTTP ' + r.status + ')'); return; }
+        const data = await r.json();
+        const have = new Set(selected.map(s => String(s.id)));
+        suggestions = (data.hosts || []).filter(h => !have.has(String(h.id)));
+        activeIdx = -1; renderSug();
+      } catch (e) { showMessage('Could not reach host search'); }
+    }
+
+    function trigger() {
+      const q = search.value.trim();
+      clearTimeout(debounce);
+      debounce = setTimeout(() => lookup(q), 150);
+    }
+
+    // Show hosts as soon as the field is focused, even before typing.
+    search.addEventListener('focus', trigger);
+    search.addEventListener('input', trigger);
+    search.addEventListener('keydown', e => {
+      if (!suggestions.length) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = (activeIdx + 1) % suggestions.length; renderSug(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = (activeIdx - 1 + suggestions.length) % suggestions.length; renderSug(); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (activeIdx >= 0 || suggestions.length) pick(suggestions[activeIdx >= 0 ? activeIdx : 0]); }
+      else if (e.key === 'Escape') { closeSug(); }
+    });
+    search.addEventListener('blur', () => setTimeout(closeSug, 150));
+
+    sync();
+  })();
+</script>
+{% endblock %}
