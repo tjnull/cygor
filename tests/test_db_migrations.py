@@ -20,6 +20,7 @@ EXPECTED_MIGRATIONS = [
     "_migrate_host_tracking_fields",
     "_migrate_device_fingerprint_tables",
     "_migrate_host_tag_table",
+    "_migrate_note_table",
     "_migrate_scheduler_resilience_fields",
     "_migrate_device_info_certainty_fields",
 ]

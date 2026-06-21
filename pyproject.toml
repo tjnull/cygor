@@ -74,6 +74,7 @@ dependencies = [
   "watchfiles>=1.0.0",
   "PyYAML>=6.0.1",
   "markdown>=3.5",           # Renders cygor/wiki/*.md for the /docs web route
+  "nh3>=0.2.18",             # HTML sanitizer for user-authored notes (stored-XSS guard)
 
   # Imaging (lockon screenshot processing)
   "Pillow>=11.0.0",

@@ -29,6 +29,8 @@ from ..models import (
     OSGuess,
     HostTag,
     DeviceInfo,
+    Note,
+    NoteHostLink,
 )
 from ..config import settings
 from ..helpers import (
@@ -431,6 +433,17 @@ async def hosts_view(
     else:
         hosts = all_hosts
 
+    # Per-host count of (non-archived) notes that reference each host, for the
+    # Notes column badge on each row.
+    from sqlalchemy import func as _sa_func
+    note_counts = (await session.execute(
+        select(NoteHostLink.host_id, _sa_func.count(NoteHostLink.note_id))
+        .join(Note, Note.id == NoteHostLink.note_id)
+        .where(Note.archived == False)  # noqa: E712
+        .group_by(NoteHostLink.host_id)
+    )).all()
+    note_count_map = {hid: cnt for hid, cnt in note_counts}
+
     # Send all hosts to the template — DataTables handles client-side
     # pagination, sorting, and searching over the full dataset.
     return templates.TemplateResponse(
@@ -440,6 +453,7 @@ async def hosts_view(
             "hosts": hosts,
             "top_os_map": top_map,
             "device_info_map": device_info_map,  # Enhanced fingerprint data
+            "note_count_map": note_count_map,
             "filter_os": os,
             "filter_ip": ip,
         }
@@ -632,8 +646,20 @@ async def host_detail(
     except Exception as e:
         logger.warning(f"Failed to build next steps for host {host.id}: {e}")
 
+    # Backlinks: every (non-archived) note that references this host via the
+    # many-to-many link table. Pinned notes float to the top.
+    host_notes = (await session.execute(
+        select(Note)
+        .where(Note.id.in_(
+            select(NoteHostLink.note_id).where(NoteHostLink.host_id == host_id)
+        ))
+        .where(Note.archived == False)  # noqa: E712
+        .order_by(Note.pinned.desc(), Note.updated_at.desc())
+    )).scalars().all()
+
     return templates.TemplateResponse(request, "host_detail.html", {
         "h": host,
+        "host_notes": host_notes,
         "os_guesses": host.os_guesses,
         "top_guess": top_guess,
         "device_info": host.device_info,

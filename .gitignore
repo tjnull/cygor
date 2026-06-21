@@ -267,3 +267,6 @@ cygor-*-linux-*/
 cygor-presentation.*
 build_cygor_deck.py
 *_deck.py
+
+# Note image attachments (bytes also live in the DB; these are the served copies)
+cygor/webapp/static/uploads/

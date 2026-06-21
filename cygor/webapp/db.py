@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, AsyncGenerator
@@ -376,6 +377,8 @@ async def init_db():
     await _migrate_host_tracking_fields()
     await _migrate_device_fingerprint_tables()
     await _migrate_host_tag_table()
+    await _migrate_note_table()
+    await _heal_note_image_urls()
     await _migrate_scheduler_resilience_fields()
     await _migrate_device_info_certainty_fields()
 
@@ -916,6 +919,111 @@ async def _migrate_host_tag_table():
 
     except Exception as e:
         logging.warning(f"Migration for host_tag table: {e}")
+
+
+async def _migrate_note_table():
+    """Add collaboration columns to note, ensure indexes, and backfill the
+    note_host_link many-to-many from any legacy note.host_id values.
+
+    The note and note_host_link tables themselves are created by create_all.
+    """
+    if engine is None:
+        return
+
+    # Columns added for collaboration / discoverability (name -> SQL type).
+    new_columns = {
+        "author": "VARCHAR",
+        "last_edited_by": "VARCHAR",
+        "pinned": "BOOLEAN DEFAULT FALSE",
+        "archived": "BOOLEAN DEFAULT FALSE",
+    }
+
+    try:
+        async with engine.begin() as conn:
+            lowered = str(engine.url).lower()
+
+            if "postgresql" in lowered:
+                existing = {row[0] for row in (await conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'note'"
+                ))).fetchall()}
+                if not existing:
+                    return  # note table not created yet
+            elif "sqlite" in lowered:
+                rows = (await conn.execute(text("PRAGMA table_info(note)"))).fetchall()
+                existing = {row[1] for row in rows}
+                if not existing:
+                    return
+            else:
+                return
+
+            for col_name, col_type in new_columns.items():
+                if col_name not in existing:
+                    try:
+                        await conn.execute(text(f"ALTER TABLE note ADD COLUMN {col_name} {col_type}"))
+                    except Exception:
+                        pass
+
+            for stmt in (
+                "CREATE INDEX IF NOT EXISTS ix_note_host_id ON note (host_id)",
+                "CREATE INDEX IF NOT EXISTS ix_note_updated_at ON note (updated_at)",
+                "CREATE INDEX IF NOT EXISTS ix_note_pinned ON note (pinned)",
+                "CREATE INDEX IF NOT EXISTS ix_note_archived ON note (archived)",
+                "CREATE INDEX IF NOT EXISTS ix_note_host_link_host_id ON note_host_link (host_id)",
+            ):
+                try:
+                    await conn.execute(text(stmt))
+                except Exception:
+                    pass
+
+            # Backfill the link table from legacy single host_id values.
+            try:
+                await conn.execute(text(
+                    "INSERT INTO note_host_link (note_id, host_id) "
+                    "SELECT n.id, n.host_id FROM note n "
+                    "WHERE n.host_id IS NOT NULL AND NOT EXISTS ("
+                    "  SELECT 1 FROM note_host_link l "
+                    "  WHERE l.note_id = n.id AND l.host_id = n.host_id)"
+                ))
+            except Exception:
+                pass
+
+    except Exception as e:
+        logging.warning(f"Migration for note table: {e}")
+
+
+# Absolute image URL with an embedded host (and usually a stray double slash),
+# e.g. http://127.0.0.1:8080//static/uploads/notes/<token>.png — left behind by
+# an early version of the editor's upload handler. We rewrite these back to a
+# root-relative path so they resolve and stay portable across hosts.
+_BROKEN_NOTE_IMG_RE = re.compile(
+    r"https?://[^/)\s]+/+(static/uploads/notes/|api/notes/img/)"
+)
+
+
+async def _heal_note_image_urls():
+    """One-time, idempotent data heal for note image URLs saved with an absolute
+    host/double-slash. Only rows still containing the broken form are rewritten,
+    so this is a cheap no-op once healed (and on fresh installs)."""
+    if engine is None:
+        return
+    try:
+        async with engine.begin() as conn:
+            rows = (await conn.execute(text(
+                "SELECT id, content FROM note "
+                "WHERE content LIKE '%://%/static/uploads/notes/%' "
+                "   OR content LIKE '%://%/api/notes/img/%'"
+            ))).fetchall()
+            for note_id, content in rows:
+                if not content:
+                    continue
+                fixed = _BROKEN_NOTE_IMG_RE.sub(r"/\1", content)
+                if fixed != content:
+                    await conn.execute(
+                        text("UPDATE note SET content = :c WHERE id = :i"),
+                        {"c": fixed, "i": note_id},
+                    )
+    except Exception as e:
+        logging.warning(f"Heal of note image URLs: {e}")
 
 
 async def _migrate_scheduler_resilience_fields():

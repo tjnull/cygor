@@ -97,6 +97,7 @@
             <th style="min-width: 140px;">OS Accuracy</th>
             <th class="text-center">Ports</th>
             <th>Services</th>
+            <th class="text-center">Notes</th>
           </tr>
         </thead>
         <tbody>
@@ -218,6 +219,18 @@
                 <span class="host-hostname-muted">—</span>
               {% endif %}
             </td>
+
+            <!-- Notes -->
+            <td class="text-center">
+              {% set ncount = (note_count_map.get(h.id, 0) if note_count_map else 0) %}
+              <button type="button"
+                      class="note-quick-btn {{ 'has-notes' if ncount else '' }}"
+                      data-host-id="{{ h.id }}" data-host-address="{{ h.address }}"
+                      title="Add a note for {{ h.address }}">
+                <i class="bi bi-journal-plus"></i>
+                <span class="note-count-badge" data-host-id="{{ h.id }}">{{ ncount }}</span>
+              </button>
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -244,6 +257,42 @@
 #hostsTable thead {
   border-bottom: 2px solid #1e293b;
 }
+
+/* ===== Notes quick-add button ===== */
+.note-quick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #11161f;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.note-quick-btn:hover {
+  background: #1c2230;
+  border-color: #58a6ff;
+  color: #e6edf3;
+}
+.note-quick-btn:focus { outline: none; box-shadow: 0 0 0 0.15rem rgba(88, 166, 255, 0.25); }
+.note-quick-btn i { font-size: 0.95rem; }
+.note-quick-btn .note-count-badge {
+  font-weight: 600;
+  color: #c9d1d9;
+  min-width: 0.8rem;
+  text-align: center;
+}
+/* Host already has notes -> make the row's button clearly stand out */
+.note-quick-btn.has-notes {
+  background: rgba(88, 166, 255, 0.10);
+  border-color: rgba(88, 166, 255, 0.55);
+  color: #58a6ff;
+}
+.note-quick-btn.has-notes .note-count-badge { color: #58a6ff; }
 
 #hostsTable thead th {
   background: #0a0a1a;
@@ -633,7 +682,8 @@ $(document).ready(function() {
     dom: '<"dataTables_top"f>t<"dt-bottom-bar"pli>',
     columnDefs: [
       { orderable: false, targets: 0 },
-      { type: 'ip', targets: 1 }
+      { type: 'ip', targets: 1 },
+      { orderable: false, searchable: false, targets: -1 }  // Notes column
     ],
     order: [[1, 'asc']],
     language: {
@@ -711,5 +761,170 @@ $(document).ready(function() {
     table.draw();
   });
 });
+</script>
+
+<!-- Quick add-note modal (shared; populated per host on open) -->
+<style>
+#quickNoteModal .modal-content {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  color: #e6edf3;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+#quickNoteModal .modal-header {
+  border-bottom: 1px solid #21262d;
+  padding: 1rem 1.25rem;
+}
+#quickNoteModal .modal-title { font-weight: 700; font-size: 1.15rem; color: #e6edf3; }
+#quickNoteModal .modal-body { padding: 1.25rem; }
+#quickNoteModal .modal-footer { border-top: 1px solid #21262d; padding: 0.8rem 1.25rem; }
+#quickNoteModal .btn-close { filter: invert(0.85); opacity: 0.7; }
+#quickNoteModal .btn-close:hover { opacity: 1; }
+
+#quickNoteModal .qn-targeting { color: #8b949e; font-size: 0.8rem; margin-bottom: 0.4rem; }
+#quickNoteModal .qn-host-chip {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  background: rgba(88, 166, 255, 0.12);
+  color: #58a6ff;
+  border: 1px solid rgba(88, 166, 255, 0.4);
+  padding: 0.3rem 0.7rem; border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; font-weight: 600;
+}
+#quickNoteModal .qn-label {
+  display: block; color: #8b949e; font-size: 0.72rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem;
+}
+#quickNoteModal .qn-label .qn-hint { text-transform: none; letter-spacing: 0; color: #6e7681; font-weight: 400; }
+#quickNoteModal .qn-input {
+  width: 100%; background: #010409; border: 1px solid #30363d; color: #e6edf3;
+  border-radius: 6px; padding: 0.5rem 0.7rem; font-size: 0.9rem;
+}
+#quickNoteModal .qn-input::placeholder { color: #565f6b; }
+#quickNoteModal .qn-input:focus {
+  outline: none; border-color: #58a6ff; background: #010409; color: #e6edf3;
+  box-shadow: 0 0 0 0.15rem rgba(88, 166, 255, 0.25);
+}
+#quickNoteModal textarea.qn-input {
+  resize: vertical; min-height: 140px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.88rem; line-height: 1.5;
+}
+#quickNoteModal .qn-link { color: #58a6ff; text-decoration: none; }
+#quickNoteModal .qn-link:hover { color: #79b8ff; text-decoration: underline; }
+</style>
+<div class="modal fade" id="quickNoteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-journal-plus me-2" style="color:#58a6ff;"></i>Add note</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="quickNoteForm">
+        <div class="modal-body">
+          <div class="mb-3">
+            <div class="qn-targeting">Tagging note to host</div>
+            <span class="qn-host-chip"><i class="bi bi-hdd-network"></i> <span id="quickNoteHostAddr">—</span></span>
+          </div>
+          <input type="hidden" id="quickNoteHostId" name="host_id">
+          <div class="mb-3">
+            <label class="qn-label" for="quickNoteTitle">Title</label>
+            <input type="text" class="qn-input" id="quickNoteTitle"
+                   name="title" placeholder="e.g. SMB signing disabled" autocomplete="off">
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-sm-6">
+              <label class="qn-label" for="quickNoteAuthor">Author <span class="qn-hint">(your name)</span></label>
+              <input type="text" class="qn-input" id="quickNoteAuthor"
+                     name="author" placeholder="alice" autocomplete="off">
+            </div>
+            <div class="col-sm-6">
+              <label class="qn-label" for="quickNoteTags">Tags <span class="qn-hint">(comma-separated)</span></label>
+              <input type="text" class="qn-input" id="quickNoteTags"
+                     name="tags" placeholder="recon, smb" autocomplete="off">
+            </div>
+          </div>
+          <div>
+            <label class="qn-label" for="quickNoteContent">Note <span class="qn-hint">— Markdown supported</span></label>
+            <textarea class="qn-input" id="quickNoteContent"
+                      name="content" rows="6" placeholder="What did you find?"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <a href="#" id="quickNoteFull" class="qn-link me-auto">
+            <i class="bi bi-arrows-fullscreen me-1"></i>Open full editor
+          </a>
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm" id="quickNoteSave"><i class="bi bi-check-lg me-1"></i>Save note</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var modalEl = document.getElementById('quickNoteModal');
+  if (!modalEl) return;
+  var form = document.getElementById('quickNoteForm');
+  var saveBtn = document.getElementById('quickNoteSave');
+
+  // base.html loads bootstrap's JS *after* this inline script, so create the
+  // Modal lazily on first use (by which point bootstrap is defined).
+  var _modal = null;
+  function getModal() {
+    if (!_modal && typeof bootstrap !== 'undefined') _modal = new bootstrap.Modal(modalEl);
+    return _modal;
+  }
+
+  // Open the modal pre-tagged with the clicked host (event delegation so it
+  // works across DataTables paging/redraws).
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.note-quick-btn');
+    if (!btn) return;
+    form.reset();
+    document.getElementById('quickNoteHostId').value = btn.dataset.hostId;
+    document.getElementById('quickNoteHostAddr').textContent = btn.dataset.hostAddress || '';
+    document.getElementById('quickNoteFull').href =
+      '/notes/new?host_id=' + encodeURIComponent(btn.dataset.hostId);
+    document.getElementById('quickNoteAuthor').value = localStorage.getItem('cygor_note_author') || '';
+    var m = getModal();
+    if (m) m.show();
+    setTimeout(function () { document.getElementById('quickNoteTitle').focus(); }, 350);
+  });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var hostId = document.getElementById('quickNoteHostId').value;
+    var author = document.getElementById('quickNoteAuthor').value.trim();
+    if (author) localStorage.setItem('cygor_note_author', author);  // remember for next time
+
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+
+    fetch('/api/notes/quick', { method: 'POST', body: new FormData(form) })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (data) {
+        document.querySelectorAll('.note-quick-btn[data-host-id="' + hostId + '"]').forEach(function (btn) {
+          var badge = btn.querySelector('.note-count-badge');
+          if (badge) badge.textContent = data.note_count;
+          btn.classList.toggle('has-notes', data.note_count > 0);
+        });
+        // Show success only after the modal has fully closed (avoids backdrop clash).
+        modalEl.addEventListener('hidden.bs.modal', function once() {
+          modalEl.removeEventListener('hidden.bs.modal', once);
+          if (typeof showAlert === 'function') showAlert('Note saved and tagged to host.', 'success');
+        });
+        var m = getModal();
+        if (m) m.hide();
+      })
+      .catch(function (err) {
+        if (typeof showAlert === 'function') showAlert('Could not save note: ' + err.message, 'danger');
+      })
+      .finally(function () {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save note';
+      });
+  });
+})();
 </script>
 {% endblock %}

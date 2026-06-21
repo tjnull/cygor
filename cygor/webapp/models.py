@@ -1,8 +1,20 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date
 from sqlmodel import SQLModel, Field, Relationship, Column
-from sqlalchemy import JSON, Text, Index
+from sqlalchemy import JSON, Text, Index, LargeBinary
 from sqlalchemy.dialects.postgresql import JSONB
+
+
+class NoteHostLink(SQLModel, table=True):
+    """Association between notes and the hosts they reference (many-to-many).
+
+    Defined before Host/Note so their Relationship(link_model=...) can resolve
+    this class by name when their bodies execute.
+    """
+    __tablename__ = "note_host_link"
+
+    note_id: Optional[int] = Field(default=None, foreign_key="note.id", primary_key=True)
+    host_id: Optional[int] = Field(default=None, foreign_key="host.id", primary_key=True)
 
 
 class Host(SQLModel, table=True):
@@ -22,6 +34,8 @@ class Host(SQLModel, table=True):
     os_guesses: List["OSGuess"] = Relationship(back_populates="host")
     device_info: Optional["DeviceInfo"] = Relationship(back_populates="host")
     tags: List["HostTag"] = Relationship(back_populates="host")
+    # Notes that reference this host (many-to-many via NoteHostLink)
+    notes: List["Note"] = Relationship(back_populates="hosts", link_model=NoteHostLink)
 
 
 class HostTag(SQLModel, table=True):
@@ -39,6 +53,56 @@ class HostTag(SQLModel, table=True):
     created_by: Optional[int] = Field(default=None, index=True)
 
     host: "Host" = Relationship(back_populates="tags")
+
+
+class Note(SQLModel, table=True):
+    """User-authored markdown notes for collaborative, host-linked knowledge.
+
+    A note can reference many hosts via NoteHostLink (the source of truth for
+    host tagging). `host_id` is kept only as the optional "origin" host — where
+    the note was first created from — and intentionally has no relationship
+    mapped, to avoid ambiguity with the many-to-many `hosts`.
+    """
+    __tablename__ = "note"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    host_id: Optional[int] = Field(default=None, foreign_key="host.id", index=True)  # origin host
+    title: str = Field(default="Untitled", max_length=200, index=True)
+    content: str = Field(default="", sa_column=Column(Text))  # raw markdown
+    tags: Optional[str] = Field(default=None)  # comma-separated, mirrors HostTag style
+    author: Optional[str] = Field(default=None, max_length=100, index=True)  # free-text until real auth
+    last_edited_by: Optional[str] = Field(default=None, max_length=100)
+    pinned: bool = Field(default=False, index=True)
+    archived: bool = Field(default=False, index=True)
+    created_by: Optional[int] = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+    # Hosts this note references (many-to-many via NoteHostLink)
+    hosts: List["Host"] = Relationship(back_populates="notes", link_model=NoteHostLink)
+
+
+class NoteAttachment(SQLModel, table=True):
+    """Binary attachment (pasted / dropped / uploaded image) for a note.
+
+    The bytes stored here are the source of truth, so attachments travel with
+    the database and survive a portable move. On upload a copy is also written
+    to static/uploads/notes/<token>.<ext> for fast direct serving; the DB row
+    lets that file be re-materialized if it is ever missing. `note_id` is
+    nullable because an image is usually uploaded before the note is first saved.
+    """
+    __tablename__ = "note_attachment"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    token: str = Field(max_length=64, index=True, unique=True)  # opaque URL/file id
+    note_id: Optional[int] = Field(default=None, foreign_key="note.id", index=True)
+    filename: Optional[str] = Field(default=None, max_length=255)  # original upload name
+    content_type: str = Field(default="application/octet-stream", max_length=100)
+    ext: str = Field(default="bin", max_length=12)
+    size: int = Field(default=0)
+    data: bytes = Field(sa_column=Column(LargeBinary))
+    created_by: Optional[int] = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 
 
 class Port(SQLModel, table=True):
