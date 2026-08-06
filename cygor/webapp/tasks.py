@@ -4,6 +4,7 @@ Background task management for running scans and enumeration modules from the We
 import asyncio
 import logging
 import os
+import re
 import signal
 import subprocess
 from collections import deque
@@ -61,6 +62,13 @@ def _resolve_task_workspace(output_dir: Optional[str]) -> str:
 MAX_OUTPUT_LINES = 100_000
 
 logger = logging.getLogger(__name__)
+
+# A module option key must be a plain snake_case identifier. It is turned into
+# a CLI flag (``--{key.replace('_','-')}``) that is handed straight to
+# ``create_subprocess_exec``. Restricting the key to this shape guarantees the
+# generated flag can never carry whitespace, a leading dash beyond the two we
+# add, or shell/argument-injection metacharacters into the child argv.
+_SAFE_OPTION_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
 
 class CountingDeque(deque):
@@ -415,6 +423,19 @@ class TaskManager:
         # Add module-specific options to command
         for key, value in opts.items():
             if value is not None and value != "" and value is not False:
+                # Reject option keys that aren't plain identifiers. A key like
+                # "output-file=/etc/x" or one containing spaces/dashes would
+                # otherwise be assembled into a single argv token and could be
+                # interpreted as an unintended flag by the module's argparse.
+                # Keys with an explicit override flag (e.g. smbexplorer's
+                # ntlm_hash -> -H) are trusted and exempt.
+                if key not in flag_overrides and not _SAFE_OPTION_KEY.match(str(key)):
+                    logger.warning(
+                        "Dropping module option with unsafe key %r for module %r",
+                        key, module_name,
+                    )
+                    continue
+
                 # Use override flag if one exists, otherwise convert snake_case to --kebab-case
                 flag = flag_overrides.get(key, f"--{key.replace('_', '-')}")
 

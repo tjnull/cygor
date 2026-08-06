@@ -16,9 +16,17 @@ built-in modules in cygor/modules/. They can define either:
 
 Plugins execute via subprocess (cygor enum <slug>) just like built-in
 modules, so they cannot access internal webapp APIs.
+
+SECURITY: Plugin discovery and validation read metadata *statically* (via
+``ast``) and never import/exec the plugin file in the web process. Extracting
+``module_info`` by importing the file was an arbitrary-code-execution vector --
+an attacker could upload a file to ``/api/plugins/validate`` and have its
+top-level code run. Metadata must therefore be expressed as literals; anything
+computed at runtime is rejected rather than executed.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
 import json
@@ -239,143 +247,181 @@ def _validate_options_schema(options: List[Dict[str, Any]]) -> List[str]:
     return warnings
 
 
-def _import_plugin(path: Path, allowlist: Optional[Dict[str, Any]] = None):
-    """Safely import a plugin file. Returns the module object or None.
+def _literal_or_none(node: ast.AST) -> Tuple[bool, Any]:
+    """ast.literal_eval a single AST node without executing anything.
 
-    When an allowlist is in enforcing mode, this function hashes the file
-    BEFORE calling ``exec_module`` and refuses to import anything whose
-    hash isn't pinned in the allowlist. The slug↔fingerprint binding is
-    still verified after import by ``_allowlist_check`` -- but the
-    pre-exec gate is what actually keeps untrusted plugin code from
-    running at all.
+    Returns (True, value) for constant/collection literals, else (False, None).
     """
     try:
-        # Pre-exec allowlist gate. When enforce=False (or no allowlist),
-        # this returns None and we fall through to the import.
-        if allowlist is None:
-            allowlist = _load_allowlist()
-        fingerprint = _file_fingerprint(path)
-        pre_err = _allowlist_pre_exec_check(fingerprint, allowlist)
-        if pre_err:
-            _record_error(path, pre_err, kind="allowlist")
-            return None
+        return True, ast.literal_eval(node)
+    except Exception:
+        return False, None
 
-        spec = importlib.util.spec_from_file_location(f"cygor_plugin_{path.stem}", path)
-        if not spec or not spec.loader:
-            _record_error(path, "spec_from_file_location returned None", kind="import")
-            return None
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)  # type: ignore[attr-defined]
-        return mod
+
+def _extract_module_info_static(path: Path) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Read a plugin's ``module_info`` WITHOUT executing the file.
+
+    This is the security boundary. Plugin metadata used to be obtained by
+    importing the file (``exec_module``), which ran the plugin's top-level
+    code -- an unauthenticated attacker could upload a file to
+    ``/api/plugins/validate`` and get arbitrary code execution just by having
+    it "validated". Metadata is now parsed statically with ``ast`` so hostile
+    top-level code never runs in the web process.
+
+    Supports the two documented plugin shapes, both of which must use *literal*
+    values (anything computed at runtime is rejected -- it cannot be read
+    without executing the plugin, which is exactly what we refuse to do):
+
+      1. A module-level ``module_info = { ... }`` dict literal.
+      2. A ``CygorModule`` subclass whose ``name``/``slug`` (and other
+         metadata) are literal class attributes.
+
+    Returns ``(info_dict, None)`` on success, otherwise ``(None, error)``.
+    """
+    try:
+        src = path.read_text(encoding="utf-8")
     except Exception as e:
-        # Capture exception type + message (full traceback would be too noisy
-        # for the UI panel; user can re-run cygor plugin validate for detail).
-        _record_error(path, f"{type(e).__name__}: {e}", kind="import")
-        return None
+        return None, f"cannot read file: {e}"
+    try:
+        tree = ast.parse(src, filename=str(path))
+    except SyntaxError as e:
+        return None, f"syntax error: {e}"
 
-
-def _build_spec_from_module(mod, file_path: Path, allowlist: Optional[Dict[str, Any]] = None) -> Optional[ModuleSpec]:
-    """Build a ModuleSpec from a plugin module."""
-    info = getattr(mod, "module_info", None)
-    fingerprint = _file_fingerprint(file_path)
-    if allowlist is None:
-        allowlist = _load_allowlist()
-
-    if info and isinstance(info, dict):
-        module_type = info.get("module_type", "enumeration")
-        if module_type == "hidden":
-            return None
-
-        slug = info.get("slug") or file_path.stem
-        name = info.get("name") or slug.replace("_", " ").title()
-        columns = info.get("table", {}).get("columns", [])
-        requires = info.get("requires_cygor", "")
-        options = info.get("options", []) or []
-        deps = info.get("dependencies", []) or []
-
-        version_err = _check_version_compat(requires)
-        if version_err:
-            _record_error(file_path, version_err, kind="version")
-            return None
-
-        allow_err = _allowlist_check(slug, fingerprint, allowlist)
-        if allow_err:
-            _record_error(file_path, allow_err, kind="allowlist")
-            return None
-
-        return ModuleSpec(
-            name=name,
-            slug=slug,
-            description=info.get("description", ""),
-            author=info.get("author", ""),
-            version=info.get("version", ""),
-            module_type=module_type,
-            view=info.get("view", "table"),
-            template=info.get("template", "modules_common.html"),
-            columns=columns,
-            source="plugin",
-            plugin_path=str(file_path),
-            requires_cygor=requires,
-            fingerprint=fingerprint,
-            options=options,
-            dependencies=deps,
-        )
-
-    # Check for CygorModule subclass
-    for attr_name in dir(mod):
-        attr = getattr(mod, attr_name, None)
-        if (
-            isinstance(attr, type)
-            and attr_name != "CygorModule"
-            and hasattr(attr, "slug")
-            and hasattr(attr, "name")
+    # 1) Module-level `module_info = { ...literal... }`
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "module_info" for t in node.targets
         ):
-            # Check it's actually a CygorModule subclass by duck typing
-            slug = getattr(attr, "slug", file_path.stem)
-            if slug == "unnamed":
-                slug = file_path.stem
-
-            columns = getattr(attr, "columns", [])
-            option_flags = getattr(attr, "option_flags", {})
-            requires = getattr(attr, "requires_cygor", "")
-            options = getattr(attr, "options", []) or []
-            deps = getattr(attr, "dependencies", []) or []
-
-            version_err = _check_version_compat(requires)
-            if version_err:
-                _record_error(file_path, version_err, kind="version")
-                return None
-
-            allow_err = _allowlist_check(slug, fingerprint, allowlist)
-            if allow_err:
-                _record_error(file_path, allow_err, kind="allowlist")
-                return None
-
-            return ModuleSpec(
-                name=getattr(attr, "name", slug.replace("_", " ").title()),
-                slug=slug,
-                description=getattr(attr, "description", ""),
-                author=getattr(attr, "author", ""),
-                version=getattr(attr, "version", ""),
-                module_type="enumeration",
-                view=getattr(attr, "view", "table"),
-                template=getattr(attr, "template", "modules_common.html"),
-                columns=columns,
-                source="plugin",
-                plugin_path=str(file_path),
-                option_flags=option_flags,
-                requires_cygor=requires,
-                fingerprint=fingerprint,
-                options=options,
-                dependencies=deps,
+            ok, val = _literal_or_none(node.value)
+            if ok and isinstance(val, dict):
+                return val, None
+            return None, (
+                "module_info must be a literal dict readable without executing "
+                "the plugin (computed/dynamic module_info is not allowed)"
             )
 
-    _record_error(
-        file_path,
-        "no module_info dict or CygorModule subclass found",
-        kind="schema",
+    # 2) CygorModule subclass with literal class attributes
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        attrs: Dict[str, Any] = {}
+        for stmt in node.body:
+            if isinstance(stmt, ast.Assign):
+                for t in stmt.targets:
+                    if isinstance(t, ast.Name):
+                        ok, val = _literal_or_none(stmt.value)
+                        if ok:
+                            attrs[t.id] = val
+            elif (
+                isinstance(stmt, ast.AnnAssign)
+                and isinstance(stmt.target, ast.Name)
+                and stmt.value is not None
+            ):
+                ok, val = _literal_or_none(stmt.value)
+                if ok:
+                    attrs[stmt.target.id] = val
+        if "slug" in attrs and "name" in attrs:
+            return {
+                "name": attrs.get("name"),
+                "slug": attrs.get("slug"),
+                "description": attrs.get("description", ""),
+                "author": attrs.get("author", ""),
+                "version": attrs.get("version", ""),
+                "module_type": attrs.get("module_type", "enumeration"),
+                "view": attrs.get("view", "table"),
+                "template": attrs.get("template", "modules_common.html"),
+                "table": {"columns": attrs.get("columns", [])},
+                "requires_cygor": attrs.get("requires_cygor", ""),
+                "option_flags": attrs.get("option_flags", {}),
+                "options": attrs.get("options", []),
+                "dependencies": attrs.get("dependencies", []),
+            }, None
+
+    return None, "no module_info dict or CygorModule subclass found"
+
+
+def _build_spec_from_info(
+    info: Dict[str, Any],
+    file_path: Path,
+    fingerprint: str,
+    allowlist: Optional[Dict[str, Any]] = None,
+) -> Optional[ModuleSpec]:
+    """Build a ModuleSpec from a statically-extracted ``module_info`` dict.
+
+    Records an error and returns None if the plugin is hidden, fails the
+    version gate, or is rejected by the allowlist.
+    """
+    if allowlist is None:
+        allowlist = _load_allowlist()
+    if not isinstance(info, dict):
+        _record_error(file_path, "module_info is not a dict", kind="schema")
+        return None
+
+    module_type = info.get("module_type", "enumeration")
+    if module_type == "hidden":
+        return None
+
+    slug = info.get("slug") or file_path.stem
+    name = info.get("name") or slug.replace("_", " ").title()
+    table = info.get("table") if isinstance(info.get("table"), dict) else {}
+    columns = table.get("columns", []) if isinstance(table, dict) else []
+    requires = info.get("requires_cygor", "")
+    options = info.get("options", []) or []
+    deps = info.get("dependencies", []) or []
+
+    version_err = _check_version_compat(requires)
+    if version_err:
+        _record_error(file_path, version_err, kind="version")
+        return None
+
+    allow_err = _allowlist_check(slug, fingerprint, allowlist)
+    if allow_err:
+        _record_error(file_path, allow_err, kind="allowlist")
+        return None
+
+    return ModuleSpec(
+        name=name,
+        slug=slug,
+        description=info.get("description", ""),
+        author=info.get("author", ""),
+        version=info.get("version", ""),
+        module_type=module_type,
+        view=info.get("view", "table"),
+        template=info.get("template", "modules_common.html"),
+        columns=columns,
+        source="plugin",
+        plugin_path=str(file_path),
+        option_flags=info.get("option_flags", {}) or {},
+        requires_cygor=requires,
+        fingerprint=fingerprint,
+        options=options,
+        dependencies=deps,
     )
-    return None
+
+
+def _spec_for_file(f: Path, allowlist: Dict[str, Any]) -> Optional[ModuleSpec]:
+    """Statically read one plugin file and build its ModuleSpec.
+
+    Never executes the plugin. Records errors and returns None on any failure.
+    """
+    fingerprint = _file_fingerprint(f)
+
+    # Allowlist gate: when enforcing, only files whose hash is pinned load.
+    pre_err = _allowlist_pre_exec_check(fingerprint, allowlist)
+    if pre_err:
+        _record_error(f, pre_err, kind="allowlist")
+        return None
+
+    info, err = _extract_module_info_static(f)
+    if info is None:
+        low = (err or "").lower()
+        # A parse/read failure is an "import"-style problem; a well-formed file
+        # that simply lacks metadata is a "schema" problem.
+        kind = "import" if ("syntax" in low or "cannot read" in low) else "schema"
+        _record_error(f, err or "no module_info dict or CygorModule subclass found", kind=kind)
+        return None
+
+    return _build_spec_from_info(info, f, fingerprint, allowlist)
 
 
 def discover_plugins() -> List[ModuleSpec]:
@@ -399,11 +445,7 @@ def discover_plugins() -> List[ModuleSpec]:
             if f.name.startswith("_") or f.stem in _EXCLUDED_NAMES:
                 continue
 
-            mod = _import_plugin(f, allowlist=allowlist)
-            if mod is None:
-                continue
-
-            spec = _build_spec_from_module(mod, f, allowlist=allowlist)
+            spec = _spec_for_file(f, allowlist)
             if not spec:
                 continue
             if spec.slug in seen_slugs:
@@ -426,11 +468,7 @@ def discover_plugins() -> List[ModuleSpec]:
                 if f.name.startswith("_") or f.stem in _EXCLUDED_NAMES:
                     continue
 
-                mod = _import_plugin(f, allowlist=allowlist)
-                if mod is None:
-                    continue
-
-                spec = _build_spec_from_module(mod, f)
+                spec = _spec_for_file(f, allowlist)
                 if not spec:
                     continue
                 if spec.slug in seen_slugs:
@@ -482,17 +520,21 @@ def validate_plugin(path: Path) -> Dict[str, Any]:
         result["errors"].append("Plugin must be a .py file")
         return result
 
+    # Metadata is extracted statically -- the plugin file is never executed
+    # here. This is what closes the upload-and-validate RCE: a hostile file
+    # cannot run its top-level code merely by being validated.
+    info, extract_err = _extract_module_info_static(path)
+    if info is None:
+        result["errors"].append(f"Failed to import module: {extract_err or 'no module_info found'}")
+        return result
+
+    fingerprint = _file_fingerprint(path)
+
     # Capture per-call errors without polluting the discover-time error list.
     saved_errors = list(_PLUGIN_ERRORS)
     _PLUGIN_ERRORS.clear()
     try:
-        mod = _import_plugin(path)
-        if mod is None:
-            details = "; ".join(e["error"] for e in _PLUGIN_ERRORS) or "import failed"
-            result["errors"].append(f"Failed to import module: {details}")
-            return result
-
-        spec = _build_spec_from_module(mod, path)
+        spec = _build_spec_from_info(info, path, fingerprint)
         if spec is None:
             details = "; ".join(e["error"] for e in _PLUGIN_ERRORS)
             if details:
