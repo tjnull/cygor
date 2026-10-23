@@ -713,7 +713,7 @@ async def _capture_web_screenshots(
 
 
 # ======================================================================
-# Native (pure-Python) capture backends for RDP / VNC / X11
+# Native capture backends for RDP / VNC / X11
 # ----------------------------------------------------------------------
 # These speak the protocol directly -- no external tools (xfreerdp/vncsnapshot)
 # and no local display/Xvfb -- and are auto-installed on first use, like the
@@ -723,7 +723,10 @@ async def _capture_web_screenshots(
 _PIP_PKGS = {  # import name -> pip distribution name
     "asyncvnc": "asyncvnc",
     "Xlib": "python-xlib",
-    "aardwolf": "aardwolf",
+    "aardwolf": (
+        "aardwolf>=0.2.16,<0.2.17" if sys.version_info >= (3, 11)
+        else "aardwolf>=0.2.12,<0.2.14"
+    ),
 }
 
 

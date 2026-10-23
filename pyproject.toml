@@ -32,11 +32,10 @@ dependencies = [
   "requests>=2.32.0",
   "aiohttp>=3.10.0",  # Async HTTP for fingerprint database sync
   "playwright>=1.50",
-  # Native (pure-Python) screenshot backends for lockon: no external tools or
-  # local display needed -- asyncvnc (VNC), python-xlib (X11), aardwolf (RDP).
+  # Screenshot backends for lockon: asyncvnc (VNC), python-xlib (X11).
+  # aardwolf (RDP) needs Rust when no matching wheel exists; see the rdp extra.
   "asyncvnc>=1.1.0",
   "python-xlib>=0.31",
-  "aardwolf>=0.2.10,<0.2.14",  # 0.2.14 dropped its prebuilt wheel (sdist only) and needs Rust to build; pin to the last wheel release
   "tabulate>=0.9.0",
   "paramiko>=4.0.0",
   'py-xdrlib; python_version >= "3.13"',
@@ -86,6 +85,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+rdp = [
+  "aardwolf>=0.2.12,<0.2.14; python_version < '3.11'",
+  "aardwolf>=0.2.16,<0.2.17; python_version >= '3.11'",
+]
 postgres = [
   "psycopg[async]>=3.2.1"
 ]

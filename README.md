@@ -65,6 +65,13 @@ cd cygor
 pipx install .
 ```
 
+RDP screenshots use the optional `aardwolf` backend. To include it, install
+from source with `pipx install '.[rdp]'` (or `pipx install --force '.[rdp]'`
+if Cygor is already installed). `aardwolf` has a Linux x86-64 wheel for
+Python 3.11 and newer. If your platform has no matching wheel, install Rust
+first with `sudo apt install rustc cargo`. The base installation works
+without `aardwolf`; other screenshot modes are unaffected.
+
 ## Deploying Cygor Using Docker
 
 Cygor's Docker setup includes both the application and a PostgreSQL database service. The system automatically falls back to SQLite if PostgreSQL is unavailable.

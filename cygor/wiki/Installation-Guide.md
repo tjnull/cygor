@@ -30,6 +30,11 @@ pipx install .
 pipx install --force .
 ```
 
+RDP screenshot capture uses the optional `aardwolf` package. To install it
+alongside Cygor from this checkout, use `pipx install '.[rdp]'` (or
+`pipx install --force '.[rdp]'` for an existing installation). Cygor can be
+installed without this extra; other screenshot modes do not require it.
+
 Verify:
 
 ```bash
@@ -145,6 +150,33 @@ cygor web start
 ```
 
 ## Troubleshooting
+
+### `aardwolf` fails to build (`can't find Rust compiler`)
+
+`aardwolf` is needed only for native RDP screenshots. From a checkout with
+the updated dependency metadata, retry the base install:
+
+```bash
+pipx install --force .
+```
+
+If you need RDP screenshots, install the RDP extra:
+
+```bash
+pipx install --force '.[rdp]'
+```
+
+`aardwolf` 0.2.16 has a Linux x86-64 wheel compatible with CPython 3.11 and
+newer; Python 3.10 uses the older 0.2.13 wheel. If pip still tries to build
+`aardwolf` from source, check your Python version and architecture. Platforms
+without a matching wheel need Rust to compile it:
+
+```bash
+python3 --version
+uname -m
+sudo apt install -y rustc cargo
+pipx install --force '.[rdp]'
+```
 
 ### Permission errors during scans
 Nmap/Masscan need raw-socket privileges:
