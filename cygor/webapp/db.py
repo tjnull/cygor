@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -620,10 +620,9 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 # -------------------------------------------------------------------
 async def get_or_create_host(session: AsyncSession, address: str, hostname: str | None = None,
                              create_if_missing: bool = True) -> Optional[Host]:
-    from datetime import datetime
     res = await session.execute(select(Host).where(Host.address == address))
     host = res.scalar_one_or_none()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     if host:
         # Update hostname only if the new one is longer (prefer FQDN over short name)
@@ -1181,14 +1180,12 @@ async def get_or_create_device_info(
     - SSL certificate CommonName
     - Samba version detection
     """
-    from datetime import datetime
-
     res = await session.execute(
         select(DeviceInfo).where(DeviceInfo.host_id == host.id)
     )
     existing = res.scalar_one_or_none()
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     if existing:
         # Update if new confidence is higher, more validation sources, or data is more complete
@@ -1382,8 +1379,7 @@ async def cached_get_or_create_host(
     address: str, hostname: str | None = None,
     create_if_missing: bool = True
 ) -> Optional[Host]:
-    from datetime import datetime
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     host = cache.hosts.get(address)
     if host:
@@ -1547,8 +1543,7 @@ async def cached_get_or_create_device_info(
     manufacturer_certainty: float = 0.0,
     os_family_certainty: float = 0.0,
 ) -> DeviceInfo:
-    from datetime import datetime
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     existing = cache.device_info.get(host.id)
     if existing:

@@ -362,13 +362,17 @@ class PostgreSQLAdapter(DatabaseAdapter):
         if self.port:
             port_args = ["-p", str(self.port)]
 
+        # Use the maintenance database explicitly. Without -d, psql tries a
+        # database named after the OS user, which may not exist.
+        psql_args = ["-X", "-w", "-v", "ON_ERROR_STOP=1", "-d", "postgres"] + port_args + args
+
         if use_postgres_user:
             if need_sudo:
-                cmd = ["sudo", "-n", "-u", "postgres", "psql"] + port_args + args
+                cmd = ["sudo", "-n", "-u", "postgres", "psql"] + psql_args
             else:
-                cmd = ["psql", "-U", "postgres"] + port_args + args
+                cmd = ["psql", "-U", "postgres"] + psql_args
         else:
-            cmd = ["psql"] + port_args + args
+            cmd = ["psql"] + psql_args
 
         return subprocess.run(
             cmd,
@@ -398,6 +402,10 @@ class PostgreSQLAdapter(DatabaseAdapter):
                     ["-tAc", f"SELECT 1 FROM pg_roles WHERE rolname='{self.user}'"],
                     use_postgres_user=False
                 )
+            if check_user.returncode != 0:
+                detail = check_user.stderr.strip() if check_user.stderr else "check postgres admin access"
+                logger.error(f"Cannot inspect PostgreSQL roles on port {self.port}: {detail[:500]}")
+                return False
 
             # Create user if doesn't exist, or update password if exists
             if check_user.returncode == 0 and not check_user.stdout.strip():
@@ -464,6 +472,10 @@ class PostgreSQLAdapter(DatabaseAdapter):
                     ["-tAc", _check_sql],
                     use_postgres_user=False
                 )
+            if check_db.returncode != 0:
+                detail = check_db.stderr.strip() if check_db.stderr else "check postgres admin access"
+                logger.error(f"Cannot inspect PostgreSQL databases on port {self.port}: {detail[:500]}")
+                return False
 
             # Create database if doesn't exist
             if check_db.returncode == 0 and not check_db.stdout.strip():
@@ -474,7 +486,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
                 need_sudo = os.geteuid() != 0 and shutil.which("sudo")
                 port_args = ["-p", str(self.port)] if self.port else []
                 if need_sudo:
-                    create_db_cmd = ["sudo", "-u", "postgres", "createdb"] + port_args + ["-O", self.user, self.database]
+                    create_db_cmd = ["sudo", "-n", "-u", "postgres", "createdb"] + port_args + ["-O", self.user, self.database]
                 else:
                     create_db_cmd = ["createdb", "-U", "postgres"] + port_args + ["-O", self.user, self.database]
 
@@ -484,22 +496,34 @@ class PostgreSQLAdapter(DatabaseAdapter):
                 create_db = subprocess.run(create_db_cmd, capture_output=True, text=True, timeout=10)
 
                 if create_db.returncode != 0:
+                    # After an OS locale update, template1 can have a stale
+                    # collation version. A new Cygor database can safely use
+                    # pristine template0 without changing the system template.
+                    template_mismatch = "template1" in create_db.stderr and "collation version mismatch" in create_db.stderr
+                    if template_mismatch:
+                        logger.warning("PostgreSQL template1 collation version mismatch; retrying with template0")
+                        create_db = subprocess.run(
+                            create_db_cmd[:-1] + ["-T", "template0", create_db_cmd[-1]],
+                            capture_output=True, text=True, timeout=10,
+                        )
+
+                if create_db.returncode != 0:
                     if verbose > 1:
                         logger.debug("createdb failed, trying psql CREATE DATABASE")
 
                     # Fallback to psql CREATE DATABASE. Both identifiers
                     # were validated in __init__ (only [A-Za-z_][A-Za-z0-9_]*
                     # allowed) so the f-string interpolation here is safe.
-                    create_db_sql = f"CREATE DATABASE {self.database} OWNER {self.user};"
+                    template_clause = " TEMPLATE template0" if template_mismatch else ""
+                    create_db_sql = f"CREATE DATABASE {self.database} OWNER {self.user}{template_clause};"
                     create_db = self._run_psql(["-c", create_db_sql])
                     if create_db.returncode != 0:
                         if verbose > 1:
                             logger.debug("Retrying database creation without postgres user")
                         create_db = self._run_psql(["-c", create_db_sql], use_postgres_user=False)
                         if create_db.returncode != 0:
-                            logger.error(f"Failed to create PostgreSQL database '{self.database}'")
-                            if verbose > 1 and create_db.stderr:
-                                logger.debug(f"Error details: {create_db.stderr.strip()[:200]}")
+                            detail = create_db.stderr.strip() if create_db.stderr else "unknown PostgreSQL error"
+                            logger.error(f"Failed to create PostgreSQL database '{self.database}': {detail[:500]}")
                             return False
 
                 if verbose > 0:
