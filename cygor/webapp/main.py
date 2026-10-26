@@ -77,10 +77,6 @@ def _ignore_event_loop_closed(loop, context):
         return
     loop.default_exception_handler(context)
 
-# Patch all asyncio loops created after import
-asyncio.get_event_loop().set_exception_handler(_ignore_event_loop_closed)
-
-
 async def _db_health_monitor():
     """Background task: check database health every 60 seconds."""
     from . import db
@@ -98,6 +94,8 @@ async def _db_health_monitor():
 # ---------------- Lifespan ----------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Uvicorn owns the running loop; no loop may exist while this module imports.
+    asyncio.get_running_loop().set_exception_handler(_ignore_event_loop_closed)
     from .startup_logger import get_logger, StartupPhase
     log = get_logger()
 

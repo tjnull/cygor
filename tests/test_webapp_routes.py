@@ -4,8 +4,10 @@ Tests for the Cygor webapp route registration and app structure.
 These tests verify the FastAPI app can be created and that all expected
 routers/routes are registered, without requiring a running database.
 """
+import asyncio
 import importlib
 import os
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -60,6 +62,34 @@ class TestAppCreation:
         app = _get_app()
         # FastAPI stores the lifespan on router
         assert app.router.lifespan_context is not None
+
+    def test_import_without_current_event_loop(self):
+        """The CLI imports the webapp before Uvicorn creates its event loop."""
+        result = subprocess.run(
+            [sys.executable, "-c", "import asyncio; asyncio.set_event_loop(None); "
+             "from cygor.webapp.startup_logger import init_logger"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+
+    def test_lifespan_installs_exception_handler_on_running_loop(self, monkeypatch):
+        from cygor.webapp import startup_logger
+        from cygor.webapp.main import _ignore_event_loop_closed, lifespan
+
+        def stop_startup():
+            raise RuntimeError("startup reached")
+
+        monkeypatch.setattr(startup_logger, "get_logger", stop_startup)
+
+        async def check_handler():
+            loop = asyncio.get_running_loop()
+            with pytest.raises(RuntimeError, match="startup reached"):
+                async with lifespan(_get_app()):
+                    pass
+            assert loop.get_exception_handler() is _ignore_event_loop_closed
+
+        asyncio.run(check_handler())
 
 
 # ---------------------------------------------------------------------------
